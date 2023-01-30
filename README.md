@@ -20,7 +20,9 @@ make && sudo make install
 I've included a Makefile that should work on most Linux systems, including Windows Subsystem for Linux and possibly for MacOS.  You'll need to install SDL2 and the SDL2 image, ttf, and mixer extensions.  To install these extensions on a Debian based system, you can follow [these instructions][4].  If you're on a different system, you'll need to install the SDL2 and extensions [per the instructions for your system][5].  If you already have SDL2 and extensions installed, only steps you need is to install [Tiled][6], [Valgrind][7], and [Igloo][8] if you don't have those already.  On Debian-based systems, you can do the following:
 
 ```bash
-sudo update && sudo apt install cmake llibtinyxml-dev tiled valgrind
+sudo update && sudo apt install cmake llibtinyxml-dev tiled valgrind liblua5.3-dev
+```
+```
 
 git clone https://github.com/codewars/igloo.git
 cd igloo

@@ -1,7 +1,7 @@
 name: Enforce Branch Name "feature/", "chore/", "fix/", or "refactor/"
 on:
   pull_request:
-    branches: ["master"]
+    branches: ["main"]
   workflow_dispatch:
 jobs:
   lint-branch-name:

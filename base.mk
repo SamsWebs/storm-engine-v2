@@ -1,36 +1,16 @@
 #!/bin/sh
 
 CC = g++
-AR = ar
-
-LIB = -L/usr/local/lib -Wl,-rpath=/usr/local/lib -lSDL2 -lSDL2_image -lSDL2_ttf -lSDL2_mixer -lz -ltinyxml
+LIB = -L/usr/local/lib -Wl,-rpath=/usr/local/lib -lSDL2 -lSDL2_image -lSDL2_ttf -lSDL2_mixer -lz -ltinyxml2
 INCLUDE = -isystem -I/usr/local/include
-CCFLAGS = -Wall -c -g -std=c++17  \
+CCFLAGS = -Wall -c -g -std=c++17 -DDATA_PREFIX=\"$(DATA_PREFIX)\" \
 	-Wno-reorder -Wno-unused-parameter -Wno-unused-variable -Wno-unused-function  $(INCLUDE) 
-
-OBJS 	= $(SRCS:.cpp=.o)
-
-all: clean  $(TARGET)
 
 clean:
 	rm -f $(BIN_DIR)/* && rm -f $(shell find . -name "*.o")
-
-run:
-	$(TARGET)
-	
-test: test-target
 
 .cpp.o: 
 	$(CC) $(CCFLAGS) $< -o $@
 	
 memcheck:
 	valgrind --log-file=valgrind.output --leak-check=yes --tool=memcheck $(TARGET)
-	
-test: test-target
-
-run-test:
-	$(TESTTARGET)
-
-test-target: $(TESTOBJS)
-	mkdir -p $(BIN_DIR)
-	$(CC) $^ $(LIB) -o $(TESTTARGET)

@@ -11,7 +11,7 @@ include ./base.mk
 test: test-target
 
 TESTRCS  = $(wildcard specs/*.cpp)
-TESTRCS  += $(wildcard src/*.cpp)
+TESTRCS  += $(wildcard common/*.cpp)
 TESTOBJS  = $(TESTRCS:.cpp=.o)
 
 run-test:

@@ -1,0 +1,64 @@
+name: Deploy Linux Package
+# Create a "classic" token w/ write permissions for packages -> https://github.com/settings/tokens
+
+name: Create and publish a Docker image
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}-linux
+
+jobs:
+  build-and-push-image:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+    - name: Generate build ID
+      id: prep
+      run: |
+          sha=${GITHUB_SHA::8}
+          ts=$(date +%s)
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            echo "::set-output name=BUILD_ID::dev-${sha}-${ts}" 
+          else
+            echo "::set-output name=BUILD_ID::stable-${sha}-${ts}" 
+          fi
+
+    - name: Echo ID
+      run: |
+        echo ${{ github.ref_name }}
+        echo "${{ steps.prep.outputs.BUILD_ID }}"
+    
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Log in to the Container registry
+      uses: docker/login-action@v1
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Extract metadata (tags, labels) for Docker
+      id: meta
+      uses: docker/metadata-action@v3
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v2
+      with:
+        context: .
+        push: true
+        file: ./Dockerfile.linux
+        tags: |
+          ${{ env.IMAGE_NAME }}:${{ steps.prep.outputs.BUILD_ID }}
+        labels: ${{ steps.meta.outputs.labels }}

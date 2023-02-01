@@ -21,16 +21,15 @@ I've included a Makefile that should work on most Linux systems, including Windo
 
 ```bash
 sudo update && sudo apt install cmake llibtinyxml-dev tiled valgrind liblua5.3-dev
-```
-```
 
 git clone https://github.com/codewars/igloo.git
 cd igloo
 git submodule add -b headers-only https://github.com/banditcpp/snowhouse snowhouse
 git submodule update --init --recursive
+sed -i 's/\VERSION 3.22/VERSION 3.18/g' CMakeLists.txt  # This is a hack to get it to work on older versions of CMake
 mkdir build && cd build
 cmake ..
-sudo cmake --build .. --target install
+sudo cmake --build . --target install
 ```
 
 I'll update these instructions for WSL and MacOS, eventually.  However, if anyone wants to submit a PR for these, I'd be happy to accept it.

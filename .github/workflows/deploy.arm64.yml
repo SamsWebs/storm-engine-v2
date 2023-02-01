@@ -7,7 +7,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}-arm64
+  IMAGE_NAME: ghcr.io/willsams/arm64
 
 jobs:
   build-and-push-image:

@@ -7,7 +7,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}-macos
+  IMAGE_NAME: ghcr.io/willsams/macos
 
 jobs:
   build-and-push-image:

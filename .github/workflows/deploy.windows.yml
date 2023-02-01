@@ -7,7 +7,7 @@ on:
     
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}-windows
+  IMAGE_NAME: ghcr.io/willsams/windows
 
 jobs:
   build-and-push-image:

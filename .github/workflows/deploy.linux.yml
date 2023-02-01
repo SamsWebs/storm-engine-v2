@@ -1,17 +1,13 @@
 name: Deploy Linux Package
 # Create a "classic" token w/ write permissions for packages -> https://github.com/settings/tokens
 
-name: Create and publish a Docker image
-
 on:
   push:
-    branches: [ main ]
-  pull_request:
     branches: [ main ]
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}-linux
+  IMAGE_NAME: ghcr.io/willsams/linux
 
 jobs:
   build-and-push-image:
@@ -26,11 +22,7 @@ jobs:
       run: |
           sha=${GITHUB_SHA::8}
           ts=$(date +%s)
-          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            echo "::set-output name=BUILD_ID::dev-${sha}-${ts}" 
-          else
-            echo "::set-output name=BUILD_ID::stable-${sha}-${ts}" 
-          fi
+          echo "::set-output name=BUILD_ID::stable-${sha}-${ts}" 
 
     - name: Echo ID
       run: |

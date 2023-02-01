@@ -5,7 +5,8 @@ BIN_DIR   		= $(PWD)/bin
 TARGET 			= $(BIN_DIR)/$(BIN)
 DATA_PREFIX   	= $(PWD)/assets/
 
-SRCS	= $(wildcard src/**/*.cpp)
+SRCS	= $(wildcard $(ROOT_DIR)/common/**/*.cpp)
+SRCS	+= $(wildcard src/**/*.cpp)
 SRCS	+= $(wildcard src/*.cpp)
 OBJS 	= $(SRCS:.cpp=.o)
 
@@ -19,3 +20,4 @@ run:
 $(TARGET) : $(OBJS)
 	mkdir -p $(BIN_DIR)
 	$(CC) $^ $(LIB) -o $@
+	/usr/bin/time -f "Compilation completed in : %E" $(TARGET)

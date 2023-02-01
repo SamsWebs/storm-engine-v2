@@ -4,21 +4,20 @@
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
 
-#include "../../common/logger.h"
-#include "../../vendor/glm/glm.hpp"
+#include <glm/glm.hpp>
 
 #include "game.h"
 
 Game::Game() {
   isRunning = false;
-  Logger::Log("Game constructor called!");
+  logger.Log("Game constructor called!");
 }
 
-Game::~Game() { Logger::Log("Game destructor called!"); }
+Game::~Game() { logger.Log("Game destructor called!"); }
 
 void Game::Initialize() {
   if (SDL_Init(SDL_INIT_EVERYTHING) != 0) {
-    Logger::Err("Error initializing SDL.");
+    logger.Err("Error initializing SDL.");
     return;
   }
   SDL_DisplayMode displayMode;
@@ -29,12 +28,12 @@ void Game::Initialize() {
       SDL_CreateWindow(NULL, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
                        windowWidth, windowHeight, SDL_WINDOW_BORDERLESS);
   if (!window) {
-    Logger::Err("Error creating SDL window.");
+    logger.Err("Error creating SDL window.");
     return;
   }
   renderer = SDL_CreateRenderer(window, -1, 0);
   if (!renderer) {
-    Logger::Err("Error creating SDL renderer.");
+    logger.Err("Error creating SDL renderer.");
     return;
   }
   SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN);

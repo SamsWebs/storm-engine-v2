@@ -42,10 +42,10 @@ RUN mkdir -p /opt/library
 COPY ./common /opt/library/common
 COPY ./vendor /opt/library/vendor
 COPY ./specs /opt/library/specs
-COPY ./Makefile /opt/library/Makefile
+COPY ./Makefile.debian /opt/library/Makefile
 COPY ./base.mk /opt/library/base.mk
 
 # Build the project
 WORKDIR /opt/library
-RUN make && make test && make run-test
-# RUN make install
+RUN make test && make run-test
+#RUN make && make install 

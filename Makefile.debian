@@ -1,12 +1,24 @@
 #!/bin/bash
 
-BIN				= tests
+BIN				= libstormenginev2.so
+TEST_BIN		= tests
 BIN_DIR   		= ./bin
 TARGET 			= $(BIN_DIR)/$(BIN)
+TEST_TARGET 	= $(BIN_DIR)/$(TEST_BIN)
 
-all: clean test-target run-test
+all: clean test-target run-test target
 
 include ./base.mk
+
+LIBSRCS  = $(wildcard common/**/*.cpp)
+LIBOBJS  = $(LIBSRCS:.cpp=.o)
+
+target : $(LIBOBJS)
+	mkdir -p $(BIN_DIR)
+	$(CC) $^ $(LIB) -shared -o $(TARGET)
+
+install:
+	cp $(TARGET) /usr/local/lib && cp -r ./common/* /usr/local/include
 
 test: test-target
 
@@ -15,8 +27,8 @@ TESTRCS  += $(wildcard common/**/*.cpp)
 TESTOBJS  = $(TESTRCS:.cpp=.o)
 
 run-test:
-	$(TARGET)
+	$(TEST_TARGET)
 
 test-target: $(TESTOBJS)
 	mkdir -p $(BIN_DIR)
-	$(CC) $^ $(LIB) -pthread -o $(TARGET)
+	$(CC) $^ $(LIB) -pthread -o $(TEST_TARGET)

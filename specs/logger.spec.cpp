@@ -2,7 +2,7 @@
 
 #include <string>
 
-#include <stormengine2/logger.h>
+#include "../common/stormengine2/logger.h"
 
 using namespace igloo;
 

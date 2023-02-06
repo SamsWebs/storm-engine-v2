@@ -12,7 +12,7 @@ Built this engine for game jams and possible future projects.  It's based some o
 For your project, other than the pre-requisite steps, you can either just copy over the `common` and `vendor` folders or compile the engine as a library.  If you want to compile the engine as a library, you can do the following:
 
 ```bash
-make && sudo make install
+make -f Makefile.debian && sudo make install -f Makefile.debian  # For Debian and Debian-based distros (Ubuntu, Linux Mint, etc.)
 ```
 
 ## Pre-requisites

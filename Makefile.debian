@@ -24,10 +24,10 @@ install:
 
 test: test-target
 
-TESTRCS  = $(wildcard specs/*.cpp)
-TESTRCS  += $(wildcard common/*.cpp)
-TESTRCS  += $(wildcard common/**/*.cpp)
-TESTOBJS  = $(TESTRCS:.cpp=.o)
+TESTSRCS  	= $(wildcard specs/*.cpp)
+TESTSRCS  	+= $(wildcard common/**/*.cpp)
+TESTSRCS  	+= $(wildcard common/*.cpp)
+TESTOBJS  	= $(TESTSRCS:.cpp=.o)
 
 run-test:
 	$(TEST_TARGET)

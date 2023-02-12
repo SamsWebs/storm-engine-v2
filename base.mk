@@ -15,4 +15,4 @@ clean:
 	$(CC) $(CCFLAGS) $< -o $@
 	
 memcheck:
-	valgrind --log-file=valgrind.output --leak-check=yes --tool=memcheck $(TARGET)
+	valgrind --log-file=valgrind.output --leak-check=yes --leak-check=full --tool=memcheck -s $(TARGET)

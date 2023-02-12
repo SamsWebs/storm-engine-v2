@@ -69,28 +69,29 @@ Describe(EcsSpec) {
   };
 
   Describe(PoolSpec) {
-    It(should_not_be_empty) {
-      Pool<int> p = Pool<int>(10);
 
-      // Test isEmpty()
+    It(should_not_be_empty) {
+      typedef Pool<int> Pool;
+      Pool p(10);
+
       Assert::That(p.isEmpty(), Is().EqualTo(false));
     };
 
     It(should_get_size) {
-      Pool<int> p = Pool<int>(10);
+      Pool<int> p(10);
 
       Assert::That(p.GetSize(), Is().EqualTo(10));
     };
 
     It(should_resize) {
-      Pool<int> p = Pool<int>(10);
+      Pool<int> p(10);
 
       p.Resize(20);
       Assert::That(p.GetSize(), Is().EqualTo(20));
     };
 
     It(should_clear) {
-      Pool<int> p = Pool<int>(10);
+      Pool<int> p(10);
 
       p.Clear();
       Assert::That(p.GetSize(), Is().EqualTo(0));
@@ -98,7 +99,7 @@ Describe(EcsSpec) {
     };
 
     It(should_add) {
-      Pool<int> p = Pool<int>(0);
+      Pool<int> p(0);
       p.Add(1);
       p.Add(2);
       p.Add(3);
@@ -109,7 +110,7 @@ Describe(EcsSpec) {
     };
 
     It(should_set) {
-      Pool<int> p = Pool<int>(3);
+      Pool<int> p(3);
       p.Set(0, 4);
       p.Set(1, 5);
       p.Set(2, 6);
@@ -119,7 +120,7 @@ Describe(EcsSpec) {
     };
 
     It(should_get) {
-      Pool<int> p = Pool<int>(10);
+      Pool<int> p(10);
       p.Set(0, 4);
       p.Set(1, 5);
       p.Set(2, 6);
@@ -128,14 +129,22 @@ Describe(EcsSpec) {
       Assert::That(p.Get(2), Is().EqualTo(6));
     };
 
-    It(should_use_opertor) {
-      Pool<int> p = Pool<int>(10);
+    It(should_use_operator) {
+      Pool<int> p(10);
       p[0] = 7;
       p[1] = 8;
       p[2] = 9;
       Assert::That(p[0], Is().EqualTo(7));
       Assert::That(p[1], Is().EqualTo(8));
       Assert::That(p[2], Is().EqualTo(9));
+    };
+  };
+
+  Describe(RegistrySpec) {
+    It(should_create_entity) {
+      Registry registry;
+      Entity entity = registry.CreateEntity();
+      Assert::That(entity.GetId(), Equals(0));
     };
   };
 };

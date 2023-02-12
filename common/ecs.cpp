@@ -20,26 +20,21 @@ const Signature &System::GetComponentSignature() const {
   return componentSignature;
 }
 
-// template <typename T> Pool<T>::Pool(int size) { data.resize(size); }
+Registry::Registry() = default;
 
-// template <typename T> bool Pool<T>::isEmpty() const { return data.empty(); }
+void Registry::Update() {
+  // ...
+}
 
-// template <typename T> int Pool<T>::GetSize() const { return data.size(); }
+Entity Registry::CreateEntity() {
+  int entityId;
 
-// template <typename T> void Pool<T>::Resize(int n) { data.resize(n); }
+  entityId = numEntities++;
 
-// template <typename T> void Pool<T>::Clear() { data.clear(); }
+  Entity entity(entityId);
+  entitiesToBeAdded.insert(entity);
 
-// template <typename T> void Pool<T>::Add(T object) { data.push_back(object); }
+  logger.Log("Entity created with id = " + std::to_string(entityId));
 
-// template <typename T> void Pool<T>::Set(int index, T object) {
-//   data[index] = object;
-// }
-
-// template <typename T> T &Pool<T>::Get(int index) {
-//   return static_cast<T &>(data[index]);
-// }
-
-// template <typename T> T &Pool<T>::operator[](unsigned int index) {
-//   return data[index];
-// }
+  return entity;
+}

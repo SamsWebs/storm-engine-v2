@@ -1,7 +1,12 @@
 #pragma once
 
 #include <bitset>
+#include <set>
+#include <typeindex>
+#include <unordered_map>
 #include <vector>
+
+#include "logger.h"
 
 const unsigned int MAX_COMPONENTS = 32;
 
@@ -110,15 +115,24 @@ public:
 // and components.
 ////////////////////////////////////////////////////////////////////////////////
 class Registry {
+public:
+  Registry();
+  void Update();
+  Entity CreateEntity();
+
 private:
   int numEntities = 0;
 
-  // Vector of component pools, each pool contains all the data for a certain
-  // component type Vector index = component type id Pool index = entity id
   std::vector<IPool *> componentPools;
+  std::vector<Signature> entityComponentSignatures;
+  std::unordered_map<std::type_index, System *> systems;
+  std::set<Entity> entitiesToBeAdded;
+  std::set<Entity> entitiesToBeKilled;
+
+  Logger logger;
 };
 
 template <typename TComponent> void System::RequireComponent() {
   const auto componentId = Component<TComponent>::GetId();
   componentSignature.set(componentId);
-}
+};

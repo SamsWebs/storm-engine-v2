@@ -1,6 +1,10 @@
-#include <SDL2/SDL_image.h>
+#include <iostream>
 
+#include <SDL2/SDL.h>
+#include <SDL2/SDL_image.h>
 #include <glm/glm.hpp>
+
+#include <stormengine2/ecs.h>
 
 #include "game.h"
 

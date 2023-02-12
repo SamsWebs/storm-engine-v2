@@ -5,13 +5,14 @@ BIN_DIR   		= $(PWD)/bin
 TARGET 			= $(BIN_DIR)/$(BIN)
 DATA_PREFIX   	= $(PWD)/assets/
 
-SRCS	= $(wildcard src/**/*.cpp)
+SRCS	= $(wildcard vendor/imgui/*.cpp)
+SRCS	+= $(wildcard src/**/*.cpp)
 SRCS	+= $(wildcard src/*.cpp)
 OBJS 	= $(SRCS:.cpp=.o)
 
 all: clean $(TARGET)
 
-include ../../base.mk
+include ../../../base.mk
 
 run:
 	$(TARGET)

@@ -2,4 +2,4 @@
 
 NAME = tanks
 
-include ../examples.mk
+include ../../examples.mk

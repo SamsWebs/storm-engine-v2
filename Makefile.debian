@@ -22,7 +22,7 @@ install:
 	cp $(TARGET) /usr/local/lib && cp -r ./common/* /usr/local/include/stormengine2
 	rm -r /usr/local/include/stormengine2/**/*.o
 
-test: test-target
+test: test-target run-test
 
 TESTSRCS  	= $(wildcard specs/*.cpp)
 TESTSRCS  	+= $(wildcard common/**/*.cpp)

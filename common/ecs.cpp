@@ -20,8 +20,6 @@ const Signature &System::GetComponentSignature() const {
   return componentSignature;
 }
 
-Registry::Registry() = default;
-
 void Registry::Update() {
   // ...
 }

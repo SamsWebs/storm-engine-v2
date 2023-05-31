@@ -1,0 +1,18 @@
+FROM storminator16/igloo-testing-devkitpro:latest
+
+ENV DEVKITPRO=/opt/devkitpro
+ENV DEVKITARM=${DEVKITPRO}/devkitARM
+ENV DEVKITPPC=${DEVKITPRO}/devkitPPC
+ENV PATH=${DEVKITPRO}/tools/bin:$PATH
+
+# # Copy the source code into the container
+RUN mkdir -p /opt/library
+COPY ./common /opt/library/common
+COPY ./vendor /opt/library/vendor
+COPY ./specs /opt/library/specs
+COPY ./Makefile.nx /opt/library/Makefile
+COPY ./base.mk /opt/library/base.mk
+
+# Build the project
+WORKDIR /opt/library
+CMD ["make", "test"]

@@ -12,7 +12,7 @@ Built this engine for game jams and possible future projects.  It's based some o
 For your project, other than the pre-requisite steps, you can either just copy over the `common` and `vendor` folders or compile the engine as a library.  If you want to compile the engine as a library, you can do the following:
 
 ```bash
-make && sudo make install
+make -f Makefile.debian && sudo make install -f Makefile.debian  # For Debian and Debian-based distros (Ubuntu, Linux Mint, etc.)
 ```
 
 ## Pre-requisites
@@ -20,17 +20,24 @@ make && sudo make install
 I've included a Makefile that should work on most Linux systems, including Windows Subsystem for Linux and possibly for MacOS.  You'll need to install SDL2 and the SDL2 image, ttf, and mixer extensions.  To install these extensions on a Debian based system, you can follow [these instructions][4].  If you're on a different system, you'll need to install the SDL2 and extensions [per the instructions for your system][5].  If you already have SDL2 and extensions installed, only steps you need is to install [Tiled][6], [Valgrind][7], and [Igloo][8] if you don't have those already.  On Debian-based systems, you can do the following:
 
 ```bash
-sudo update && sudo apt install cmake llibtinyxml-dev tiled valgrind liblua5.3-dev
-```
-```
+sudo apt update && sudo apt install cmake llibtinyxml2-dev tiled valgrind liblua5.3-dev
 
+# Igloo w/ Snowhouse
 git clone https://github.com/codewars/igloo.git
 cd igloo
 git submodule add -b headers-only https://github.com/banditcpp/snowhouse snowhouse
 git submodule update --init --recursive
+sed -i 's/\VERSION 3.22/VERSION 3.16/g' CMakeLists.txt  # This is a hack to get it to work on older versions of CMake
 mkdir build && cd build
 cmake ..
-sudo cmake --build .. --target install
+sudo cmake --build . --target install
+
+OpenGL Mathematics (GLM)
+git clone https://github.com/g-truc/glm.git
+cd glm
+mkdir build && cd build
+cmake ..
+sudo cmake --build . --target install
 ```
 
 I'll update these instructions for WSL and MacOS, eventually.  However, if anyone wants to submit a PR for these, I'd be happy to accept it.

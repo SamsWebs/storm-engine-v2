@@ -6,10 +6,10 @@
 
 using namespace igloo;
 
-Describe(LoggerTest) {
+Describe(LoggerSpec) {
   void SetUp() { Logger::messages.clear(); }
 
-  It(TestLog) {
+  It(should_log_info_message) {
     Logger logger;
     logger.Log("This is a log message");
     Assert::That(Logger::messages.size(), Equals(1));
@@ -18,7 +18,7 @@ Describe(LoggerTest) {
     // message"));
   };
 
-  It(TestErr) {
+  It(should_log_error_message) {
     Logger logger;
     logger.Err("This is an error message");
     Assert::That(Logger::messages.size(), Equals(1));
@@ -27,7 +27,7 @@ Describe(LoggerTest) {
     //             Equals("This is an error message"));
   };
 
-  It(TestSetLogCallback) {
+  It(should_set_log_callback) {
     Logger logger;
     std::vector<LogEntry> callback_messages;
     logger.SetLogCallback(
@@ -39,7 +39,7 @@ Describe(LoggerTest) {
     // message"));
   };
 
-  It(TestSetErrCallback) {
+  It(should_set_err_callback) {
     Logger logger;
     std::vector<LogEntry> callback_messages;
     logger.SetErrCallback(

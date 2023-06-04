@@ -1,0 +1,9 @@
+**/build
+Dockerfile.*
+.dockerignore
+docs
+.envrc
+.git
+.github
+.gitignore
+README.md

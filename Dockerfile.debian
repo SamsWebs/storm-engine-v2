@@ -1,0 +1,13 @@
+FROM storminator16/igloo-testing:latest
+
+# # Copy the source code into the container
+RUN mkdir -p /opt/library
+COPY ./common /opt/library/common
+COPY ./vendor /opt/library/vendor
+COPY ./specs /opt/library/specs
+COPY ./Makefile.debian /opt/library/Makefile
+COPY ./base.mk /opt/library/base.mk
+
+# Build the project
+WORKDIR /opt/library
+CMD ["make", "test"]

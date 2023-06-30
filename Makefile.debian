@@ -10,7 +10,7 @@ all: clean test-target run-test target
 
 include ./base.mk
 
-LIBSRCS  = $(wildcard common/**/*.cpp)
+LIBSRCS  = $(shell find common -name '*.cpp')
 LIBOBJS  = $(LIBSRCS:.cpp=.o)
 
 target : $(LIBOBJS)
@@ -24,9 +24,8 @@ install:
 
 test: test-target run-test
 
-TESTSRCS  	= $(wildcard specs/*.cpp)
-TESTSRCS  	+= $(wildcard common/**/*.cpp)
-TESTSRCS  	+= $(wildcard common/*.cpp)
+TESTSRCS  	:= $(shell find specs -name '*.cpp')
+TESTSRCS  	+= $(shell find common -name '*.cpp')
 TESTOBJS  	= $(TESTSRCS:.cpp=.o)
 
 run-test:

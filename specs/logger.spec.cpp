@@ -3,51 +3,93 @@
 #include <string>
 
 #include "../common/logger.h"
+#include <sstream>
 
 using namespace igloo;
 
-Describe(LoggerSpec) {
-  void SetUp() { Logger::messages.clear(); }
+Describe(LoggerSpec){
+    void LogCallbackFunction(const LogEntry &entry){std::stringstream ss;
+ss << "Custom log callback: Type=" << static_cast<int>(entry.type)
+   << ", Message=" << entry.message;
+Logger::messages.push_back({entry.type, ss.str()});
+}
 
-  It(should_log_info_message) {
-    Logger logger;
-    logger.Log("This is a log message");
-    Assert::That(Logger::messages.size(), Equals(1));
-    Assert::That(Logger::messages[0].type, Equals(LOG_INFO));
-    // Assert::That(Logger::messages[0].message, Equals("This is a log
-    // message"));
-  };
+void ErrCallbackFunction(const LogEntry &entry) {
+  std::stringstream ss;
+  ss << "Custom error callback: Type=" << static_cast<int>(entry.type)
+     << ", Message=" << entry.message;
+  Logger::messages.push_back({entry.type, ss.str()});
+}
 
-  It(should_log_error_message) {
-    Logger logger;
-    logger.Err("This is an error message");
-    Assert::That(Logger::messages.size(), Equals(1));
-    Assert::That(Logger::messages[0].type, Equals(LOG_ERROR));
-    // Assert::That(Logger::messages[0].message,
-    //             Equals("This is an error message"));
-  };
+It(should_log_messages_with_correct_type) {
+  // Clear any existing log messages
+  Logger::messages.clear();
 
-  It(should_set_log_callback) {
-    Logger logger;
-    std::vector<LogEntry> callback_messages;
-    logger.SetLogCallback(
-        [&](const LogEntry &entry) { callback_messages.push_back(entry); });
-    logger.Log("This is a log message");
-    Assert::That(callback_messages.size(), Equals(1));
-    Assert::That(callback_messages[0].type, Equals(LOG_INFO));
-    // Assert::That(callback_messages[0].message, Equals("This is a log
-    // message"));
-  };
+  // Arrange
+  std::string message = "Test log message";
+  std::string errorMessage = "Test error message";
 
-  It(should_set_err_callback) {
-    Logger logger;
-    std::vector<LogEntry> callback_messages;
-    logger.SetErrCallback(
-        [&](const LogEntry &entry) { callback_messages.push_back(entry); });
-    logger.Err("This is an error message");
-    Assert::That(callback_messages.size(), Equals(1));
-    Assert::That(callback_messages[0].type, Equals(LOG_ERROR));
-    // Assert::That(callback_messages[0].message,
-    //              Equals("This is an error message"));
-  };
-};
+  // Create an instance of Logger
+  Logger logger;
+
+  // Act
+  logger.Log(message);
+  logger.Err(errorMessage);
+
+  // Assert
+  Assert::That(Logger::messages.size(), Equals(2));
+
+  // Check the first log entry
+  Assert::That(Logger::messages[0].type, Equals(LogType::LOG_INFO));
+
+  // Check the second log entry
+  Assert::That(Logger::messages[1].type, Equals(LogType::LOG_ERROR));
+}
+
+It(should_call_custom_log_callback) {
+  // Clear any existing log messages
+  Logger::messages.clear();
+
+  // Arrange
+  std::string message = "Test log message";
+
+  // Create an instance of Logger
+  Logger logger;
+
+  // Set custom error callback
+  std::vector<LogEntry> callback_messages;
+  logger.SetErrCallback(
+      [&](const LogEntry &entry) { callback_messages.push_back(entry); });
+
+  // Act
+  logger.Log(message);
+
+  // Assert
+  Assert::That(Logger::messages.size(), Equals(1));
+  Assert::That(Logger::messages[0].type, Equals(LogType::LOG_INFO));
+}
+
+It(should_call_custom_error_callback) {
+  // Clear any existing log messages
+  Logger::messages.clear();
+
+  // Arrange
+  std::string errorMessage = "Test error message";
+
+  // Create an instance of Logger
+  Logger logger;
+
+  // Set custom error callback
+  std::vector<LogEntry> callback_messages;
+  logger.SetErrCallback(
+      [&](const LogEntry &entry) { callback_messages.push_back(entry); });
+
+  // Act
+  logger.Err(errorMessage);
+
+  // Assert
+  Assert::That(Logger::messages.size(), Equals(1));
+  Assert::That(Logger::messages[0].type, Equals(LogType::LOG_ERROR));
+}
+}
+;

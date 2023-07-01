@@ -1,6 +1,10 @@
 #pragma once
 
+#include <chrono>
+#include <ctime>
+#include <fstream>
 #include <functional>
+#include <iostream>
 #include <string>
 #include <vector>
 
@@ -24,4 +28,8 @@ public:
 private:
   LogCallback log_callback_;
   LogCallback err_callback_;
+  void logHelper(const std::string &msg, LogType logType);
+  static const std::string GREEN;
+  static const std::string RED;
+  static const std::string RESET;
 };

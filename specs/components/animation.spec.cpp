@@ -5,9 +5,10 @@
 
 using namespace igloo;
 
-Describe(AnimationComponentSpec){
-    It(should_initialize_with_default_values){// Arrange & Act
-                                              AnimationComponent animation;
+Describe(AnimationComponentSpec){It(should_initialize_with_default_values){
+
+    // Arrange & Act
+    AnimationComponent animation;
 
 // Assert
 Assert::That(animation.numFrames, Equals(1));

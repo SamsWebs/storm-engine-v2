@@ -1,31 +1,54 @@
 #pragma once
 
-#include <SDL2/SDL.h>
+#include <iostream>
 
+#include <SDL2/SDL.h>
+#include <SDL2/SDL_image.h>
 #include <stormengine2/logger.h>
 
-const int FPS = 60;
-const int MILLISECS_PER_FRAME = 1000 / FPS;
+#include <stormengine2/assetStore.h>
+#include <stormengine2/components/animation.h>
+#include <stormengine2/components/boxCollider.h>
+#include <stormengine2/components/rigidBody.h>
+#include <stormengine2/components/sprite.h>
+#include <stormengine2/components/transform.h>
+#include <stormengine2/ecs.h>
+#include <stormengine2/systems/animation.h>
+#include <stormengine2/systems/collision.h>
+#include <stormengine2/systems/movement.h>
+#include <stormengine2/systems/render.h>
+#include <stormengine2/systems/renderCollider.h>
+#include <stormengine2/tilemapLoader.h>
+
+#include "glm/glm.hpp"
+
+constexpr int FPS = 60;
+constexpr int MILLISECS_PER_FRAME = 1000 / FPS;
 
 class Game {
+private:
+  bool isRunning = false;
+  bool isDebugging = false;
+  int millisecondsPreviousFrame = 0;
+  SDL_Window *window = nullptr;
+  SDL_Renderer *renderer = nullptr;
+
+  Registry registry;
+  AssetStore assetStore;
+  Logger logger;
+
 public:
   Game();
   ~Game();
   void Initialize();
-  void Run();
-  void Setup();
   void ProcessInput();
+  void Setup();
+  void LoadLevel(int level);
   void Update();
   void Render();
+  void Run();
   void Destroy();
 
   int windowWidth;
   int windowHeight;
-
-private:
-  bool isRunning;
-  int millisecsPreviousFrame = 0;
-  SDL_Window *window;
-  SDL_Renderer *renderer;
-  Logger logger;
 };

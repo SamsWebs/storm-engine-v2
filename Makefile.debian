@@ -10,7 +10,7 @@ all: clean test-target run-test target
 
 include ./base.mk
 
-LIBSRCS  = $(wildcard common/**/*.cpp)
+LIBSRCS  = $(shell find common -name '*.cpp')
 LIBOBJS  = $(LIBSRCS:.cpp=.o)
 
 target : $(LIBOBJS)
@@ -20,13 +20,12 @@ target : $(LIBOBJS)
 install:
 	mkdir -p /usr/local/include/stormengine2
 	cp $(TARGET) /usr/local/lib && cp -r ./common/* /usr/local/include/stormengine2
-	rm -r /usr/local/include/stormengine2/**/*.o
+	rm -r /usr/local/include/stormengine2/*.o
 
 test: test-target run-test
 
-TESTSRCS  	= $(wildcard specs/*.cpp)
-TESTSRCS  	+= $(wildcard common/**/*.cpp)
-TESTSRCS  	+= $(wildcard common/*.cpp)
+TESTSRCS  	:= $(shell find specs -name '*.cpp')
+TESTSRCS  	+= $(shell find common -name '*.cpp')
 TESTOBJS  	= $(TESTSRCS:.cpp=.o)
 
 run-test:

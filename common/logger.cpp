@@ -1,11 +1,18 @@
-#include <chrono>
-#include <ctime>
-#include <fstream>
-#include <iostream>
-
 #include "logger.h"
 
 std::vector<LogEntry> Logger::messages;
+
+const std::string Logger::GREEN = "\033[32m";
+const std::string Logger::RED = "\033[31m";
+const std::string Logger::RESET = "\033[0m";
+
+void Logger::Log(const std::string &message) {
+  logHelper(message, LogType::LOG_INFO);
+}
+
+void Logger::Err(const std::string &message) {
+  logHelper(message, LogType::LOG_ERROR);
+}
 
 std::string CurrentDateTimeToString() {
   std::time_t now =
@@ -24,24 +31,32 @@ void Logger::SetErrCallback(const LogCallback &callback) {
   err_callback_ = callback;
 }
 
-void Logger::Log(const std::string &message) {
-  LogEntry log_entry;
-  log_entry.type = LOG_INFO;
-  log_entry.message = "LOG: [" + CurrentDateTimeToString() + "]: " + message;
-  messages.push_back(log_entry);
+void Logger::logHelper(const std::string &message, LogType logType) {
+  LogEntry logEntry;
+  logEntry.type = logType;
+  std::string color;
+  std::string logDesc;
+
+  switch (logType) {
+  case LogType::LOG_ERROR:
+    color = RED;
+    logDesc = "ERR";
+    break;
+  case LogType::LOG_INFO:
+    color = GREEN;
+    logDesc = "LOG";
+    break;
+  default:
+    break;
+  }
+
+  logEntry.message =
+      logDesc + " [ " + CurrentDateTimeToString() + "]: " + message;
+
+  std::cout << color << logEntry.message << RESET << std::endl;
+  messages.push_back(logEntry);
 
   if (log_callback_) {
-    log_callback_(log_entry);
-  }
-}
-
-void Logger::Err(const std::string &message) {
-  LogEntry log_entry;
-  log_entry.type = LOG_ERROR;
-  log_entry.message = "ERR: [" + CurrentDateTimeToString() + "]: " + message;
-  messages.push_back(log_entry);
-
-  if (err_callback_) {
-    err_callback_(log_entry);
+    log_callback_(logEntry);
   }
 }

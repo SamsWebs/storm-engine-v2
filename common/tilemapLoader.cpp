@@ -9,7 +9,8 @@ TileMapLoader::TileMapLoader(const std::string &fileMap,
 
 TileMapLoader::~TileMapLoader() {
   if (mapSurface)
-    SDL_free(mapSurface);
+    SDL_FreeSurface(mapSurface);
+  mapSurface = nullptr;
 }
 
 void TileMapLoader::loadImg(const ::std::string &filePng) {

@@ -12,7 +12,7 @@ OBJS 	= $(SRCS:.cpp=.o)
 
 all: clean $(TARGET)
 
-include ../../../base.mk
+include ../../base.mk
 
 run:
 	$(TARGET)

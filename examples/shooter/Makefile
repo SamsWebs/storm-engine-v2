@@ -1,5 +1,5 @@
 #!/bin/bash
 
-NAME = tanks
+NAME = alienattack
 
 include ../examples.mk

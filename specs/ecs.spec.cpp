@@ -1,7 +1,5 @@
 #include <igloo/igloo_alt.h>
 
-#include "../vendor/fakeit/fakeit.h"
-
 #include "../common/ecs.h"
 
 using namespace igloo;

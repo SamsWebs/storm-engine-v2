@@ -14,6 +14,7 @@
 #include <stormengine2/components/sprite.h>
 #include <stormengine2/components/transform.h>
 #include <stormengine2/ecs.h>
+#include <stormengine2/gameStateMachine.h>
 #include <stormengine2/logger.h>
 #include <stormengine2/systems/animation.h>
 #include <stormengine2/systems/collision.h>
@@ -22,28 +23,29 @@
 #include <stormengine2/systems/renderCollider.h>
 #include <stormengine2/tilemapLoader.h>
 
-constexpr int FPS = 60;
-constexpr int MILLISECS_PER_FRAME = 1000 / FPS;
+//#include "states/gameOverState.h"
+#include "states/mainMenuState.h"
+#include "states/pauseState.h"
+#include "states/playState.h"
+
+// constexpr int FPS = 60;
+// constexpr int MILLISECS_PER_FRAME = 1000 / FPS;
 
 class Game {
 private:
   bool isRunning = false;
   bool isDebugging = false;
-  int millisecondsPreviousFrame = 0;
   SDL_Window *window = nullptr;
   SDL_Renderer *renderer = nullptr;
 
-  Registry registry;
-  AssetStore assetStore;
   Logger logger;
+  GameStateMachine gameStateMachine;
 
 public:
   Game();
   ~Game();
   void Initialize();
   void ProcessInput();
-  void Setup();
-  void LoadLevel(int level);
   void Update();
   void Render();
   void Run();

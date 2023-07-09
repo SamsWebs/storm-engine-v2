@@ -8,6 +8,7 @@ using namespace igloo;
 
 class MockGameState : public GameState {
 public:
+  void processInput() override {}
   void update() override {}
   void render() override {}
   bool onEnter() override { return true; }

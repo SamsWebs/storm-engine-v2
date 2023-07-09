@@ -10,6 +10,7 @@ public:
   GameStateMachine() {}
   ~GameStateMachine() {}
 
+  void processInput();
   void update();
   void render();
 

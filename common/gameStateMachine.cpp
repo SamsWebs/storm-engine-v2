@@ -11,6 +11,12 @@ void GameStateMachine::clean() {
   }
 }
 
+void GameStateMachine::processInput() {
+  if (!m_gameStates.empty()) {
+    m_gameStates.back()->processInput();
+  }
+}
+
 void GameStateMachine::update() {
   if (!m_gameStates.empty()) {
     m_gameStates.back()->update();

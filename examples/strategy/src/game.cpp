@@ -61,15 +61,19 @@ void Game::ProcessInput() {
       break;
     }
   }
-}
 
-void Game::ProcessInput() { gameStateMachine.processInput(); }
+  gameStateMachine.processInput();
+}
 
 void Game::Update() { gameStateMachine.update(); }
 
 void Game::Render() { gameStateMachine.render(); }
 
 void Game::Destroy() {
+
+  gameStateMachine.clean();
+  //  / delete gameStateMachine;
+
   SDL_DestroyRenderer(renderer);
   SDL_DestroyWindow(window);
   SDL_QuitSubSystem(SDL_INIT_EVERYTHING);

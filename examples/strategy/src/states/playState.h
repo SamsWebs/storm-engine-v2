@@ -1,4 +1,7 @@
+#pragma once
+
 #include <SDL2/SDL.h>
+
 #include <stormengine2/ecs.h>
 #include <stormengine2/graphics/engine.h>
 #include <stormengine2/states/gameState.h>

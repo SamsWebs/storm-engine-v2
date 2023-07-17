@@ -28,9 +28,6 @@
 #include "states/pauseState.h"
 #include "states/playState.h"
 
-// constexpr int FPS = 60;
-// constexpr int MILLISECS_PER_FRAME = 1000 / FPS;
-
 class Game {
 private:
   bool isRunning = false;

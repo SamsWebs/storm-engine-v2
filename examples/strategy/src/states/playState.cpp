@@ -127,5 +127,20 @@ void PlayState::processInput() {
   }
 }
 
-bool PlayState::onEnter() {}
-bool PlayState::onExit() {}
+bool PlayState::onEnter() {
+  // here we can set default variables for the game play
+  // and load assets specific for the level
+
+  m_loadingComplete = true;
+
+  std::cout << "entering PlayState\n";
+  return true;
+}
+bool PlayState::onExit() {
+  // here we can free any resource we put on the stack
+  // and set the exiting_state flag
+  m_exiting = true;
+
+  std::cout << "exiting PlayState\n";
+  return true;
+}

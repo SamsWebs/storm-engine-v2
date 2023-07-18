@@ -69,7 +69,9 @@
         "thread": "cpp",
         "cfenv": "cpp",
         "cinttypes": "cpp",
-        "valarray": "cpp"
+        "valarray": "cpp",
+        "codecvt": "cpp",
+        "filesystem": "cpp"
     },
     "editor.tokenColorCustomizations": {
         "textMateRules": [

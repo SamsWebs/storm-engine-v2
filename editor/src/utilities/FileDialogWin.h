@@ -1,6 +1,7 @@
 #pragma once
 
-#include <Windows.h>
+#include <X11/Xlib.h>
+#include <algorithm>
 #include <string>
 /*
  *	Windows platform implementation of the FileDialogs needed for loading
@@ -18,7 +19,7 @@ public:
   static std::string
   OpenFile(const char *filter = "Lua Files (*.lua) |*.lua\0*.lua\0 Tilemap "
                                 "Files (*.map) | *.map\0*.map\0",
-           HWND owner = NULL);
+           Window owner = NULL);
 
   /*
    *  	SaveFile --> Opens a windows file dialog.
@@ -28,7 +29,7 @@ public:
   static std::string
   SaveFile(const char *filter = "Lua Files (*.lua) |*.lua\0*.lua\0 Tilemap "
                                 "Files (*.map) | *.map\0*.map\0",
-           HWND owner = NULL);
+           Window owner = NULL);
 
   /*
    *  	OpenImageFile--> Opens a windows file dialog.
@@ -39,5 +40,5 @@ public:
   OpenImageFile(const char *filter =
                     "PNG Files (*.png) | *.png\0*.png\0 Bitmap Files (*.bmp) "
                     "|*.bmp\0*.bmp\0 JPEG Files (*.jpg) |*.jpg\0*.jpg\0",
-                HWND owner = NULL);
+                Window owner = NULL);
 };

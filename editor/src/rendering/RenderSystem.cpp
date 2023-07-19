@@ -1,8 +1,8 @@
 #include "RenderSystem.h"
 
 RenderSystem::RenderSystem() {
-  RequiredComponent<TransformComponent>();
-  RequiredComponent<SpriteComponent>();
+  RequireComponent<TransformComponent>();
+  RequireComponent<SpriteComponent>();
 }
 
 void RenderSystem::Update(SDL_Renderer *renderer,

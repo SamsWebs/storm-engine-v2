@@ -9,8 +9,8 @@ RemoveTileCommand::RemoveTileCommand(
 void RemoveTileCommand::Execute() {
   mBoxColliderComponent = mMouseControl->GetRemovedBoxComponent();
 
-  if (mBoxColliderComponent.mWidth == 0 && mBoxColliderComponent.mHeight == 0 &&
-      mBoxColliderComponent.mOffset == glm::vec2(0))
+  if (mBoxColliderComponent.width == 0 && mBoxColliderComponent.height == 0 &&
+      mBoxColliderComponent.offset == glm::vec2(0))
     mCollider = false;
   else
     mCollider = true;
@@ -20,7 +20,7 @@ void RemoveTileCommand::Execute() {
 
   mAnimationComponent = mMouseControl->GetRemovedAnimationComponent();
 
-  if (mAnimationComponent.mNumFrames > 1)
+  if (mAnimationComponent.numFrames > 1)
     mAnimated = true;
   else
     mAnimated = false;

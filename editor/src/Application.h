@@ -9,10 +9,12 @@
 
 #include <glm/glm.hpp>
 #include <imgui/imgui.h>
-#include <imgui/imgui_impl_sdl.h>
+#include <imgui/imgui_impl_sdl2.h>
 #include <imgui/imgui_sdl.h>
+#include <imgui/imgui_stdlib.h>
 #include <sol/sol.hpp>
 
+#include <stormengine2/ecs.h>
 #include <stormengine2/logger.h>
 
 #include "./utilities/Utilities.h"
@@ -64,6 +66,9 @@ private:
   void UpdateDeltaTime();
   void CameraControl(SDL_Event &event);
   void Zoom(SDL_Event &event);
+
+  Registry registry;
+  Logger logger;
 
 public:
   Application();

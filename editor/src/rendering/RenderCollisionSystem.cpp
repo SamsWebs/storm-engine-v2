@@ -1,8 +1,8 @@
 #include "RenderCollisionSystem.h"
 
 RenderCollisionSystem::RenderCollisionSystem() {
-  RequiredComponent<BoxColliderComponent>();
-  RequiredComponent<TransformComponent>();
+  RequireComponent<BoxColliderComponent>();
+  RequireComponent<TransformComponent>();
 }
 
 void RenderCollisionSystem::Update(

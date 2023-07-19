@@ -6,17 +6,18 @@ struct AnimationComponent {
   int numFrames;
   int currentFrame;
   int frameSpeedRate;
-  bool isLoop;
+  bool vertical;
+  bool isLooped;
   int startTime;
-  bool isVertical;
   int frameOffset;
   int lastFrame;
 
   AnimationComponent(int numFrames = 1, int frameSpeedRate = 1,
-                     bool isLoop = true, bool isVertical = true,
+                     bool vertical = true, bool isLooped = true,
                      int frameOffset = 0)
       : numFrames{numFrames}, currentFrame{1}, frameSpeedRate{frameSpeedRate},
-        isLoop{isLoop}, isVertical{isVertical}, frameOffset{frameOffset} {
+        vertical{vertical}, isLooped{isLooped}, frameOffset{frameOffset} {
+    currentFrame = 1;
     startTime = SDL_GetTicks();
     lastFrame = 0;
   }

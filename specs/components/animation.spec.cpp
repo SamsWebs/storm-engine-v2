@@ -14,7 +14,7 @@ Describe(AnimationComponentSpec){It(should_initialize_with_default_values){
 Assert::That(animation.numFrames, Equals(1));
 Assert::That(animation.currentFrame, Equals(1));
 Assert::That(animation.frameSpeedRate, Equals(1));
-Assert::That(animation.isLoop, IsTrue());
+Assert::That(animation.isLooped, IsTrue());
 }
 
 It(should_initialize_with_custom_values) {
@@ -28,7 +28,7 @@ It(should_initialize_with_custom_values) {
   Assert::That(animation.numFrames, Equals(numFrames));
   Assert::That(animation.currentFrame, Equals(1));
   Assert::That(animation.frameSpeedRate, Equals(frameSpeedRate));
-  Assert::That(animation.isLoop, IsFalse());
+  Assert::That(animation.isLooped, IsTrue());
 }
 }
 ;

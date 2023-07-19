@@ -30,6 +30,8 @@ private:
   void SaveMap(std::filesystem::path filename);
   void SaveColliders(std::filesystem::path filename);
 
+  Logger logger;
+
 public:
   FileLoader();
   ~FileLoader();

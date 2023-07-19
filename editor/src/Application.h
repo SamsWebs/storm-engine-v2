@@ -67,7 +67,6 @@ private:
   void CameraControl(SDL_Event &event);
   void Zoom(SDL_Event &event);
 
-  Registry registry;
   Logger logger;
 
 public:

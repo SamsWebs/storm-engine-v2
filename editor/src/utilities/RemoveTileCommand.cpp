@@ -1,5 +1,7 @@
 #include "RemoveTileCommand.h"
 
+Registry AssetManager::registry;
+
 RemoveTileCommand::RemoveTileCommand(
     std::shared_ptr<MouseControl> &mouseControl)
     : mMouseControl(mouseControl), mTileId(-1), mCollider(false),
@@ -28,7 +30,7 @@ void RemoveTileCommand::Execute() {
 
 void RemoveTileCommand::Undo() {
   // Create a new tile based on the removed tile
-  Entity newEntity = Registry::Instance().CreateEntity();
+  Entity newEntity = registry.CreateEntity();
   newEntity.Group("tiles");
   newEntity.AddComponent<TransformComponent>(mTransformComponent);
   newEntity.AddComponent<SpriteComponent>(mSpriteComponent);
@@ -40,7 +42,7 @@ void RemoveTileCommand::Undo() {
     newEntity.AddComponent<AnimationComponent>(mAnimationComponent);
 
   // The Tile id is need for the redo so we can remove the tile
-  mTileId = newEntity.GetID();
+  mTileId = newEntity.GetId();
 }
 
 // Redo removes the tile again
@@ -49,13 +51,13 @@ void RemoveTileCommand::Redo() {
   if (mTileId == -1)
     return;
 
-  auto entities = Registry::Instance().GetEntitiesByGroup("tiles");
+  auto entities = registry.GetEntitiesByGroup("tiles");
 
   for (auto &entity : entities) {
-    if (entity.GetID() == mTileId) {
+    if (entity.GetId() == mTileId) {
       entity.Kill();
-      LOG_INFO("REMOVE: __REDO__LINE__58: Tile: {0} has been removed!",
-               mTileId);
+      logger.Log("REMOVE: __REDO__LINE__58: Tile: {0} has been removed!" +
+                 mTileId);
       mTileId = -1;
     }
   }

@@ -1,5 +1,7 @@
 #include "AddTileCommand.h"
 
+Registry AssetManager::registry;
+
 AddTileCommand::AddTileCommand(std::shared_ptr<MouseControl> &mouseControl)
     : mMouseControl(mouseControl), mTileId(-1) // -1 means no Id
       ,
@@ -8,15 +10,15 @@ AddTileCommand::AddTileCommand(std::shared_ptr<MouseControl> &mouseControl)
 
 void AddTileCommand::Execute() {
   mTileId = mMouseControl->GetRecentTileId();
-  LOG_INFO("Tile ID: {0}", mTileId);
+  logger.Log("Tile ID: " + mTileId);
 }
 
 void AddTileCommand::Undo() {
-  auto entities = Registry::Instance().GetEntitiesByGroup("tiles");
+  auto entities = registry.GetEntitiesByGroup("tiles");
 
   for (auto &entity : entities) {
     // Remove the most Recently added tile
-    if (entity.GetID() == mTileId) {
+    if (entity.GetId() == mTileId) {
       const auto &transform = entity.GetComponent<TransformComponent>();
       const auto &sprite = entity.GetComponent<SpriteComponent>();
 
@@ -36,13 +38,13 @@ void AddTileCommand::Undo() {
       }
 
       entity.Kill();
-      LOG_INFO("UNDO: Remove Tile: {0}", mTileId);
+      logger.Log("UNDO: Remove Tile: " + mTileId);
     }
   }
 }
 
 void AddTileCommand::Redo() {
-  Entity newEntity = Registry::Instance().CreateEntity();
+  Entity newEntity = registry.CreateEntity();
   newEntity.Group("tiles");
   newEntity.AddComponent<TransformComponent>(mTransformComponent);
   newEntity.AddComponent<SpriteComponent>(mSpriteComponent);
@@ -53,5 +55,5 @@ void AddTileCommand::Redo() {
   if (mAnimated)
     newEntity.AddComponent<AnimationComponent>(mAnimationComponent);
 
-  mTileId = newEntity.GetID();
+  mTileId = newEntity.GetId();
 }

@@ -14,7 +14,7 @@ void CommandManager::ExecuteCmd(std::shared_ptr<ICommand> command) {
 void CommandManager::Undo() {
   // If the undo stack is empty, there is nothing to do
   if (mUndoStack.size() <= 0) {
-    LOG_ERROR("Undo Stack Empty!");
+    logger.Err("Undo Stack Empty!");
     return;
   }
 
@@ -29,7 +29,7 @@ void CommandManager::Undo() {
 void CommandManager::Redo() {
   // If the redo stack is empty, there is nothing to do
   if (mRedoStack.size() <= 0) {
-    LOG_ERROR("Redo Stack Empty!");
+    logger.Err("Redo Stack Empty!");
     return;
   }
 
@@ -39,7 +39,7 @@ void CommandManager::Redo() {
   mUndoStack.push(mRedoStack.top());
   // Pop that command off of the redo stack
   mRedoStack.pop();
-  LOG_ERROR("RedoSize: {0}", mRedoStack.size());
+  logger.Err("RedoSize: {0}", mRedoStack.size());
 }
 
 void CommandManager::Clear() {

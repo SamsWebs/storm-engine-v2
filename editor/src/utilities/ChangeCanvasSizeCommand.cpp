@@ -8,7 +8,7 @@ ChangeCanvasSizeCommand::ChangeCanvasSizeCommand(
 
 void ChangeCanvasSizeCommand::Execute() {
   // Nothing to set
-  // LOG_INFO("width: {0}\nprevWidth: {1}\nheight: {2}\nprevHeight: {3}",
+  // logger.Log("width: {0}\nprevWidth: {1}\nheight: {2}\nprevHeight: {3}",
   // mCanvasWidth, mPrevCanvasWidth, mCanvasHeight, mPrevCanvasHeight);
 }
 

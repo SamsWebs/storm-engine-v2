@@ -11,6 +11,8 @@
 #include <imgui/imgui.h>
 #include <sol/sol.hpp>
 
+#include <stormengine2/logger.h>
+
 #include "../AssetManager.h"
 #include "../Canvas.h"
 #include "../MouseControl.h"
@@ -101,6 +103,8 @@ private:
    * from the previous tile properties.
    */
   bool CheckAnimationStatus();
+
+  Logger logger;
 
 public:
   ImGuiFuncs(class std::shared_ptr<MouseControl> &mouseControl);

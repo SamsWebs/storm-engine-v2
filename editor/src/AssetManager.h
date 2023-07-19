@@ -7,6 +7,7 @@
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
 
+#include <stormengine2/ecs.h>
 #include <stormengine2/logger.h>
 
 #include "./utilities/Utilities.h"
@@ -18,6 +19,8 @@
 class AssetManager {
 private:
   std::map<std::string, Texture> mTextures;
+  Logger logger;
+  static Registry registry;
 
 public:
   AssetManager();

@@ -1,16 +1,18 @@
 #include "Application.h"
 
+Registry AssetManager::registry;
+
 void Application::Init() {
   // Init SDL
   if (SDL_Init(SDL_INIT_EVERYTHING) != 0) {
-    LOG_ERROR("APPLICATION__LINE__14: Failed to Initialize SDL: {0}",
-              SDL_GetError());
+    logger.Err("APPLICATION__LINE__14: Failed to Initialize SDL: " +
+               std::string(SDL_GetError()));
     return;
   }
 
   // Init SDL TTF
   if (TTF_Init() != 0) {
-    LOG_ERROR("APPLICATION__LINE__21: Failed to Initialize SDL_TTF!");
+    logger.Err("APPLICATION__LINE__21: Failed to Initialize SDL_TTF!");
     return;
   }
 
@@ -26,8 +28,8 @@ void Application::Init() {
       WINDOW_WIDTH, WINDOW_HEIGHT, SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE));
 
   if (!mWindow) {
-    LOG_ERROR("APPLICATION__LINE__41: Failed to create window: {0}",
-              SDL_GetError());
+    logger.Err("APPLICATION__LINE__41: Failed to create window: {0} " +
+               std::string(SDL_GetError()));
     return;
   }
 
@@ -36,8 +38,8 @@ void Application::Init() {
       mWindow.get(), -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC));
 
   if (!mRenderer) {
-    LOG_ERROR("APPLICATION__LINE__41: Failed to create renderer: {0}",
-              SDL_GetError());
+    logger.Err("APPLICATION__LINE__41: Failed to create renderer: " +
+               std::string(SDL_GetError()));
     return;
   }
 
@@ -58,7 +60,7 @@ void Application::Init() {
   static const ImWchar icon_ranges[] = {ICON_MIN_FA, ICON_MAX_FA, 0};
   if (!io.Fonts->AddFontFromFileTTF("fonts/fontawesome-webfont.ttf", 14.0f,
                                     &config, icon_ranges))
-    LOG_ERROR("FAILED TO LOAD FONT!");
+    logger.Err("FAILED TO LOAD FONT!");
 
   io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
 
@@ -78,14 +80,11 @@ void Application::Init() {
   // Initialize asset manager
   mAssetManager = std::make_unique<AssetManager>();
 
-  // Initialize the Logger
-  Logger::Init();
-
   // Add all Necessary Systems to registry
-  Registry::Instance().AddSystem<RenderSystem>();
-  Registry::Instance().AddSystem<RenderCollisionSystem>();
-  Registry::Instance().AddSystem<RenderGuiSystem>();
-  Registry::Instance().AddSystem<AnimationSystem>();
+  registry.AddSystem<RenderSystem>();
+  registry.AddSystem<RenderCollisionSystem>();
+  registry.AddSystem<RenderGuiSystem>();
+  registry.AddSystem<AnimationSystem>();
   // Add the mouse hand texture right away
   mAssetManager->AddTexture(mRenderer, "mouse_hand", "./assets/mouse_hand.png");
 }
@@ -95,18 +94,17 @@ void Application::Draw() {
   SDL_RenderClear(mRenderer.get());
 
   // Render Application Systems
-  Registry::Instance().GetSystem<RenderGuiSystem>().RenderGrid(mRenderer,
-                                                               mCamera, mZoom);
-  Registry::Instance().GetSystem<RenderSystem>().Update(
-      mRenderer.get(), mAssetManager, mCamera, mZoom);
+  registry.GetSystem<RenderGuiSystem>().RenderGrid(mRenderer, mCamera, mZoom);
+  registry.GetSystem<RenderSystem>().Update(mRenderer.get(), mAssetManager,
+                                            mCamera, mZoom);
 
   if (mShowColliders)
-    Registry::Instance().GetSystem<RenderCollisionSystem>().Update(
-        mRenderer, mCamera, mZoom);
+    registry.GetSystem<RenderCollisionSystem>().Update(mRenderer, mCamera,
+                                                       mZoom);
 
-  Registry::Instance().GetSystem<RenderGuiSystem>().Update(
+  registry.GetSystem<RenderGuiSystem>().Update(
       mAssetManager, mRenderer, mMouseBox, mCamera, mEvent, mZoom, mDeltaTime);
-  Registry::Instance().GetSystem<AnimationSystem>().Update();
+  registry.GetSystem<AnimationSystem>().Update();
 
   /*
           This is a little hack to get SDL and ImGui to stop Ghosting!
@@ -162,13 +160,13 @@ void Application::ProcessEvents() {
 
 void Application::Update() {
   UpdateDeltaTime();
-  Registry::Instance().Update();
+  registry.Update();
 
   // Change the window title based on the current project
-  Registry::Instance().GetSystem<RenderGuiSystem>().SetWindowName(mWindow);
+  registry.GetSystem<RenderGuiSystem>().SetWindowName(mWindow);
 
   // Check for Exit
-  if (Registry::Instance().GetSystem<RenderGuiSystem>().GetExit())
+  if (registry.GetSystem<RenderGuiSystem>().GetExit())
     mIsRunning = false;
 }
 

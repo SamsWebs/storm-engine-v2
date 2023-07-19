@@ -9,14 +9,14 @@ void AssetManager::AddTexture(Renderer &renderer, const std::string &assetId,
   if (!HasTexture(assetId)) {
     SDL_Surface *surface = IMG_Load(filePath.c_str());
     if (!surface)
-      LOG_ERROR("Unable to make Surface!");
+      logger.Err("Unable to make Surface!");
 
     Texture texture =
         Texture(SDL_CreateTextureFromSurface(renderer.get(), surface));
 
     if (!texture) {
-      LOG_ERROR("Unable to Create Texture[{0}] at filepath [{1}]", assetId,
-                filePath);
+      logger.Err("Unable to Create Texture[{0}] at filepath [{1}]", assetId,
+                 filePath);
     }
 
     // Fre the surface once the texture is created
@@ -25,7 +25,7 @@ void AssetManager::AddTexture(Renderer &renderer, const std::string &assetId,
     // Add the Textures to the map
     mTextures.emplace(assetId, std::move(texture));
   } else {
-    LOG_ERROR("ASSETMANAGER.CPP__LINE__36: Texture [{0}] already exists!");
+    logger.Err("ASSETMANAGER.CPP__LINE__36: Texture [{0}] already exists!");
   }
 }
 

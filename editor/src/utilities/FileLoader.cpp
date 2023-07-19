@@ -2,6 +2,8 @@
 
 namespace fs = std::filesystem;
 
+Registry AssetManager::registry;
+
 FileLoader::FileLoader() {}
 
 FileLoader::~FileLoader() {}
@@ -26,7 +28,7 @@ void FileLoader::LoadProject(sol::state &lua, const std::string &filename,
   fs::path filepath(filename);
 
   if (filepath.extension() != ".lua") {
-    LOG_ERROR("FILELOADER__LINE__44: Project File must be a [.lua] file!");
+    logger.Err("FILELOADER__LINE__44: Project File must be a [.lua] file!");
     // TODO: ADD ERROR MSG TO IMGUI
     return;
   }
@@ -37,8 +39,8 @@ void FileLoader::LoadProject(sol::state &lua, const std::string &filename,
   if (!script.valid()) {
     sol::error err = script;
     std::string errorMsg = err.what();
-    LOG_ERROR("FILELOADER__LINE__55: Error loading the Lua Script -- " +
-              errorMsg);
+    logger.Err("FILELOADER__LINE__55: Error loading the Lua Script -- " +
+               errorMsg);
     // TODO: ADD ERROR MSG TO IMGUI
     return;
   }
@@ -55,7 +57,7 @@ void FileLoader::LoadProject(sol::state &lua, const std::string &filename,
   while (true) {
     sol::optional<sol::table> hasAssets = project["assets"][assetNum];
     if (hasAssets == sol::nullopt) {
-      LOG_INFO("FILELOADER__LINE_75: Finished loading assets");
+      logger.Log("FILELOADER__LINE_75: Finished loading assets");
       break;
     }
 
@@ -75,7 +77,7 @@ void FileLoader::LoadProject(sol::state &lua, const std::string &filename,
   while (true) {
     sol::optional<sol::table> hasMaps = project["maps"][mapNum];
     if (hasMaps == sol::nullopt) {
-      LOG_INFO("FILELOADER__LINE_75: Finished loading assets");
+      logger.Log("FILELOADER__LINE_75: Finished loading assets");
       break;
     }
 
@@ -105,8 +107,8 @@ void FileLoader::LoadMap(const AssetManager_Ptr &assetManager,
   mapFile.open(filename);
 
   if (!mapFile.is_open()) {
-    LOG_ERROR("FILELOADER__LINE__37: Unable to open[{0}] for loading",
-              filename);
+    logger.Err("FILELOADER__LINE__37: Unable to open[{0}] for loading",
+               filename);
     return;
   }
 
@@ -160,7 +162,7 @@ void FileLoader::LoadMap(const AssetManager_Ptr &assetManager,
 void FileLoader::SaveMap(std::filesystem::path filename) {
   // Check to see if there are any tile entities to save to a file
   if (!Registry::Instance().DoesGroupExist("tiles")) {
-    LOG_ERROR(
+    logger.Err(
         "FILELOADER__LINE__85: Trying to save entities that do not exist!");
     return;
   }
@@ -170,7 +172,8 @@ void FileLoader::SaveMap(std::filesystem::path filename) {
   mapFile.open(filename);
 
   if (!mapFile.is_open()) {
-    LOG_ERROR("FILELOADER__LINE__97: Unable to open[{0}] for saving", filename);
+    logger.Err("FILELOADER__LINE__97: Unable to open[{0}] for saving",
+               filename);
     return;
   }
 
@@ -225,7 +228,7 @@ void FileLoader::SaveMap(std::filesystem::path filename) {
 void FileLoader::SaveColliders(std::filesystem::path filename) {
   // Check to see if there are any tile entities to save to a file
   if (!Registry::Instance().DoesGroupExist("colliders")) {
-    LOG_ERROR(
+    logger.Err(
         "FILELOADER__LINE__220: Trying to save Colliders that do not exist!");
     return;
   }
@@ -235,8 +238,8 @@ void FileLoader::SaveColliders(std::filesystem::path filename) {
   mapFile.open(filename);
 
   if (!mapFile.is_open()) {
-    LOG_ERROR("FILELOADER__LINE__230: Unable to open[{0}] for saving",
-              filename);
+    logger.Err("FILELOADER__LINE__230: Unable to open[{0}] for saving",
+               filename);
     return;
   }
 
@@ -268,8 +271,8 @@ void FileLoader::SaveProject(const std::string &filename,
   projFile.open(filename, std::ios::out | std::ios::trunc);
 
   if (!projFile.is_open()) {
-    LOG_ERROR("FILELOADER__LINE__223: Unable to open[{0}] for saving",
-              filename);
+    logger.Err("FILELOADER__LINE__223: Unable to open[{0}] for saving",
+               filename);
     return;
   }
 
@@ -325,8 +328,8 @@ void FileLoader::SaveProject(const std::string &filename,
   mapFile.open(filepath, std::ios::out);
 
   if (!mapFile.is_open()) {
-    LOG_ERROR("FILELOADER__LINE__313: Unable to open[{0}] for saving",
-              filepath.u8string());
+    logger.Err("FILELOADER__LINE__313: Unable to open[{0}] for saving",
+               filepath.u8string());
     return;
   }
 
@@ -343,11 +346,11 @@ void FileLoader::SaveProject(const std::string &filename,
   colliderFile.open(filepath, std::ios::out);
 
   if (!colliderFile.is_open()) {
-    LOG_ERROR("FILELOADER__LINE__327: Unable to open[{0}] for saving",
-              filepath.u8string());
+    logger.Err("FILELOADER__LINE__327: Unable to open[{0}] for saving",
+               filepath.u8string());
     return;
   }
-  LOG_INFO("Collider: {0}", filepath.string());
+  logger.Log("Collider: {0}", filepath.string());
 
   SaveColliders(filepath);
 }
@@ -360,8 +363,8 @@ void FileLoader::SaveToLuaTable(const std::string &filename,
   projFile.open(filename, std::ios::out | std::ios::trunc);
 
   if (!projFile.is_open()) {
-    LOG_ERROR("FILELOADER__LINE__223: Unable to open[{0}] for saving",
-              filename);
+    logger.Err("FILELOADER__LINE__223: Unable to open[{0}] for saving",
+               filename);
     return;
   }
 

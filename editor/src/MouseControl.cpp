@@ -1,5 +1,7 @@
 #include "MouseControl.h"
 
+Registry AssetManager::registry;
+
 void MouseControl::MouseBox(const AssetManager_Ptr &assetManager,
                             Renderer &renderer, SDL_Rect &mouseBox,
                             SDL_Rect &camera, bool collider) {
@@ -18,30 +20,30 @@ void MouseControl::MouseBox(const AssetManager_Ptr &assetManager,
   } else // Float the center of the tile on the mouse
   {
     mouseBox.x = (mMousePosX * mZoom - camera.x -
-                  (mMouseRect.x * mTransformComponent.mScale.x * mZoom) / 2);
+                  (mMouseRect.x * mTransformComponent.scale.x * mZoom) / 2);
     mouseBox.y = (mMousePosY * mZoom - camera.y -
-                  (mMouseRect.y * mTransformComponent.mScale.y * mZoom) / 2);
+                  (mMouseRect.y * mTransformComponent.scale.y * mZoom) / 2);
   }
 
   // Do not draw the mouse box image outside of the mouse bounds
   if (MouseOutOfBounds())
     return;
 
-  SDL_Rect srcRect = {mSpriteComponent.mSrcRect.x, mSpriteComponent.mSrcRect.y,
+  SDL_Rect srcRect = {mSpriteComponent.srcRect.x, mSpriteComponent.srcRect.y,
                       mMouseRect.x, mMouseRect.y};
 
   SDL_Rect dstRect = {mouseBox.x, mouseBox.y,
                       std::round(mouseBox.w * mMouseRect.x *
-                                 mTransformComponent.mScale.x * mZoom),
+                                 mTransformComponent.scale.x * mZoom),
                       std::round(mouseBox.h * mMouseRect.y *
-                                 mTransformComponent.mScale.y * mZoom)};
+                                 mTransformComponent.scale.y * mZoom)};
 
   // If not a collider, draw the selected tile image
   if (!collider) {
     SDL_RenderCopyEx(renderer.get(),
-                     assetManager->GetTexture(mSpriteComponent.mAssetId).get(),
-                     &srcRect, &dstRect, mTransformComponent.mRotation, NULL,
-                     mSpriteComponent.mFlip);
+                     assetManager->GetTexture(mSpriteComponent.assetId).get(),
+                     &srcRect, &dstRect, mTransformComponent.rotation, NULL,
+                     mSpriteComponent.flip);
   } else {
     SDL_SetRenderDrawColor(renderer.get(), 255, 0, 0, 100);
     SDL_RenderFillRect(renderer.get(), &dstRect);
@@ -88,7 +90,7 @@ void MouseControl::CreateTile(const AssetManager_Ptr &assetManager,
                             mouseBox.y + camera.y / mGridSize);
 
   // Set the transform position to the current mousebox position
-  mTransformComponent.mPosition =
+  mTransformComponent.position =
       glm::vec2(mouseBox.x + camera.x, mouseBox.y + camera.y);
 
   // Reset the mouse press if not pressed
@@ -108,47 +110,47 @@ void MouseControl::CreateTile(const AssetManager_Ptr &assetManager,
       int mGridY = static_cast<int>(mMousePosScreen.y) / mGridSize;
 
       if (mGridSnap) {
-        mTransformComponent.mPosition.x = mGridX * mGridSize;
-        mTransformComponent.mPosition.y = mGridY * mGridSize;
+        mTransformComponent.position.x = mGridX * mGridSize;
+        mTransformComponent.position.y = mGridY * mGridSize;
       } else {
-        mTransformComponent.mPosition.x =
+        mTransformComponent.position.x =
             static_cast<int>(mMousePosScreen.x -
-                             (mMouseRect.x * mTransformComponent.mScale.x / 2));
-        mTransformComponent.mPosition.y =
+                             (mMouseRect.x * mTransformComponent.scale.x / 2));
+        mTransformComponent.position.y =
             static_cast<int>(mMousePosScreen.y -
-                             (mMouseRect.y * mTransformComponent.mScale.y / 2));
+                             (mMouseRect.y * mTransformComponent.scale.y / 2));
       }
 
       // Create a new tile entity and add the necessary components
-      Entity tile = Registry::Instance().CreateEntity();
+      Entity tile = registry.CreateEntity();
       tile.Group("tiles");
       tile.AddComponent<TransformComponent>(
-          glm::vec2(mTransformComponent.mPosition.x,
-                    mTransformComponent.mPosition.y),
-          mTransformComponent.mScale, mTransformComponent.mRotation);
+          glm::vec2(mTransformComponent.position.x,
+                    mTransformComponent.position.y),
+          mTransformComponent.scale, mTransformComponent.rotation);
 
       tile.AddComponent<SpriteComponent>(
-          mSpriteComponent.mAssetId, mSpriteComponent.mWidth,
-          mSpriteComponent.mHeight, mSpriteComponent.mLayer,
-          mSpriteComponent.mIsFixed, mSpriteComponent.mSrcRect.x,
-          mSpriteComponent.mSrcRect.y, mSpriteComponent.mOffset);
+          mSpriteComponent.assetId, mSpriteComponent.width,
+          mSpriteComponent.height, mSpriteComponent.zIndex,
+          mSpriteComponent.isFixed, mSpriteComponent.srcRect.x,
+          mSpriteComponent.srcRect.y, mSpriteComponent.offset);
 
       // If the tile is a box collider, Add a BoxColliderComponent
       if (mIsCollider) {
-        tile.AddComponent<BoxColliderComponent>(mBoxColliderComponent.mWidth,
-                                                mBoxColliderComponent.mHeight,
-                                                mBoxColliderComponent.mOffset);
+        tile.AddComponent<BoxColliderComponent>(mBoxColliderComponent.width,
+                                                mBoxColliderComponent.height,
+                                                mBoxColliderComponent.offset);
       }
 
       if (mIsAnimated) {
         tile.AddComponent<AnimationComponent>(
-            mAnimationComponent.mNumFrames, mAnimationComponent.mFrameSpeedRate,
-            mAnimationComponent.mVertical, mAnimationComponent.mIsLooped,
-            mAnimationComponent.mFrameOffset);
+            mAnimationComponent.numFrames, mAnimationComponent.frameSpeedRate,
+            mAnimationComponent.vertical, mAnimationComponent.isLooped,
+            mAnimationComponent.frameOffset);
       }
 
       // Get Most Recent Tile Id
-      mMostRecentTileId = tile.GetID();
+      mMostRecentTileId = tile.GetId();
 
       mLeftPressed = true;
       mTileAdded = true;
@@ -161,30 +163,30 @@ void MouseControl::CreateTile(const AssetManager_Ptr &assetManager,
     // location
     if (event.button.button == SDL_BUTTON_RIGHT && !mOverImGuiWindow &&
         !mRightPressed) {
-      if (!Registry::Instance().DoesGroupExist("tiles"))
+      if (!registry.DoesGroupExist("tiles"))
         return;
 
       // This value is used as a tolerance area so the mouse does not need to be
       // exactly on the tile to remove it
       glm::vec2 subtract =
-          glm::vec2((mMouseRect.x * mTransformComponent.mScale.x) / 2,
-                    (mMouseRect.y * mTransformComponent.mScale.y) / 2);
+          glm::vec2((mMouseRect.x * mTransformComponent.scale.x) / 2,
+                    (mMouseRect.y * mTransformComponent.scale.y) / 2);
 
       // Get all the entities from the group "tiles"
-      auto entities = Registry::Instance().GetEntitiesByGroup("tiles");
+      auto entities = registry.GetEntitiesByGroup("tiles");
 
       // Loop through tiles and remove the one that the mouse is hovering over
       for (auto &entity : entities) {
         const auto &transform = entity.GetComponent<TransformComponent>();
         const auto &sprite = entity.GetComponent<SpriteComponent>();
 
-        if (mMousePosX >= transform.mPosition.x &&
+        if (mMousePosX >= transform.position.x &&
             mMousePosX <=
-                transform.mPosition.x + sprite.mWidth * transform.mScale.x &&
-            mMousePosY >= transform.mPosition.y &&
+                transform.position.x + sprite.width * transform.scale.x &&
+            mMousePosY >= transform.position.y &&
             mMousePosY <=
-                transform.mPosition.y + sprite.mHeight * transform.mScale.y &&
-            mSpriteComponent.mLayer == sprite.mLayer) {
+                transform.position.y + sprite.height * transform.scale.y &&
+            mSpriteComponent.zIndex == sprite.zIndex) {
           const auto &sprite = entity.GetComponent<SpriteComponent>();
           auto boxComponent = BoxColliderComponent();
           auto animComponent = AnimationComponent();
@@ -206,7 +208,7 @@ void MouseControl::CreateTile(const AssetManager_Ptr &assetManager,
           entity.Kill();
           mRightPressed = true;
           mTileRemoved = true;
-          LOG_INFO("Tile with ID: {0} has been removed!", entity.GetID());
+          logger.Log("Tile with ID: {0} has been removed!", entity.GetId());
         }
       }
     }
@@ -224,7 +226,7 @@ void MouseControl::CreateCollider(const AssetManager_Ptr &assetManager,
     return;
 
   // Set the transform position to the current mousebox position
-  mTransformComponent.mPosition =
+  mTransformComponent.position =
       glm::vec2(mouseBox.x + camera.x, mouseBox.y + camera.y);
 
   // Reset the mouse press if not pressed
@@ -235,25 +237,25 @@ void MouseControl::CreateCollider(const AssetManager_Ptr &assetManager,
 
   if (event.type == SDL_MOUSEBUTTONDOWN && !mLeftPressed) {
     if (event.button.button == SDL_BUTTON_LEFT && !mOverImGuiWindow) {
-      Entity boxCollider = Registry::Instance().CreateEntity();
+      Entity boxCollider = registry.CreateEntity();
       boxCollider.Group("colliders");
       boxCollider.AddComponent<TransformComponent>(
-          mTransformComponent.mPosition / glm::vec2(mZoom, mZoom),
-          mTransformComponent.mScale, mTransformComponent.mRotation);
+          mTransformComponent.position / glm::vec2(mZoom, mZoom),
+          mTransformComponent.scale, mTransformComponent.rotation);
 
       boxCollider.AddComponent<BoxColliderComponent>(
-          mBoxColliderComponent.mHeight, mBoxColliderComponent.mWidth,
-          mBoxColliderComponent.mOffset);
+          mBoxColliderComponent.height, mBoxColliderComponent.width,
+          mBoxColliderComponent.offset);
       mLeftPressed = true;
     }
 
     if (event.button.button == SDL_BUTTON_RIGHT && !mOverImGuiWindow) {
       glm::vec2 subtract =
-          glm::vec2((mMouseRect.x * mTransformComponent.mScale.x) / 2,
-                    (mMouseRect.y * mTransformComponent.mScale.y) / 2);
+          glm::vec2((mMouseRect.x * mTransformComponent.scale.x) / 2,
+                    (mMouseRect.y * mTransformComponent.scale.y) / 2);
 
       // Get all the entities from the group "tiles"
-      auto entities = Registry::Instance().GetEntitiesByGroup("colliders");
+      auto entities = registry.GetEntitiesByGroup("colliders");
 
       // Loop through tiles and remove the one that the mouse is hovering over
       for (auto &entity : entities) {
@@ -263,15 +265,15 @@ void MouseControl::CreateCollider(const AssetManager_Ptr &assetManager,
         auto &transform = entity.GetComponent<TransformComponent>();
         const auto &box_collider = entity.GetComponent<BoxColliderComponent>();
 
-        if (mMousePosX >= transform.mPosition.x &&
-            mMousePosX <= transform.mPosition.x +
-                              box_collider.mWidth * transform.mScale.x &&
-            mMousePosY >= transform.mPosition.y &&
-            mMousePosY <= transform.mPosition.y +
-                              box_collider.mHeight * transform.mScale.y) {
+        if (mMousePosX >= transform.position.x &&
+            mMousePosX <=
+                transform.position.x + box_collider.width * transform.scale.x &&
+            mMousePosY >= transform.position.y &&
+            mMousePosY <= transform.position.y +
+                              box_collider.height * transform.scale.y) {
           entity.Kill();
           mRightPressed = true;
-          LOG_INFO("Collider with ID: {0} has been removed!", entity.GetID());
+          logger.Log("Collider with ID: {0} has been removed!", entity.GetId());
         }
       }
     }
@@ -298,36 +300,36 @@ void MouseControl::SetSpriteProperties(const std::string &assetID,
                                        const int width, const int height,
                                        const int layer, const int srcRectX,
                                        const int srcRectY) {
-  mSpriteComponent.mAssetId = assetID;
-  mSpriteComponent.mWidth = width;
-  mSpriteComponent.mHeight = height;
-  mSpriteComponent.mLayer = layer;
+  mSpriteComponent.assetId = assetID;
+  mSpriteComponent.width = width;
+  mSpriteComponent.height = height;
+  mSpriteComponent.zIndex = layer;
   mSpriteComponent.mIsFixed = false;
-  mSpriteComponent.mFlip = SDL_FLIP_NONE;
+  mSpriteComponent.flip = SDL_FLIP_NONE;
   mSpriteComponent.mSrcRect = {srcRectX, srcRectY, width, height};
 }
 
-void MouseControl::SetTransformScale(const int scaleX, const int scaleY) {
-  mTransformComponent.mScale = glm::vec2(scaleX, scaleY);
+void MouseControl::SetTransforscale(const int scaleX, const int scaleY) {
+  mTransformComponent.scale = glm::vec2(scaleX, scaleY);
 }
 
 void MouseControl::SetBoxColliderProperties(const int width, const int height,
                                             const int offsetX,
                                             const int offsetY) {
-  mBoxColliderComponent.mWidth = width;
-  mBoxColliderComponent.mHeight = height;
-  mBoxColliderComponent.mOffset = glm::vec2(offsetX, offsetY);
+  mBoxColliderComponent.width = width;
+  mBoxColliderComponent.height = height;
+  mBoxColliderComponent.offset = glm::vec2(offsetX, offsetY);
 }
 
 void MouseControl::SetAnimationProperties(const int numFrames,
                                           const int frameSpeedRate,
                                           bool vertical, bool looped,
                                           int frameOffset) {
-  mAnimationComponent.mNumFrames = numFrames;
-  mAnimationComponent.mFrameSpeedRate = frameSpeedRate;
-  mAnimationComponent.mVertical = vertical;
-  mAnimationComponent.mIsLooped = looped;
-  mAnimationComponent.mFrameOffset = frameOffset;
+  mAnimationComponent.numFrames = numFrames;
+  mAnimationComponent.frameSpeedRate = frameSpeedRate;
+  mAnimationComponent.vertical = vertical;
+  mAnimationComponent.isLooped = looped;
+  mAnimationComponent.frameOffset = frameOffset;
 }
 
 const bool MouseControl::MouseOutOfBounds() const {

@@ -95,7 +95,7 @@ void ImGuiFuncs::OpenCheckWindow() {
     mCheck = false;
     mNewFile = false;
     SetWindowName("");
-    LOG_INFO("CLEARED ALL FILES");
+    logger.Log("CLEARED ALL FILES");
   }
 }
 
@@ -177,7 +177,7 @@ void ImGuiFuncs::Save(const AssetManager_Ptr &assetManager, Renderer &renderer,
   } else {
     mFileLoader->SaveProject(mFileName, mLoadedTilesets, mTilesetLocations,
                              canvasWidth, canvasHeight, tileSize);
-    LOG_INFO("FILES SAVED!!");
+    logger.Log("FILES SAVED!!");
   }
 }
 
@@ -361,7 +361,7 @@ void ImGuiFuncs::ShowToolsMenu(Renderer &renderer,
     if (SDL_QueryTexture(assetManager->GetTexture(mAssetID).get(), NULL, NULL,
                          &mImageWidth, &mImageHeight) != 0) {
       const char *errMsg = SDL_GetError();
-      LOG_ERROR("__FUNC: Load Tileset: " + std::string(errMsg));
+      logger.Err("__FUNC: Load Tileset: " + std::string(errMsg));
       mImageLoaded = false;
     } else {
       mImageLoaded = true;

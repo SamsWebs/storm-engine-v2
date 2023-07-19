@@ -24,7 +24,7 @@ RenderGuiSystem::RenderGuiSystem()
 }
 
 RenderGuiSystem::~RenderGuiSystem() {
-  // LOG_INFO("Render Gui System Destroyed!");
+  // logger.Log("Render Gui System Destroyed!");
 }
 
 void RenderGuiSystem::Update(const AssetManager_Ptr &assetManager,

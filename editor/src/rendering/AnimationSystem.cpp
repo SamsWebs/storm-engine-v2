@@ -19,7 +19,7 @@ void AnimationSystem::Update() {
                              animation.numFrames;
 
     // If the animation is a vertical scroll use this
-    if (animation.isVertical) {
+    if (animation.vertical) {
       sprite.srcRect.y = animation.currentFrame * sprite.height;
     } else {
       sprite.srcRect.x =

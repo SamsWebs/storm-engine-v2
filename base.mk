@@ -3,8 +3,8 @@
 ROOT_DIR = $(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
 
 CC = g++
-LIB = -L/usr/local/lib -Wl,-rpath=/usr/local/lib -lSDL2 -lSDL2_image -lSDL2_ttf -lSDL2_mixer -lz -ltinyxml2
-INCLUDE = -isystem -I/usr/local/include
+LIB = -L/usr/local/lib -Wl,-rpath=/usr/local/lib -lSDL2 -lSDL2_image -lSDL2_ttf -lSDL2_mixer -lz -ltinyxml2 -llua -ldl -lX11 
+INCLUDE = -isystem -I/usr/local/include -I$(ROOT_DIR)/vendor
 CCFLAGS = -Wall -c -g -fPIC -std=c++17 -Wno-reorder -Wno-unused-parameter \
 	-Wno-unused-variable -Wno-unused-function $(INCLUDE) 
 

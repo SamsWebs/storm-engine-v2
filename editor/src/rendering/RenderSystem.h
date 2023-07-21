@@ -4,8 +4,8 @@
 
 #include "../AssetManager.h"
 
-#include <stormengine2/components/sprite.h"
-#include <stormengine2/components/transform.h"
+#include <stormengine2/components/sprite.h>
+#include <stormengine2/components/transform.h>
 #include <stormengine2/ecs.h>
 
 class RenderSystem : public System {

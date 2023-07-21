@@ -18,6 +18,8 @@ private:
   // This is reset after ever new execution of a command
   CommandStack mRedoStack;
 
+  Logger logger;
+
 public:
   CommandManager(){};
   ~CommandManager();

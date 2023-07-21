@@ -39,7 +39,7 @@ void CommandManager::Redo() {
   mUndoStack.push(mRedoStack.top());
   // Pop that command off of the redo stack
   mRedoStack.pop();
-  logger.Err("RedoSize: {0}", mRedoStack.size());
+  logger.Err("RedoSize: " + mRedoStack.size());
 }
 
 void CommandManager::Clear() {

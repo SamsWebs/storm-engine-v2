@@ -9,7 +9,7 @@
 
 #include <glm/glm.hpp>
 #include <imgui/imgui.h>
-#include <imgui/imgui_impl_sdl2.h>
+#include <imgui/imgui_impl_sdl.h>
 #include <imgui/imgui_sdl.h>
 #include <imgui/imgui_stdlib.h>
 #include <sol/sol.hpp>
@@ -38,7 +38,7 @@ private:
 
   const int CAM_SPEED = 10;
 
-  Window mWindow;
+  SDLWindowPtr mWindow;
   Renderer mRenderer;
 
   SDL_Rect mCamera;

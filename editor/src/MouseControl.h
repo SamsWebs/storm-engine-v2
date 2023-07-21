@@ -9,6 +9,7 @@
 #include <stormengine2/components/sprite.h>
 #include <stormengine2/components/transform.h>
 #include <stormengine2/ecs.h>
+#include <stormengine2/logger.h>
 
 #include "AssetManager.h"
 #include "utilities/Utilities.h"
@@ -40,6 +41,8 @@ private:
   TransformComponent mTransformComponent, mRemovedTransformComponent;
   BoxColliderComponent mBoxColliderComponent, mRemovedBoxComponent;
   AnimationComponent mAnimationComponent, mRemovedAnimationComponent;
+
+  Logger logger;
 
   // Private functions
 private:

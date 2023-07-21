@@ -1,7 +1,5 @@
 #include "Application.h"
 
-Registry AssetManager::registry;
-
 void Application::Init() {
   // Init SDL
   if (SDL_Init(SDL_INIT_EVERYTHING) != 0) {
@@ -21,7 +19,7 @@ void Application::Init() {
   SDL_GetCurrentDisplayMode(0, &displayMode);
 
   // Create the window
-  mWindow = Window(SDL_CreateWindow(
+  mWindow = SDLWindowPtr(SDL_CreateWindow(
       "Tilemap Editor",
       0,          // Place the window in the top left corner
       WINDOW_BAR, // Subtract the window title bar from y position
@@ -81,10 +79,10 @@ void Application::Init() {
   mAssetManager = std::make_unique<AssetManager>();
 
   // Add all Necessary Systems to registry
-  registry.AddSystem<RenderSystem>();
-  registry.AddSystem<RenderCollisionSystem>();
-  registry.AddSystem<RenderGuiSystem>();
-  registry.AddSystem<AnimationSystem>();
+  Registry::Instance().AddSystem<RenderSystem>();
+  Registry::Instance().AddSystem<RenderCollisionSystem>();
+  Registry::Instance().AddSystem<RenderGuiSystem>();
+  Registry::Instance().AddSystem<AnimationSystem>();
   // Add the mouse hand texture right away
   mAssetManager->AddTexture(mRenderer, "mouse_hand", "./assets/mouse_hand.png");
 }
@@ -94,17 +92,18 @@ void Application::Draw() {
   SDL_RenderClear(mRenderer.get());
 
   // Render Application Systems
-  registry.GetSystem<RenderGuiSystem>().RenderGrid(mRenderer, mCamera, mZoom);
-  registry.GetSystem<RenderSystem>().Update(mRenderer.get(), mAssetManager,
-                                            mCamera, mZoom);
+  Registry::Instance().GetSystem<RenderGuiSystem>().RenderGrid(mRenderer,
+                                                               mCamera, mZoom);
+  Registry::Instance().GetSystem<RenderSystem>().Update(
+      mRenderer.get(), mAssetManager, mCamera, mZoom);
 
   if (mShowColliders)
-    registry.GetSystem<RenderCollisionSystem>().Update(mRenderer, mCamera,
-                                                       mZoom);
+    Registry::Instance().GetSystem<RenderCollisionSystem>().Update(
+        mRenderer, mCamera, mZoom);
 
-  registry.GetSystem<RenderGuiSystem>().Update(
+  Registry::Instance().GetSystem<RenderGuiSystem>().Update(
       mAssetManager, mRenderer, mMouseBox, mCamera, mEvent, mZoom, mDeltaTime);
-  registry.GetSystem<AnimationSystem>().Update();
+  Registry::Instance().GetSystem<AnimationSystem>().Update();
 
   /*
           This is a little hack to get SDL and ImGui to stop Ghosting!
@@ -160,13 +159,13 @@ void Application::ProcessEvents() {
 
 void Application::Update() {
   UpdateDeltaTime();
-  registry.Update();
+  Registry::Instance().Update();
 
   // Change the window title based on the current project
-  registry.GetSystem<RenderGuiSystem>().SetWindowName(mWindow);
+  Registry::Instance().GetSystem<RenderGuiSystem>().SetWindowName(mWindow);
 
   // Check for Exit
-  if (registry.GetSystem<RenderGuiSystem>().GetExit())
+  if (Registry::Instance().GetSystem<RenderGuiSystem>().GetExit())
     mIsRunning = false;
 }
 

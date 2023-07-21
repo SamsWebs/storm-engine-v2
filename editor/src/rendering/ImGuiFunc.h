@@ -8,7 +8,11 @@
 #include <SDL2/SDL.h>
 
 #include <glm/glm.hpp>
+
 #include <imgui/imgui.h>
+#include <imgui/imgui_impl_sdl.h>
+#include <imgui/imgui_sdl.h>
+#include <imgui/imgui_stdlib.h>
 #include <sol/sol.hpp>
 
 #include <stormengine2/logger.h>

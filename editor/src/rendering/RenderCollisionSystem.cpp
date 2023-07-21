@@ -13,12 +13,12 @@ void RenderCollisionSystem::Update(
     const auto &collider = entity.GetComponent<BoxColliderComponent>();
 
     const SDL_Rect srcRect = {
-        std::floor((transform.mPosition.x + collider.mOffset.x) * zoom) -
+        std::floor((transform.position.x + collider.offset.x) * zoom) -
             camera.x,
-        std::floor((transform.mPosition.y + collider.mOffset.y) * zoom) -
+        std::floor((transform.position.y + collider.offset.y) * zoom) -
             camera.y,
-        std::ceil(collider.mWidth * transform.mScale.x * zoom),
-        std::ceil(collider.mHeight * transform.mScale.y * zoom)};
+        std::ceil(collider.width * transform.scale.x * zoom),
+        std::ceil(collider.height * transform.scale.y * zoom)};
 
     SDL_SetRenderDrawColor(renderer.get(), 255, 0, 0, 125);
     SDL_RenderFillRect(renderer.get(), &srcRect);

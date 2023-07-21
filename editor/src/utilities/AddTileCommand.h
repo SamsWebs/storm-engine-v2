@@ -22,7 +22,7 @@ private:
 
 public:
   AddTileCommand(std::shared_ptr<class MouseControl> &mouseControl);
-  virtual void Execute() override;
-  virtual void Undo() override;
-  virtual void Redo() override;
+  virtual void Execute();
+  virtual void Undo();
+  virtual void Redo();
 };

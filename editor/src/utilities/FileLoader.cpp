@@ -107,7 +107,7 @@ void FileLoader::LoadMap(const AssetManager_Ptr &assetManager,
   mapFile.open(filename);
 
   if (!mapFile.is_open()) {
-    logger.Err("FILELOADER__LINE__37: Unable to open[{0}] for loading",
+    logger.Err("FILELOADER__LINE__37: Unable to open[{0}] for loading " +
                filename);
     return;
   }
@@ -172,8 +172,8 @@ void FileLoader::SaveMap(std::filesystem::path filename) {
   mapFile.open(filename);
 
   if (!mapFile.is_open()) {
-    logger.Err("FILELOADER__LINE__97: Unable to open[{0}] for saving",
-               filename);
+    // logger.Err("FILELOADER__LINE__97: Unable to open[{0}] for saving " +
+    //            filename);
     return;
   }
 
@@ -186,11 +186,11 @@ void FileLoader::SaveMap(std::filesystem::path filename) {
     const auto &transform = tile.GetComponent<TransformComponent>();
 
     // Save to the map file
-    mapFile << group << " " << sprite.mAssetId << " " << sprite.mWidth << " "
-            << sprite.mHeight << " " << sprite.mSrcRect.x << " "
-            << sprite.mSrcRect.y << " " << sprite.mLayer << " "
-            << transform.mPosition.x << " " << transform.mPosition.y << " "
-            << transform.mScale.x << " " << transform.mScale.y << " ";
+    mapFile << group << " " << sprite.assetId << " " << sprite.width << " "
+            << sprite.height << " " << sprite.srcRect.x << " "
+            << sprite.srcRect.y << " " << sprite.zIndex << " "
+            << transform.position.x << " " << transform.position.y << " "
+            << transform.scale.x << " " << transform.scale.y << " ";
 
     // Check to see if the tile has a collider component
     if (tile.HasComponent<BoxColliderComponent>())
@@ -198,9 +198,9 @@ void FileLoader::SaveMap(std::filesystem::path filename) {
 
     if (collider) {
       const auto &boxCollider = tile.GetComponent<BoxColliderComponent>();
-      mapFile << collider << " " << boxCollider.mWidth << " "
-              << boxCollider.mHeight << " " << boxCollider.mOffset.x << " "
-              << boxCollider.mOffset.y << " "; // << std::endl;
+      mapFile << collider << " " << boxCollider.width << " "
+              << boxCollider.height << " " << boxCollider.offset.x << " "
+              << boxCollider.offset.y << " "; // << std::endl;
     } else {
       collider = false;
       mapFile << collider << " "; // << std::endl;
@@ -212,9 +212,9 @@ void FileLoader::SaveMap(std::filesystem::path filename) {
 
     if (animated) {
       const auto &animation = tile.GetComponent<AnimationComponent>();
-      mapFile << animated << " " << animation.mNumFrames << " "
-              << animation.mFrameSpeedRate << " " << animation.mVertical << " "
-              << animation.mIsLooped << " " << animation.mFrameOffset << " "
+      mapFile << animated << " " << animation.numFrames << " "
+              << animation.frameSpeedRate << " " << animation.vertical << " "
+              << animation.isLooped << " " << animation.frameOffset << " "
               << std::endl;
     } else {
       animated = false;
@@ -238,8 +238,8 @@ void FileLoader::SaveColliders(std::filesystem::path filename) {
   mapFile.open(filename);
 
   if (!mapFile.is_open()) {
-    logger.Err("FILELOADER__LINE__230: Unable to open[{0}] for saving",
-               filename);
+    // logger.Err("FILELOADER__LINE__230: Unable to open[{0}] for saving " +
+    //            filename);
     return;
   }
 
@@ -251,11 +251,11 @@ void FileLoader::SaveColliders(std::filesystem::path filename) {
     const auto &transform = collider.GetComponent<TransformComponent>();
 
     // Save to the map file
-    mapFile << group << " " << transform.mPosition.x << " "
-            << transform.mPosition.y << " " << transform.mScale.x << " "
-            << transform.mScale.y << " " << boxCollider.mWidth << " "
-            << boxCollider.mHeight << " " << boxCollider.mOffset.x << " "
-            << boxCollider.mOffset.y << " " << std::endl;
+    mapFile << group << " " << transform.position.x << " "
+            << transform.position.y << " " << transform.scale.x << " "
+            << transform.scale.y << " " << boxCollider.width << " "
+            << boxCollider.height << " " << boxCollider.offset.x << " "
+            << boxCollider.offset.y << " " << std::endl;
   }
   // Close the file
   mapFile.close();
@@ -271,7 +271,7 @@ void FileLoader::SaveProject(const std::string &filename,
   projFile.open(filename, std::ios::out | std::ios::trunc);
 
   if (!projFile.is_open()) {
-    logger.Err("FILELOADER__LINE__223: Unable to open[{0}] for saving",
+    logger.Err("FILELOADER__LINE__223: Unable to open[{0}] for saving " +
                filename);
     return;
   }
@@ -328,7 +328,7 @@ void FileLoader::SaveProject(const std::string &filename,
   mapFile.open(filepath, std::ios::out);
 
   if (!mapFile.is_open()) {
-    logger.Err("FILELOADER__LINE__313: Unable to open[{0}] for saving",
+    logger.Err("FILELOADER__LINE__313: Unable to open[{0}] for saving " +
                filepath.u8string());
     return;
   }
@@ -346,11 +346,11 @@ void FileLoader::SaveProject(const std::string &filename,
   colliderFile.open(filepath, std::ios::out);
 
   if (!colliderFile.is_open()) {
-    logger.Err("FILELOADER__LINE__327: Unable to open[{0}] for saving",
+    logger.Err("FILELOADER__LINE__327: Unable to open[{0}] for saving " +
                filepath.u8string());
     return;
   }
-  logger.Log("Collider: {0}", filepath.string());
+  logger.Log("Collider: " + filepath.string());
 
   SaveColliders(filepath);
 }
@@ -363,7 +363,7 @@ void FileLoader::SaveToLuaTable(const std::string &filename,
   projFile.open(filename, std::ios::out | std::ios::trunc);
 
   if (!projFile.is_open()) {
-    logger.Err("FILELOADER__LINE__223: Unable to open[{0}] for saving",
+    logger.Err("FILELOADER__LINE__223: Unable to open[{0}] for saving " +
                filename);
     return;
   }
@@ -403,14 +403,14 @@ void FileLoader::SaveToLuaTable(const std::string &filename,
 
         luaWriter.WriteDeclareTable("transform", projFile);
         luaWriter.WriteDeclareTable("position", projFile);
-        luaWriter.WriteKeyAndValue("x", transform.mPosition.x, false, projFile);
-        luaWriter.WriteKeyAndValue("y", transform.mPosition.y, true, projFile);
+        luaWriter.WriteKeyAndValue("x", transform.position.x, false, projFile);
+        luaWriter.WriteKeyAndValue("y", transform.position.y, true, projFile);
         luaWriter.WriteEndTable(true, projFile);
         luaWriter.WriteDeclareTable("scale", projFile);
-        luaWriter.WriteKeyAndValue("x", transform.mScale.x, false, projFile);
-        luaWriter.WriteKeyAndValue("y", transform.mScale.y, true, projFile);
+        luaWriter.WriteKeyAndValue("x", transform.scale.x, false, projFile);
+        luaWriter.WriteKeyAndValue("y", transform.scale.y, true, projFile);
         luaWriter.WriteEndTable(true, projFile);
-        luaWriter.WriteKeyAndUnquotedValue("rotation", transform.mRotation,
+        luaWriter.WriteKeyAndUnquotedValue("rotation", transform.rotation,
                                            projFile, false, false);
         luaWriter.WriteEndTable(false, projFile);
       }
@@ -420,22 +420,22 @@ void FileLoader::SaveToLuaTable(const std::string &filename,
 
         std::string fixed = "false";
 
-        if (sprite.mIsFixed)
+        if (sprite.isFixed)
           fixed = "true";
 
         luaWriter.WriteDeclareTable("sprite", projFile);
-        luaWriter.WriteKeyAndQuotedValue("asset_id", sprite.mAssetId, projFile);
-        luaWriter.WriteKeyAndValue("width", sprite.mWidth, false, projFile);
-        luaWriter.WriteKeyAndValue("height", sprite.mHeight, false, projFile);
-        luaWriter.WriteKeyAndValue("z_index", sprite.mLayer, false, projFile);
+        luaWriter.WriteKeyAndQuotedValue("asset_id", sprite.assetId, projFile);
+        luaWriter.WriteKeyAndValue("width", sprite.width, false, projFile);
+        luaWriter.WriteKeyAndValue("height", sprite.height, false, projFile);
+        luaWriter.WriteKeyAndValue("z_index", sprite.zIndex, false, projFile);
         luaWriter.WriteKeyAndValue("is_fixed", fixed, true, projFile);
         luaWriter.WriteDeclareTable("src_rect", projFile);
-        luaWriter.WriteKeyAndValue("x", sprite.mSrcRect.x, false, projFile);
-        luaWriter.WriteKeyAndValue("y", sprite.mSrcRect.y, true, projFile);
+        luaWriter.WriteKeyAndValue("x", sprite.srcRect.x, false, projFile);
+        luaWriter.WriteKeyAndValue("y", sprite.srcRect.y, true, projFile);
         luaWriter.WriteEndTable(true, projFile);
         luaWriter.WriteDeclareTable("offset", projFile);
-        luaWriter.WriteKeyAndValue("x", sprite.mOffset.x, false, projFile);
-        luaWriter.WriteKeyAndValue("y", sprite.mOffset.y, true, projFile);
+        luaWriter.WriteKeyAndValue("x", sprite.offset.x, false, projFile);
+        luaWriter.WriteKeyAndValue("y", sprite.offset.y, true, projFile);
         luaWriter.WriteEndTable(true, projFile);
         luaWriter.WriteEndTable(false, projFile);
       }
@@ -444,13 +444,12 @@ void FileLoader::SaveToLuaTable(const std::string &filename,
         const auto &boxCollider = tile.GetComponent<BoxColliderComponent>();
 
         luaWriter.WriteDeclareTable("box_collider", projFile);
-        luaWriter.WriteKeyAndValue("width", boxCollider.mWidth, false,
-                                   projFile);
-        luaWriter.WriteKeyAndValue("height", boxCollider.mHeight, true,
+        luaWriter.WriteKeyAndValue("width", boxCollider.width, false, projFile);
+        luaWriter.WriteKeyAndValue("height", boxCollider.height, true,
                                    projFile);
         luaWriter.WriteDeclareTable("offset", projFile);
-        luaWriter.WriteKeyAndValue("x", boxCollider.mOffset.x, false, projFile);
-        luaWriter.WriteKeyAndValue("y", boxCollider.mOffset.y, true, projFile);
+        luaWriter.WriteKeyAndValue("x", boxCollider.offset.x, false, projFile);
+        luaWriter.WriteKeyAndValue("y", boxCollider.offset.y, true, projFile);
         luaWriter.WriteEndTable(true, projFile);
         luaWriter.WriteKeyAndUnquotedValue("is_collider", "true", projFile);
         luaWriter.WriteKeyAndUnquotedValue("is_trigger", "false", projFile);
@@ -462,19 +461,19 @@ void FileLoader::SaveToLuaTable(const std::string &filename,
 
         std::string vertical = "false";
         std::string looped = "false";
-        if (animation.mVertical)
+        if (animation.vertical)
           vertical = "true";
-        if (animation.mIsLooped)
+        if (animation.isLooped)
           looped = "true";
 
         luaWriter.WriteDeclareTable("animation", projFile);
-        luaWriter.WriteKeyAndValue("num_frames", animation.mNumFrames, false,
+        luaWriter.WriteKeyAndValue("num_frames", animation.numFrames, false,
                                    projFile);
-        luaWriter.WriteKeyAndValue("frame_speed", animation.mFrameSpeedRate,
+        luaWriter.WriteKeyAndValue("frame_speed", animation.frameSpeedRate,
                                    false, projFile);
         luaWriter.WriteKeyAndValue("vertical", vertical, false, projFile);
         luaWriter.WriteKeyAndValue("looped", looped, false, projFile);
-        luaWriter.WriteKeyAndValue("frame_offset", animation.mFrameOffset, true,
+        luaWriter.WriteKeyAndValue("frame_offset", animation.frameOffset, true,
                                    projFile);
         luaWriter.WriteEndTable(false, projFile);
       }

@@ -45,6 +45,5 @@ protected:
 
   std::vector<std::string> m_textureIDList;
 
-  static Registry registry;
   static AssetStore assetStore;
 };

@@ -15,6 +15,6 @@ struct Util {
   static float Lerp(float a, float b, float t) { return a + t * (b - a); };
 };
 
-typedef std::unique_ptr<SDL_Window, Util::SDLDestroyer> Window;
+typedef std::unique_ptr<SDL_Window, Util::SDLDestroyer> SDLWindowPtr;
 typedef std::unique_ptr<SDL_Renderer, Util::SDLDestroyer> Renderer;
 typedef std::unique_ptr<SDL_Texture, Util::SDLDestroyer> Texture;

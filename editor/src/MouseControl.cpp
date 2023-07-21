@@ -1,7 +1,5 @@
 #include "MouseControl.h"
 
-Registry AssetManager::registry;
-
 void MouseControl::MouseBox(const AssetManager_Ptr &assetManager,
                             Renderer &renderer, SDL_Rect &mouseBox,
                             SDL_Rect &camera, bool collider) {
@@ -122,7 +120,7 @@ void MouseControl::CreateTile(const AssetManager_Ptr &assetManager,
       }
 
       // Create a new tile entity and add the necessary components
-      Entity tile = registry.CreateEntity();
+      Entity tile = Registry::Instance().CreateEntity();
       tile.Group("tiles");
       tile.AddComponent<TransformComponent>(
           glm::vec2(mTransformComponent.position.x,
@@ -163,7 +161,7 @@ void MouseControl::CreateTile(const AssetManager_Ptr &assetManager,
     // location
     if (event.button.button == SDL_BUTTON_RIGHT && !mOverImGuiWindow &&
         !mRightPressed) {
-      if (!registry.DoesGroupExist("tiles"))
+      if (!Registry::Instance().DoesGroupExist("tiles"))
         return;
 
       // This value is used as a tolerance area so the mouse does not need to be
@@ -173,7 +171,7 @@ void MouseControl::CreateTile(const AssetManager_Ptr &assetManager,
                     (mMouseRect.y * mTransformComponent.scale.y) / 2);
 
       // Get all the entities from the group "tiles"
-      auto entities = registry.GetEntitiesByGroup("tiles");
+      auto entities = Registry::Instance().GetEntitiesByGroup("tiles");
 
       // Loop through tiles and remove the one that the mouse is hovering over
       for (auto &entity : entities) {
@@ -208,7 +206,7 @@ void MouseControl::CreateTile(const AssetManager_Ptr &assetManager,
           entity.Kill();
           mRightPressed = true;
           mTileRemoved = true;
-          logger.Log("Tile with ID: {0} has been removed!", entity.GetId());
+          logger.Log("Tile with ID: {0} has been removed! " + entity.GetId());
         }
       }
     }
@@ -237,7 +235,7 @@ void MouseControl::CreateCollider(const AssetManager_Ptr &assetManager,
 
   if (event.type == SDL_MOUSEBUTTONDOWN && !mLeftPressed) {
     if (event.button.button == SDL_BUTTON_LEFT && !mOverImGuiWindow) {
-      Entity boxCollider = registry.CreateEntity();
+      Entity boxCollider = Registry::Instance().CreateEntity();
       boxCollider.Group("colliders");
       boxCollider.AddComponent<TransformComponent>(
           mTransformComponent.position / glm::vec2(mZoom, mZoom),
@@ -255,7 +253,7 @@ void MouseControl::CreateCollider(const AssetManager_Ptr &assetManager,
                     (mMouseRect.y * mTransformComponent.scale.y) / 2);
 
       // Get all the entities from the group "tiles"
-      auto entities = registry.GetEntitiesByGroup("colliders");
+      auto entities = Registry::Instance().GetEntitiesByGroup("colliders");
 
       // Loop through tiles and remove the one that the mouse is hovering over
       for (auto &entity : entities) {
@@ -273,7 +271,8 @@ void MouseControl::CreateCollider(const AssetManager_Ptr &assetManager,
                               box_collider.height * transform.scale.y) {
           entity.Kill();
           mRightPressed = true;
-          logger.Log("Collider with ID: {0} has been removed!", entity.GetId());
+          logger.Log("Collider with ID: {0} has been removed! " +
+                     entity.GetId());
         }
       }
     }
@@ -304,12 +303,12 @@ void MouseControl::SetSpriteProperties(const std::string &assetID,
   mSpriteComponent.width = width;
   mSpriteComponent.height = height;
   mSpriteComponent.zIndex = layer;
-  mSpriteComponent.mIsFixed = false;
+  mSpriteComponent.isFixed = false;
   mSpriteComponent.flip = SDL_FLIP_NONE;
-  mSpriteComponent.mSrcRect = {srcRectX, srcRectY, width, height};
+  mSpriteComponent.srcRect = {srcRectX, srcRectY, width, height};
 }
 
-void MouseControl::SetTransforscale(const int scaleX, const int scaleY) {
+void MouseControl::SetTransformScale(const int scaleX, const int scaleY) {
   mTransformComponent.scale = glm::vec2(scaleX, scaleY);
 }
 

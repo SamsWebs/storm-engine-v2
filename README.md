@@ -40,6 +40,9 @@ cmake ..
 sudo cmake --build . --target install
 ```
 
+<https://github.com/Rapptz/sol> -= Sol
+ -= ImGui
+
 I'll update these instructions for WSL and MacOS, eventually.  However, if anyone wants to submit a PR for these, I'd be happy to accept it.
 
 ## Running
@@ -48,11 +51,8 @@ Just simply type `make && make run` to build and run the game.
 
 [1]: https://www.packtpub.com/game-development/sdl-game-development
 [2]: https://github.com/PacktPublishing/SDL-Game-Development
-[3]: https://www.libsdl.org/
 [4]: docs/SDL2-install-instructions.md
 [5]: https://wiki.libsdl.org/SDL2/Installation
 [6]: http://www.mapeditor.org/
 [7]: http://valgrind.org/
 [8]: https://github.com/codewars/igloo
-[9]: https://switchbrew.org/wiki/Setting_up_Development_Environment
-[10]: docs/memory-management.md

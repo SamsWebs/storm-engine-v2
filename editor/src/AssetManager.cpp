@@ -15,7 +15,7 @@ void AssetManager::AddTexture(Renderer &renderer, const std::string &assetId,
         Texture(SDL_CreateTextureFromSurface(renderer.get(), surface));
 
     if (!texture) {
-      logger.Err("Unable to Create Texture[{0}] at filepath [{1}]", assetId,
+      logger.Err("Unable to Create Texture[" + assetId + "] at filepath " +
                  filePath);
     }
 

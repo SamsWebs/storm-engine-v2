@@ -1,5 +1,5 @@
-#define SDL_MAIN_HANDLED
-#define main SDL_main
+// #define SDL_MAIN_HANDLED
+// #define main SDL_main
 
 #include "Application.h"
 

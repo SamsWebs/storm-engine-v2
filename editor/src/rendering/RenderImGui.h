@@ -14,7 +14,10 @@
 #include "../AssetManager.h"
 #include "../Canvas.h"
 #include "../MouseControl.h"
+#include "../utilities/AddTileCommand.h"
+#include "../utilities/ChangeCanvasSizeCommand.h"
 #include "../utilities/CommandManager.h"
+#include "../utilities/RemoveTileCommand.h"
 #include "../utilities/Utilities.h"
 #include "IconsFontAwesome.h"
 #include "ImGuiFunc.h"
@@ -58,8 +61,8 @@ public:
 
   /*
    *	CreateNewCanvas() - This function erases all tiles and removes them from
-   *the registry. It also resets all settings back to default, starting a new
-   *fresh canvas
+   *the Registry::Instance() It also resets all settings back to default,
+   *starting a new fresh canvas
    */
   void CreateNewCanvas();
 
@@ -68,7 +71,7 @@ public:
    *based on if the project has been loaded or saved. The name of the project
    *will be in the title.
    */
-  inline void SetWindowName(Window &window) {
+  inline void SetWindowName(SDLWindowPtr &window) {
     SDL_SetWindowTitle(window.get(), mWindowName.c_str());
   }
 

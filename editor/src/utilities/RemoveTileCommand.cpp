@@ -1,7 +1,5 @@
 #include "RemoveTileCommand.h"
 
-Registry AssetManager::registry;
-
 RemoveTileCommand::RemoveTileCommand(
     std::shared_ptr<MouseControl> &mouseControl)
     : mMouseControl(mouseControl), mTileId(-1), mCollider(false),
@@ -30,7 +28,7 @@ void RemoveTileCommand::Execute() {
 
 void RemoveTileCommand::Undo() {
   // Create a new tile based on the removed tile
-  Entity newEntity = registry.CreateEntity();
+  Entity newEntity = Registry::Instance().CreateEntity();
   newEntity.Group("tiles");
   newEntity.AddComponent<TransformComponent>(mTransformComponent);
   newEntity.AddComponent<SpriteComponent>(mSpriteComponent);
@@ -48,10 +46,10 @@ void RemoveTileCommand::Undo() {
 // Redo removes the tile again
 void RemoveTileCommand::Redo() {
   // If the id is -1, it was not set, leave the function
-  if (mTileId == -1)
+  if (mTileId == 0)
     return;
 
-  auto entities = registry.GetEntitiesByGroup("tiles");
+  auto entities = Registry::Instance().GetEntitiesByGroup("tiles");
 
   for (auto &entity : entities) {
     if (entity.GetId() == mTileId) {

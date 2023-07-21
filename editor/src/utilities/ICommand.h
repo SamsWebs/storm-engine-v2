@@ -2,11 +2,6 @@
 
 #include <memory>
 #include <stack>
-
-#include "AddTileCommand.h"
-#include "ChangeCanvasSizeCommand.h"
-#include "RemoveTileCommand.h"
-
 /*
  *  ICommand is an interface that is used for all of the Undo/Redo functions
  *

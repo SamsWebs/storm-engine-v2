@@ -1,7 +1,5 @@
 #include "AddTileCommand.h"
 
-Registry AssetManager::registry;
-
 AddTileCommand::AddTileCommand(std::shared_ptr<MouseControl> &mouseControl)
     : mMouseControl(mouseControl), mTileId(-1) // -1 means no Id
       ,
@@ -14,7 +12,7 @@ void AddTileCommand::Execute() {
 }
 
 void AddTileCommand::Undo() {
-  auto entities = registry.GetEntitiesByGroup("tiles");
+  auto entities = Registry::Instance().GetEntitiesByGroup("tiles");
 
   for (auto &entity : entities) {
     // Remove the most Recently added tile
@@ -44,7 +42,7 @@ void AddTileCommand::Undo() {
 }
 
 void AddTileCommand::Redo() {
-  Entity newEntity = registry.CreateEntity();
+  Entity newEntity = Registry::Instance().CreateEntity();
   newEntity.Group("tiles");
   newEntity.AddComponent<TransformComponent>(mTransformComponent);
   newEntity.AddComponent<SpriteComponent>(mSpriteComponent);

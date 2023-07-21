@@ -29,8 +29,8 @@ class Application {
 
 private:
   const int WINDOW_BAR = 25;
-  const int WINDOW_HEIGHT = 1080 - WINDOW_BAR;
-  const int WINDOW_WIDTH = 1920;
+  const int WINDOW_HEIGHT = 720 - WINDOW_BAR;
+  const int WINDOW_WIDTH = 1280;
 
   const int DEFAULT_ZOOM = 1;
   const int DEFAULT_CAM_X = -360;

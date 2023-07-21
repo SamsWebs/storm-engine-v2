@@ -66,7 +66,7 @@ void ImGuiFuncs::ClearLoadedFiles() {
 
 void ImGuiFuncs::SetWindowName(const std::string &filename) {
   fs::path path(filename);
-  std::string title = "Tilemap Editor - " + path.stem().string();
+  std::string title = "Tilemap Editor - "; // + path.stem().string();
   mWindowName = title;
 }
 

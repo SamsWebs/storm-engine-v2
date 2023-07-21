@@ -1,8 +1,9 @@
 #pragma once
 
 #include <X11/Xlib.h>
-#include <algorithm>
+#include <X11/Xutil.h>
 #include <string>
+
 /*
  *	Windows platform implementation of the FileDialogs needed for loading
  *and saving files on a windows machine
@@ -16,10 +17,12 @@ public:
    *us. The function returns the path as an std::string of the file to open if
    *successful, if not returns an empty string.
    */
-  static std::string
-  OpenFile(const char *filter = "Lua Files (*.lua) |*.lua\0*.lua\0 Tilemap "
-                                "Files (*.map) | *.map\0*.map\0",
-           Window owner = NULL);
+  // static std::string
+  // OpenFile(const char *filter = "Lua Files (*.lua) |*.lua\0*.lua\0 Tilemap "
+  //                               "Files (*.map) | *.map\0*.map\0",
+  //          Window owner = NULL);
+  static std::string OpenFile(const char *filter = "All Files (*) | *",
+                              Window owner = None);
 
   /*
    *  	SaveFile --> Opens a windows file dialog.

@@ -1,5 +1,8 @@
 #pragma once
+
 #include <string>
+
+#include "FileDialogWin.h"
 
 /*
  *  This is intended to be a cross platform filedialog.

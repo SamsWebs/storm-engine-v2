@@ -1,8 +1,8 @@
 #pragma once
-
-#include <X11/Xlib.h>
-#include <X11/Xutil.h>
 #include <string>
+
+#include <imgui/imgui.h>
+#include <nfd/nfd.h>
 
 /*
  *	Windows platform implementation of the FileDialogs needed for loading
@@ -17,12 +17,8 @@ public:
    *us. The function returns the path as an std::string of the file to open if
    *successful, if not returns an empty string.
    */
-  // static std::string
-  // OpenFile(const char *filter = "Lua Files (*.lua) |*.lua\0*.lua\0 Tilemap "
-  //                               "Files (*.map) | *.map\0*.map\0",
-  //          Window owner = NULL);
-  static std::string OpenFile(const char *filter = "All Files (*) | *",
-                              Window owner = None);
+
+  static std::string OpenFile(const char *filter = "All Files (*) | *");
 
   /*
    *  	SaveFile --> Opens a windows file dialog.
@@ -31,8 +27,7 @@ public:
    */
   static std::string
   SaveFile(const char *filter = "Lua Files (*.lua) |*.lua\0*.lua\0 Tilemap "
-                                "Files (*.map) | *.map\0*.map\0",
-           Window owner = NULL);
+                                "Files (*.map) | *.map\0*.map\0");
 
   /*
    *  	OpenImageFile--> Opens a windows file dialog.
@@ -42,6 +37,5 @@ public:
   static std::string
   OpenImageFile(const char *filter =
                     "PNG Files (*.png) | *.png\0*.png\0 Bitmap Files (*.bmp) "
-                    "|*.bmp\0*.bmp\0 JPEG Files (*.jpg) |*.jpg\0*.jpg\0",
-                Window owner = NULL);
+                    "|*.bmp\0*.bmp\0 JPEG Files (*.jpg) |*.jpg\0*.jpg\0");
 };

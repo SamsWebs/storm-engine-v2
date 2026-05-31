@@ -16,7 +16,8 @@ TileMapLoader::~TileMapLoader() {
 void TileMapLoader::loadImg(const ::std::string &filePng) {
   mapSurface = IMG_Load(filePng.c_str());
   if (!mapSurface) {
-    logger.Err("Error loadgin PNG file maybe a wrong path provided!");
+    logger.Err("Error loading PNG file maybe a wrong path provided!");
+    return;
   }
   mapResolution.x = mapSurface->w;
   mapResolution.y = mapSurface->h;

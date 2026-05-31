@@ -1,32 +1,29 @@
 #include "playState.h"
 
-Registry GameState::registry;
-AssetStore GameState::assetStore;
-Logger Engine::logger;
-
 const std::string PlayState::s_playID = "PLAY";
 
-PlayState::PlayState(SDL_Renderer *renderer, int windoWidth, bool isDebugging)
-    : renderer_(renderer), windowWidth_(windoWidth), isDebugging_(isDebugging) {
+PlayState::PlayState(SDL_Renderer *renderer, int windowWidth, bool isDebugging,
+                     AssetStore_Ptr assetStore)
+    : renderer_(renderer), windowWidth_(windowWidth), isDebugging_(isDebugging),
+      assetStore_(std::move(assetStore)) {
   // Add the systems that need to be processed in our game
-  registry.AddSystem<MovementSystem>();
-  registry.AddSystem<RenderSystem>();
-  registry.AddSystem<AnimationSystem>();
-  registry.AddSystem<CollisionSystem>();
-  registry.AddSystem<RenderColliderSystem>();
+  Registry::Instance().AddSystem<MovementSystem>();
+  Registry::Instance().AddSystem<RenderSystem>();
+  Registry::Instance().AddSystem<AnimationSystem>();
+  Registry::Instance().AddSystem<CollisionSystem>();
+  Registry::Instance().AddSystem<RenderColliderSystem>();
 
-  // Add assets to the asset store
   const std::string tankSpriteId = "tank-image";
-  assetStore.AddTexture(renderer, tankSpriteId,
-                        "./assets/images/tank-panther-right.png");
-  assetStore.AddTexture(renderer, "truck-image",
-                        "./assets/images/truck-ford-right.png");
+  assetStore_->AddTexture(renderer, tankSpriteId,
+                          "./assets/images/tank-panther-right.png");
+  assetStore_->AddTexture(renderer, "truck-image",
+                          "./assets/images/truck-ford-right.png");
   const auto tileMapPng = std::string{"./assets/tilemaps/jungle.png"};
   const auto tileMapSpriteId = std::string{"tile-map"};
-  assetStore.AddTexture(renderer, tileMapSpriteId, tileMapPng);
-  assetStore.AddTexture(renderer, "chopper-image",
-                        "./assets/images/chopper.png");
-  assetStore.AddTexture(renderer, "radar-image", "./assets/images/radar.png");
+  assetStore_->AddTexture(renderer, tileMapSpriteId, tileMapPng);
+  assetStore_->AddTexture(renderer, "chopper-image",
+                          "./assets/images/chopper.png");
+  assetStore_->AddTexture(renderer, "radar-image", "./assets/images/radar.png");
 
   constexpr int tileSize = 32;
   constexpr double tileScale = 2.5;
@@ -35,7 +32,7 @@ PlayState::PlayState(SDL_Renderer *renderer, int windoWidth, bool isDebugging)
 
   auto map = tilemapLoader.getMap();
   for (const auto &tile : map) {
-    auto tileBackground = registry.CreateEntity();
+    auto tileBackground = Registry::Instance().CreateEntity();
     tileBackground.AddComponent<TransformComponent>(
         glm::vec2(tileScale * tileSize * tile.relativePosition.x,
                   tileScale * tileSize * tile.relativePosition.y),
@@ -45,28 +42,28 @@ PlayState::PlayState(SDL_Renderer *renderer, int windoWidth, bool isDebugging)
         tile.pixelSrcPosition.y);
   }
 
-  Entity chopper = registry.CreateEntity();
+  Entity chopper = Registry::Instance().CreateEntity();
   chopper.AddComponent<TransformComponent>(glm::vec2(10.0, 100.0),
                                            glm::vec2(1.5, 1.5), 0.0);
   chopper.AddComponent<RigidBodyComponent>(glm::vec2(0.0, 0.0));
   chopper.AddComponent<SpriteComponent>("chopper-image", tileSize, tileSize, 3);
   chopper.AddComponent<AnimationComponent>(2, 15, true);
 
-  Entity radar = registry.CreateEntity();
+  Entity radar = Registry::Instance().CreateEntity();
   radar.AddComponent<TransformComponent>(glm::vec2(windowWidth_ - 100, 10.0),
                                          glm::vec2(1.5, 1.5), 0.0);
   radar.AddComponent<RigidBodyComponent>(glm::vec2(0.0, 0.0));
   radar.AddComponent<SpriteComponent>("radar-image", 64, 64, 2);
   radar.AddComponent<AnimationComponent>(8, 5, true);
 
-  Entity tank = registry.CreateEntity();
+  Entity tank = Registry::Instance().CreateEntity();
   tank.AddComponent<TransformComponent>(glm::vec2(500.0, 10.0),
                                         glm::vec2(1.5, 1.5), 0.0);
   tank.AddComponent<RigidBodyComponent>(glm::vec2(-30.0, 0.0));
   tank.AddComponent<SpriteComponent>(tankSpriteId, tileSize, tileSize, 2);
   tank.AddComponent<BoxColliderComponent>(32, 32);
 
-  Entity truck = registry.CreateEntity();
+  Entity truck = Registry::Instance().CreateEntity();
   truck.AddComponent<TransformComponent>(glm::vec2(10.0, 10.0),
                                          glm::vec2(1.5, 1.5), 0.0);
   truck.AddComponent<RigidBodyComponent>(glm::vec2(20.0, 0.0));
@@ -74,7 +71,7 @@ PlayState::PlayState(SDL_Renderer *renderer, int windoWidth, bool isDebugging)
   truck.AddComponent<BoxColliderComponent>(32, 32);
 }
 
-PlayState::~PlayState() { assetStore.ClearAssets(); }
+PlayState::~PlayState() { assetStore_->ClearAssets(); }
 
 void PlayState::update() {
   // If we are too fast, waste some time until we reach the MILLISECS_PER_FRAME
@@ -92,12 +89,12 @@ void PlayState::update() {
 
   // Update the registry to process the entities that are waiting to be
   // created/deleted
-  registry.Update();
+  Registry::Instance().Update();
 
   // Ask all the systems to update
-  registry.GetSystem<MovementSystem>().Update(deltaTime);
-  registry.GetSystem<AnimationSystem>().Update();
-  registry.GetSystem<CollisionSystem>().Update();
+  Registry::Instance().GetSystem<MovementSystem>().Update(deltaTime);
+  Registry::Instance().GetSystem<AnimationSystem>().Update();
+  Registry::Instance().GetSystem<CollisionSystem>().Update();
 }
 
 void PlayState::render() {
@@ -105,9 +102,9 @@ void PlayState::render() {
   SDL_RenderClear(renderer_);
 
   // Invoke all the systems that need to render
-  registry.GetSystem<RenderSystem>().Update(renderer_, assetStore);
+  Registry::Instance().GetSystem<RenderSystem>().Update(renderer_, *assetStore_);
   if (isDebugging_) {
-    registry.GetSystem<RenderColliderSystem>().Update(renderer_);
+    Registry::Instance().GetSystem<RenderColliderSystem>().Update(renderer_);
   }
   SDL_RenderPresent(renderer_);
 }
@@ -133,7 +130,6 @@ bool PlayState::onEnter() {
 
   m_loadingComplete = true;
 
-  std::cout << "entering PlayState\n";
   return true;
 }
 bool PlayState::onExit() {
@@ -141,6 +137,5 @@ bool PlayState::onExit() {
   // and set the exiting_state flag
   m_exiting = true;
 
-  std::cout << "exiting PlayState\n";
   return true;
 }

@@ -6,7 +6,7 @@ project = {
     assets = {},
     maps = {
         [0] = {
-            file_path = "C:\\Development\\TilemapEditor\\ProjectFiles\\ColTest.map"
+            file_path = "/home/wsams/Projects/personal/gamedev/storm-engine-v2/editor/example_maps/ColTest.map"
         },
     },
     canvas = {

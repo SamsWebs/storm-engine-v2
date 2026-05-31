@@ -1,5 +1,3 @@
-#!/bin/bash
-
 BIN				= $(NAME)
 BIN_DIR   		= $(PWD)/bin
 TARGET 			= $(BIN_DIR)/$(BIN)

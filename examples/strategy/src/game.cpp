@@ -1,12 +1,19 @@
 #include "game.h"
 
-Game::Game() { logger.Log("Game Constructor called"); }
+Game::Game() {
+  // Initialize asset store
+  assetStore = std::make_unique<AssetStore>();
 
-Game::~Game() { logger.Log("Game Destructor called"); }
+  // Initialize logger
+  logger = std::make_unique<Logger>();
+  logger->Log("Game Constructor called");
+}
+
+Game::~Game() { logger->Log("Game Destructor called"); }
 
 void Game::Initialize() {
   if (SDL_Init(SDL_INIT_EVERYTHING) != 0) {
-    logger.Err("Error initializing SDL.");
+    logger->Err("Error initializing SDL.");
     return;
   }
 
@@ -20,17 +27,17 @@ void Game::Initialize() {
                        windowWidth, windowHeight, SDL_WINDOW_BORDERLESS);
 
   if (!window) {
-    logger.Err("Error creating SDL window");
+    logger->Err("Error creating SDL window");
     return;
   }
   renderer = SDL_CreateRenderer(window, -1, 0);
   if (!renderer) {
-    logger.Err("Error creating SDL renderer.");
+    logger->Err("Error creating SDL renderer.");
   }
   SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN_DESKTOP);
 
   gameStateMachine.changeState(
-      new PlayState(renderer, windowWidth, isDebugging));
+      new PlayState(renderer, windowWidth, isDebugging, std::move(assetStore)));
 
   isRunning = true;
 }

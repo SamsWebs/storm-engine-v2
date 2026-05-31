@@ -5,6 +5,7 @@
 #include <fstream>
 #include <functional>
 #include <iostream>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -33,3 +34,5 @@ private:
   static const std::string RED;
   static const std::string RESET;
 };
+
+typedef std::unique_ptr<Logger> Logger_Ptr;

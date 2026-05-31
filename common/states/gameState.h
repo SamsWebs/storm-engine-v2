@@ -44,6 +44,4 @@ protected:
   int millisecondsPreviousFrame = 0;
 
   std::vector<std::string> m_textureIDList;
-
-  static AssetStore assetStore;
 };

@@ -84,7 +84,8 @@ void Application::Init() {
   Registry::Instance().AddSystem<RenderGuiSystem>();
   Registry::Instance().AddSystem<AnimationSystem>();
   // Add the mouse hand texture right away
-  mAssetManager->AddTexture(mRenderer, "mouse_hand", "./assets/mouse_hand.png");
+  mAssetManager->AddTexture(mRenderer, "mouse_hand",
+                            "./assets/advmouse_hand.png");
 }
 
 void Application::Draw() {
@@ -228,8 +229,8 @@ void Application::Zoom(SDL_Event &event) {
   }
 
   // Zoom in the camera as well?
-  mCamera.h *mZoom;
-  mCamera.w *mZoom;
+  mCamera.h *= mZoom;
+  mCamera.w *= mZoom;
 }
 
 Application::Application()

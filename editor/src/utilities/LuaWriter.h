@@ -105,8 +105,7 @@ void LuaWriter::WriteStartTable(TName name, bool quoted, std::fstream &file) {
   PrepareNewLine(file);
   Write('[', file);
   if (quoted)
-    // Write(Quote(name), file);
-    std::cout << "quoted";
+    Write(Quote(name), file);
   else
     Write(name, file);
 

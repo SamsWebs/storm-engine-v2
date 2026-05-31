@@ -35,8 +35,10 @@ private:
   SDL_Window *window = nullptr;
   SDL_Renderer *renderer = nullptr;
 
-  Logger logger;
   GameStateMachine gameStateMachine;
+
+  Logger_Ptr logger;
+  AssetStore_Ptr assetStore;
 
 public:
   Game();

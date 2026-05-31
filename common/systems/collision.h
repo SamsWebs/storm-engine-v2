@@ -48,11 +48,11 @@ public:
 
     const auto entBXmin = tComponentB.position.x + colliderComponentB.offset.x;
     const auto entBXmax =
-        entBXmin + colliderComponentA.width * tComponentB.scale.x;
+        entBXmin + colliderComponentB.width * tComponentB.scale.x;
 
     const auto entBYmin = tComponentB.position.y + colliderComponentB.offset.y;
     const auto entBYmax =
-        entBXmin + colliderComponentB.height * tComponentB.scale.y;
+        entBYmin + colliderComponentB.height * tComponentB.scale.y;
 
     return entAXmin <= entBXmax && entAXmax >= entBXmin &&
            entAYmin <= entBYmax && entAYmax >= entBYmin;

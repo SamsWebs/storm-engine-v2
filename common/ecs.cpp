@@ -121,7 +121,11 @@ bool Registry::EntityHasTag(Entity entity, const std::string &tag) const {
     return false;
   }
 
-  return entityPerTag.find(tag)->second == entity;
+  auto it = entityPerTag.find(tag);
+  if (it == entityPerTag.end()) {
+    return false;
+  }
+  return it->second == entity;
 }
 
 Entity Registry::GetEntityByTag(const std::string &tag) const {

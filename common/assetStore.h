@@ -1,9 +1,11 @@
 #pragma once
 
-#include "SDL2/SDL_image.h"
-#include <SDL2/SDL.h>
 #include <map>
+#include <memory>
 #include <string>
+
+#include <SDL2/SDL.h>
+#include <SDL2/SDL_image.h>
 
 #include "logger.h"
 
@@ -22,3 +24,5 @@ public:
                   const std::string &filePath);
   SDL_Texture *GetTexture(const std::string &assetId) const;
 };
+
+typedef std::unique_ptr<AssetStore> AssetStore_Ptr;

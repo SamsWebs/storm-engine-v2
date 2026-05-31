@@ -1,5 +1,3 @@
-#!/bin/bash
-
 BIN				= $(NAME)
 BIN_DIR   		= $(PWD)/bin
 TARGET 			= $(BIN_DIR)/$(BIN)
@@ -12,7 +10,7 @@ OBJS 	= $(SRCS:.cpp=.o)
 
 all: clean $(TARGET)
 
-include ../../../base.mk
+include ../../base.mk
 
 run:
 	$(TARGET)

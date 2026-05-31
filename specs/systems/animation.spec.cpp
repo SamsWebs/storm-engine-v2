@@ -18,7 +18,7 @@ entity.AddComponent<AnimationComponent>();
 entity.GetComponent<AnimationComponent>().numFrames = 4;
 entity.GetComponent<AnimationComponent>().currentFrame = 0;
 entity.GetComponent<AnimationComponent>().frameSpeedRate = 1;
-entity.GetComponent<AnimationComponent>().isLoop = true;
+entity.GetComponent<AnimationComponent>().isLooped = true;
 entity.GetComponent<AnimationComponent>().startTime = 0;
 
 entity.GetComponent<SpriteComponent>().width = 100;

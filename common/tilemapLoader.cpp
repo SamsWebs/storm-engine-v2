@@ -9,13 +9,15 @@ TileMapLoader::TileMapLoader(const std::string &fileMap,
 
 TileMapLoader::~TileMapLoader() {
   if (mapSurface)
-    SDL_free(mapSurface);
+    SDL_FreeSurface(mapSurface);
+  mapSurface = nullptr;
 }
 
 void TileMapLoader::loadImg(const ::std::string &filePng) {
   mapSurface = IMG_Load(filePng.c_str());
   if (!mapSurface) {
-    logger.Err("Error loadgin PNG file maybe a wrong path provided!");
+    logger.Err("Error loading PNG file maybe a wrong path provided!");
+    return;
   }
   mapResolution.x = mapSurface->w;
   mapResolution.y = mapSurface->h;

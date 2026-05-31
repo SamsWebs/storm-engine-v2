@@ -48,6 +48,12 @@ public:
   void Kill();
   std::size_t GetId() const;
 
+  // Manage entity tags and groups
+  void Tag(const std::string &tag);
+  bool HasTag(const std::string &tag) const;
+  void Group(const std::string &group);
+  bool BelongsToGroup(const std::string &group) const;
+
   Entity &operator=(const Entity &other) = default;
   bool operator==(const Entity &other) const { return id == other.id; };
   bool operator!=(const Entity &other) const { return id != other.id; };
@@ -64,7 +70,7 @@ public:
   template <typename TComponent> TComponent &GetComponent() const;
 
   // Hold a pointer to the entity's owner registry
-  class Registry *registry;
+  class Registry *registry; // Be careful for cyclic dependencies
 };
 
 /*******************************************/
@@ -165,10 +171,21 @@ private:
   std::set<Entity> entitiesToBeAdded;
   std::set<Entity> entitiesToBeKilled;
 
+  // Entity tags (one tag name per entity)
+  std::unordered_map<std::string, Entity> entityPerTag;
+  std::unordered_map<int, std::string>
+      tagPerEntity; // Int is used to go by ID #
+
+  // Entiy groups (a set of entities per group name)
+  std::unordered_map<std::string, std::set<Entity>> entitiesPerGroup;
+  std::unordered_map<int, std::string> groupPerEntity;
+  ;
+
   // List of free entity ids that were previously removed
   std::deque<int> freeIds;
 
   Logger logger;
+  static std::unique_ptr<Registry> instance;
 
 public:
   Registry() { logger.Log("Registry constructor called"); }
@@ -208,6 +225,22 @@ public:
   // Add and remove entities from their systems
   void AddEntityToSystems(Entity entity);
   void RemoveEntityFromSystems(Entity entity);
+
+  // Tag Management
+  void TagEntity(Entity entity, const std::string &tag);
+  bool EntityHasTag(Entity entity, const std::string &tag) const;
+  Entity GetEntityByTag(const std::string &tag) const;
+  void RemoveEntityTag(Entity entity);
+
+  // Group Management
+  void GroupEntity(Entity entity, const std::string &group);
+  bool EntityBelongsToGroup(Entity entity, const std::string &group) const;
+  std::vector<Entity> GetEntitiesByGroup(const std::string &group) const;
+  bool DoesGroupExist(const std::string &group) const;
+  void RemoveEntityGroup(Entity entity);
+  std::set<Entity> GetEntitiesToBeKilled() const { return entitiesToBeKilled; }
+
+  static Registry &Instance();
 };
 
 template <typename TSystem, typename... Targs>

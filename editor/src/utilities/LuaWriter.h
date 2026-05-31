@@ -3,6 +3,7 @@
 #include <cassert>
 #include <fstream>
 #include <iostream>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -104,10 +105,12 @@ template <typename TName>
 void LuaWriter::WriteStartTable(TName name, bool quoted, std::fstream &file) {
   PrepareNewLine(file);
   Write('[', file);
-  if (quoted)
-    Write(Quote(name), file);
-  else
+  if (quoted) {
+    std::ostringstream oss; oss << name;
+    Write(Quote(oss.str()), file);
+  } else {
     Write(name, file);
+  }
 
   Write(mMinimize ? "]={" : "] = {", file);
   ++mIndent;

@@ -85,7 +85,7 @@ void Application::Init() {
   Registry::Instance().AddSystem<AnimationSystem>();
   // Add the mouse hand texture right away
   mAssetManager->AddTexture(mRenderer, "mouse_hand",
-                            "./assets/advmouse_hand.png");
+                            "./assets/mouse_hand.png");
 }
 
 void Application::Draw() {

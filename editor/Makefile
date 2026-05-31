@@ -1,5 +1,3 @@
-#!/bin/bash
-
 BIN				= editor
 BIN_DIR   		= $(PWD)/bin
 TARGET 			= $(BIN_DIR)/$(BIN)
@@ -13,6 +11,9 @@ OBJS 	= $(SRCS:.cpp=.o)
 all: clean $(TARGET)
 
 include ../base.mk
+
+clean:
+	rm -f $(TARGET) && rm -f $(shell find . -name "*.o")
 
 run:
 	$(TARGET)

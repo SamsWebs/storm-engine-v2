@@ -18,24 +18,20 @@ public:
    *successful, if not returns an empty string.
    */
 
-  static std::string OpenFile(const char *filter = "All Files (*) | *");
+  // NFD filter format: comma-separated extensions, e.g. "lua,map"
+  static std::string OpenFile(const char *filter = "lua");
 
   /*
-   *  	SaveFile --> Opens a windows file dialog.
+   *  	SaveFile --> Opens a native file dialog.
    *	The function returns the path as an std::string of the file to save if
    *successful, if not returns an empty string.
    */
-  static std::string
-  SaveFile(const char *filter = "Lua Files (*.lua) |*.lua\0*.lua\0 Tilemap "
-                                "Files (*.map) | *.map\0*.map\0");
+  static std::string SaveFile(const char *filter = "lua");
 
   /*
-   *  	OpenImageFile--> Opens a windows file dialog.
+   *  	OpenImageFile --> Opens a native file dialog.
    *	The function returns the path as an std::string of the image we want to
    *use if successful, if not returns an empty string.
    */
-  static std::string
-  OpenImageFile(const char *filter =
-                    "PNG Files (*.png) | *.png\0*.png\0 Bitmap Files (*.bmp) "
-                    "|*.bmp\0*.bmp\0 JPEG Files (*.jpg) |*.jpg\0*.jpg\0");
+  static std::string OpenImageFile(const char *filter = "png,bmp,jpg,jpeg");
 };

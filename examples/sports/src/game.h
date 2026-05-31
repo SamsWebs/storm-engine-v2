@@ -32,6 +32,6 @@ private:
     Logger_Ptr       logger;
     AssetStore_Ptr   assetStore;
 
-    int windowWidth  = 0;
-    int windowHeight = 0;
+    int windowWidth  = 800;
+    int windowHeight = 600;
 };

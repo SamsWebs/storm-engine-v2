@@ -3,10 +3,10 @@
 Game::Game() {
     assetStore = std::make_unique<AssetStore>();
     logger     = std::make_unique<Logger>();
-    logger->Log("Game constructor called");
+    logger->Log("Hockey game constructor called");
 }
 
-Game::~Game() { logger->Log("Game destructor called"); }
+Game::~Game() { logger->Log("Hockey game destructor called"); }
 
 void Game::Initialize() {
     if (SDL_Init(SDL_INIT_EVERYTHING) != 0) {
@@ -14,20 +14,13 @@ void Game::Initialize() {
         return;
     }
 
-    SDL_DisplayMode displayMode;
-    SDL_GetCurrentDisplayMode(0, &displayMode);
-    windowWidth  = displayMode.w;
-    windowHeight = displayMode.h;
-
-    window = SDL_CreateWindow(NULL,
+    window = SDL_CreateWindow("Storm Hockey",
                               SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-                              windowWidth, windowHeight, SDL_WINDOW_BORDERLESS);
+                              windowWidth, windowHeight, 0);
     if (!window) { logger->Err("Error creating SDL window."); return; }
 
-    renderer = SDL_CreateRenderer(window, -1, 0);
+    renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
     if (!renderer) { logger->Err("Error creating SDL renderer."); return; }
-
-    SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN_DESKTOP);
 
     gameStateMachine.changeState(
         new PlayState(renderer, windowWidth, windowHeight, isDebugging,

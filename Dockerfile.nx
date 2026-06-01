@@ -3,7 +3,9 @@ FROM storminator16/igloo-testing-devkitpro:latest
 ENV DEVKITPRO=/opt/devkitpro
 ENV DEVKITARM=${DEVKITPRO}/devkitARM
 ENV DEVKITPPC=${DEVKITPRO}/devkitPPC
-ENV PATH=${DEVKITPRO}/tools/bin:$PATH
+ENV DEVKITA64=${DEVKITPRO}/devkitA64
+ENV PATH=${DEVKITPRO}/devkitA64/bin:${DEVKITPRO}/tools/bin:$PATH
+ENV PKG_CONFIG_PATH=${DEVKITPRO}/portlibs/switch/lib/pkgconfig:${DEVKITPRO}/libnx/lib/pkgconfig
 
 # # Copy the source code into the container
 RUN mkdir -p /opt/library

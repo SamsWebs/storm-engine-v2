@@ -103,6 +103,7 @@ void Registry::Update() {
   // killed from the active systems
   for (auto entity : entitiesToBeKilled) {
     RemoveEntityFromSystems(entity);
+    RemoveEntityGroup(entity);
 
     entityComponentSignatures[entity.GetId()].reset();
 

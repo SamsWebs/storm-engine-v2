@@ -77,7 +77,7 @@ void FileLoader::LoadProject(sol::state &lua, const std::string &filename,
   while (true) {
     sol::optional<sol::table> hasMaps = project["maps"][mapNum];
     if (hasMaps == sol::nullopt) {
-      logger.Log("FILELOADER__LINE_75: Finished loading assets");
+      logger.Log("FILELOADER: Finished loading maps");
       break;
     }
 
@@ -124,9 +124,10 @@ void FileLoader::LoadMap(const AssetManager_Ptr &assetManager,
     bool collider = false, animated = false, vertical = false, looped = false;
 
     // Read the contents of the file into the temporary variables
-    mapFile >> group >> assetID >> tileWidth >> tileHeight >> srcRectX >>
-        srcRectY >> layer >> transform.x >> transform.y >> scale.x >> scale.y >>
-        collider;
+    if (!(mapFile >> group >> assetID >> tileWidth >> tileHeight >> srcRectX >>
+          srcRectY >> layer >> transform.x >> transform.y >> scale.x >>
+          scale.y >> collider))
+      break;
 
     // If the tile is also a collider, load collider data
     if (collider)
@@ -149,10 +150,6 @@ void FileLoader::LoadMap(const AssetManager_Ptr &assetManager,
     if (animated)
       tile.AddComponent<AnimationComponent>(numFrames, frameSpeed, vertical,
                                             looped, frameOffset);
-
-    // Check for end of file
-    if (mapFile.eof())
-      break;
   }
 
   // Close the file

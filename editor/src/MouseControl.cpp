@@ -49,6 +49,15 @@ void MouseControl::MouseBox(const AssetManager_Ptr &assetManager,
   }
 }
 
+bool MouseControl::FastErase(const glm::vec2 &pos) {
+  if (!RightButtonDown())
+    return false;
+  if (mGridSnap)
+    return (pos.x != mPrevMousePosErase.x || pos.y != mPrevMousePosErase.y);
+  else
+    return true; // continuous erase while dragging in free mode
+}
+
 bool MouseControl::FastTile(const glm::vec2 &pos) {
   // This is only used while in gridsnap maode
   if (mGridSnap) {
@@ -65,6 +74,7 @@ MouseControl::MouseControl()
     : mMouseRect(glm::vec2(16, 16)), mMousePosX(0), mMousePosY(0),
       mMousePosGrid(glm::vec2(0)),
       mPrevMousePos(glm::vec2(mMousePosX, mMousePosY)),
+      mPrevMousePosErase(glm::vec2(-1, -1)),
       mMousePosScreen(glm::vec2(0)), mZoom(0), mGridSize(16), mPanX(0),
       mPanY(0), mMostRecentTileId(-1), mIsCollider(false), mIsAnimated(false),
       mGridSnap(true), mOverImGuiWindow(false), mLeftPressed(false),
@@ -76,6 +86,19 @@ MouseControl::MouseControl()
 void MouseControl::CreateTile(const AssetManager_Ptr &assetManager,
                               Renderer &renderer, SDL_Rect &mouseBox,
                               SDL_Rect &camera, SDL_Event &event) {
+  // Refresh mouse position with the current frame's data so tile placement
+  // matches exactly where the cursor is right now, not one frame behind.
+  {
+    int rawX, rawY;
+    SDL_GetMouseState(&rawX, &rawY);
+    if (mZoom != 0.0f) {
+      mMousePosX = static_cast<int>((rawX + camera.x) / mZoom);
+      mMousePosY = static_cast<int>((rawY + camera.y) / mZoom);
+      mMousePosScreen.x = mMousePosX;
+      mMousePosScreen.y = mMousePosY;
+    }
+  }
+
   // Draw the Mouse Box Image, this follows the mouse
   MouseBox(assetManager, renderer, mouseBox, camera, false);
 
@@ -97,7 +120,8 @@ void MouseControl::CreateTile(const AssetManager_Ptr &assetManager,
   if (!RightButtonDown())
     mRightPressed = false;
 
-  if ((event.type == SDL_MOUSEBUTTONDOWN || LeftButtonDown()) &&
+  if ((event.type == SDL_MOUSEBUTTONDOWN || LeftButtonDown() ||
+       RightButtonDown()) &&
       !mOverImGuiWindow) {
     // If the left mouse button is pressed, create a tile/collider at that
     // location
@@ -117,6 +141,21 @@ void MouseControl::CreateTile(const AssetManager_Ptr &assetManager,
         mTransformComponent.position.y =
             static_cast<int>(mMousePosScreen.y -
                              (mMouseRect.y * mTransformComponent.scale.y / 2));
+      }
+
+      // Remove any existing tile at this grid position on the same z-layer
+      if (Registry::Instance().DoesGroupExist("tiles")) {
+        glm::vec2 newPos(mTransformComponent.position.x,
+                         mTransformComponent.position.y);
+        for (auto &existing : Registry::Instance().GetEntitiesByGroup("tiles")) {
+          const auto &t = existing.GetComponent<TransformComponent>();
+          const auto &s = existing.GetComponent<SpriteComponent>();
+          if (s.zIndex == mSpriteComponent.zIndex &&
+              static_cast<int>(t.position.x) == static_cast<int>(newPos.x) &&
+              static_cast<int>(t.position.y) == static_cast<int>(newPos.y)) {
+            existing.Kill();
+          }
+        }
       }
 
       // Create a new tile entity and add the necessary components
@@ -157,10 +196,12 @@ void MouseControl::CreateTile(const AssetManager_Ptr &assetManager,
       mPrevMousePos.y = pos.y;
     }
 
-    // If the right mouse button is pressed, remove the tile/collider at that
-    // location
-    if (event.button.button == SDL_BUTTON_RIGHT && !mOverImGuiWindow &&
-        !mRightPressed) {
+    // If the right mouse button is pressed/held, remove the tile/collider at
+    // that location (drag-erasing supported via FastErase)
+    if (!mOverImGuiWindow &&
+        ((event.type == SDL_MOUSEBUTTONDOWN &&
+          event.button.button == SDL_BUTTON_RIGHT && !mRightPressed) ||
+         FastErase(pos))) {
       if (!Registry::Instance().DoesGroupExist("tiles"))
         return;
 
@@ -206,9 +247,13 @@ void MouseControl::CreateTile(const AssetManager_Ptr &assetManager,
           entity.Kill();
           mRightPressed = true;
           mTileRemoved = true;
+          mPrevMousePosErase = pos;
           logger.Log("Tile with ID: {0} has been removed! " + entity.GetId());
         }
       }
+      // Even if no tile was found under the cursor, advance the erase position
+      // so dragging over empty cells doesn't stall the position tracker
+      mPrevMousePosErase = pos;
     }
   }
 }
@@ -216,6 +261,18 @@ void MouseControl::CreateTile(const AssetManager_Ptr &assetManager,
 void MouseControl::CreateCollider(const AssetManager_Ptr &assetManager,
                                   Renderer &renderer, SDL_Rect &mouseBox,
                                   SDL_Rect &camera, SDL_Event &event) {
+  // Refresh mouse position for the current frame (same fix as CreateTile).
+  {
+    int rawX, rawY;
+    SDL_GetMouseState(&rawX, &rawY);
+    if (mZoom != 0.0f) {
+      mMousePosX = static_cast<int>((rawX + camera.x) / mZoom);
+      mMousePosY = static_cast<int>((rawY + camera.y) / mZoom);
+      mMousePosScreen.x = mMousePosX;
+      mMousePosScreen.y = mMousePosY;
+    }
+  }
+
   // Draw the collider mouse box
   MouseBox(assetManager, renderer, mouseBox, camera, true);
 

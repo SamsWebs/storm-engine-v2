@@ -1,17 +1,17 @@
 ----------------------------------------------------------
--- 
+--
 ----------------------------------------------------------
 
 project = {
     assets = {
         [0] = {
             asset_id = "Dungeon_Tiles",
-            file_path = "C:\\Development\\ZeldaClone\\ZeldaClone\\Assets\\Tilemaps\\Tiles\\Dungeon_Tiles.png"
+            file_path = "./assets/adv/Tilemaps/Tiles/Dungeon_Tiles.png"
         }
     },
     maps = {
         [0] = {
-            file_path = "C:\\Development\\TilemapEditor\\ProjectFiles\\TestAgain.map"
+            file_path = "./example_maps/TestAgain.map"
         },
     },
     canvas = {

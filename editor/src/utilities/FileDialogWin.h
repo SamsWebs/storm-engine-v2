@@ -10,32 +10,15 @@
  */
 class FileDialogWin {
 public:
-  /*
-   *  	OpenFile --> Opens a windows file dialog. By default, the filters are
-   *set to .lua and .map files; however, we only truly need to open the project
-   *file, which is a lua file. The project loader will load any map files for
-   *us. The function returns the path as an std::string of the file to open if
-   *successful, if not returns an empty string.
-   */
+  // NFD filter format: comma-separated extensions, e.g. "lua,map"
+  static std::string OpenFile(const char *filter = "lua");
+  static std::string SaveFile(const char *filter = "lua");
+  static std::string OpenImageFile(const char *filter = "png,bmp,jpg,jpeg");
 
-  static std::string OpenFile(const char *filter = "All Files (*) | *");
+private:
+  // Persists across calls so the dialog reopens in the last used directory
+  static std::string sLastDirectory;
 
-  /*
-   *  	SaveFile --> Opens a windows file dialog.
-   *	The function returns the path as an std::string of the file to save if
-   *successful, if not returns an empty string.
-   */
-  static std::string
-  SaveFile(const char *filter = "Lua Files (*.lua) |*.lua\0*.lua\0 Tilemap "
-                                "Files (*.map) | *.map\0*.map\0");
-
-  /*
-   *  	OpenImageFile--> Opens a windows file dialog.
-   *	The function returns the path as an std::string of the image we want to
-   *use if successful, if not returns an empty string.
-   */
-  static std::string
-  OpenImageFile(const char *filter =
-                    "PNG Files (*.png) | *.png\0*.png\0 Bitmap Files (*.bmp) "
-                    "|*.bmp\0*.bmp\0 JPEG Files (*.jpg) |*.jpg\0*.jpg\0");
+  // Extract the directory portion of a full file path
+  static std::string DirectoryOf(const std::string &path);
 };

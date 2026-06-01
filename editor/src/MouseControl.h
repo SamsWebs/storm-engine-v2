@@ -21,6 +21,7 @@ private:
   int mMousePosY;
   glm::vec2 mMousePosGrid;
   glm::vec2 mPrevMousePos;
+  glm::vec2 mPrevMousePosErase;
   glm::vec2 mMousePosScreen;
 
   float mZoom;
@@ -55,6 +56,7 @@ private:
      position, place a new tile.
   */
   bool FastTile(const glm::vec2 &pos);
+  bool FastErase(const glm::vec2 &pos);
 
   /*
   Mouse Down functions

@@ -37,6 +37,9 @@ private:
   sol::state mLua;
   std::unique_ptr<class CommandManager> mCommandManager;
 
+  static constexpr int EDITOR_W = 1280;
+  static constexpr int EDITOR_H = 720 - 25; // matches Application WINDOW_HEIGHT
+
 private:
   void SetExit(bool exit) { mExit = exit; }
   void ShowMouseLocationText(SDL_Rect &mouseBox, SDL_Rect &camera);
@@ -79,4 +82,10 @@ public:
    *	GetExit() - Exit the application
    */
   inline const bool &GetExit() const { return mExit; }
+
+  // Re-centre the camera so the canvas sits in the middle of the viewport.
+  void CenterCamera(SDL_Rect &camera) const {
+    camera.x = -(EDITOR_W - mCanvasWidth)  / 2;
+    camera.y = -(EDITOR_H - mCanvasHeight) / 2;
+  }
 };

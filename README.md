@@ -1,58 +1,106 @@
 # Storm! Engine v2
 
-Built this engine for game jams and possible future projects.  It's based some of what I've learned from the [SDL Game Development][1] book by [Packt Publishing][2], some of what I've learned from Pikuma's 2D Game Engine series.  The book is a great resource for learning SDL2.  I've made some changes to the engine, including adding a few features, and fixing some bugs.  I've also added some documentation to help you get started with the engine.
+A lightweight, ECS-based 2D game engine built on SDL2 — made for game jams and personal projects.
+
+![Storm Engine v2 platformer example](docs/screenshot.png)
+<!-- TODO: replace with an actual screenshot or GIF of your game -->
 
 ## Features
 
-* Support for Windows, Linux, MacOS, and the Nintendo Switch.
-* Support for loading maps created with [Tiled][6].
+- **Entity-Component-System (ECS)** architecture
+- **Sprite rendering** with camera, z-index sorting, and flip support
+- **Tilemap support** — load maps painted with the built-in tile editor (`.map` format, auto-detected)
+- **Box collider** components with debug overlay
+- **Asset store** for textures, fonts, and audio
+- **Game state machine** for managing scenes
+- **Logger** utility
+- **Lua scripting** support
+- Built-in **tile map editor** with drag-to-paint, drag-to-erase, and layer support
+- Example games: platformer, shooter, strategy, puzzle, JRPG, sports
 
-## How to use
+## Installation
 
-For your project, other than the pre-requisite steps, you can either just copy over the `common` and `vendor` folders or compile the engine as a library.  If you want to compile the engine as a library, you can do the following:
+Pre-built `.deb` packages are available on the [Releases](https://github.com/WillSams/storm-engine-v2/releases) page.
+
+### Debian / Ubuntu / Linux Mint (amd64)
 
 ```bash
-make -f Makefile.debian && sudo make install -f Makefile.debian  # For Debian and Debian-based distros (Ubuntu, Linux Mint, etc.)
+sudo dpkg -i libstormenginev2_<version>_amd64.deb
 ```
 
-## Pre-requisites
-
-I've included a Makefile that should work on most Linux systems, including Windows Subsystem for Linux and possibly for MacOS.  You'll need to install SDL2 and the SDL2 image, ttf, and mixer extensions.  To install these extensions on a Debian based system, you can follow [these instructions][4].  If you're on a different system, you'll need to install the SDL2 and extensions [per the instructions for your system][5].  If you already have SDL2 and extensions installed, only steps you need is to install [Tiled][6], [Valgrind][7], and [Igloo][8] if you don't have those already.  On Debian-based systems, you can do the following:
+#### Raspberry Pi 4/5 with 64-bit OS (arm64)
 
 ```bash
-sudo apt update && sudo apt install cmake llibtinyxml2-dev tiled valgrind liblua5.3-dev
+sudo dpkg -i libstormenginev2_<version>_arm64.deb
+```
 
-# Igloo w/ Snowhouse
+After installing, link your project with `-lstormenginev2`.
+
+## Building from Source
+
+### Prerequisites
+
+Install SDL2 and its extensions, plus a few other dependencies:
+
+```bash
+sudo apt update && sudo apt install -y \
+    libsdl2-dev libsdl2-image-dev libsdl2-ttf-dev libsdl2-mixer-dev \
+    libglm-dev libtinyxml2-dev liblua5.4-dev libgtk-3-dev \
+    valgrind
+```
+
+Install [Igloo](https://github.com/codewars/igloo) (test framework):
+
+```bash
 git clone https://github.com/codewars/igloo.git
 cd igloo
 git submodule add -b headers-only https://github.com/banditcpp/snowhouse snowhouse
 git submodule update --init --recursive
-sed -i 's/\VERSION 3.22/VERSION 3.16/g' CMakeLists.txt  # This is a hack to get it to work on older versions of CMake
-mkdir build && cd build
-cmake ..
-sudo cmake --build . --target install
-
-OpenGL Mathematics (GLM)
-git clone https://github.com/g-truc/glm.git
-cd glm
 mkdir build && cd build
 cmake ..
 sudo cmake --build . --target install
 ```
 
-<https://github.com/Rapptz/sol> -= Sol
- -= ImGui
+### Build & install the library
 
-I'll update these instructions for WSL and MacOS, eventually.  However, if anyone wants to submit a PR for these, I'd be happy to accept it.
+```bash
+make -f Makefile.debian
+sudo make -f Makefile.debian install
+```
 
-## Running
+### Run the tests
 
-Just simply type `make && make run` to build and run the game.
+```bash
+make -f Makefile.debian test
+```
 
-[1]: https://www.packtpub.com/game-development/sdl-game-development
-[2]: https://github.com/PacktPublishing/SDL-Game-Development
-[4]: docs/SDL2-install-instructions.md
-[5]: https://wiki.libsdl.org/SDL2/Installation
-[6]: http://www.mapeditor.org/
-[7]: http://valgrind.org/
-[8]: https://github.com/codewars/igloo
+## Running the Examples
+
+```bash
+cd examples/platformer
+make && make run
+```
+
+Swap `platformer` for `shooter`, `strategy`, `puzzle`, `jrpg`, or `sports` to try the others.
+
+## Using the Tile Editor
+
+```bash
+cd editor
+make && make run
+```
+
+- **Left-click / drag** — paint tiles
+- **Right-click / drag** — erase tiles
+- **D** — toggle collider debug overlay
+- The editor saves `.map` files that `TileMapLoader` can load directly in your game
+
+## Windows / WSL
+
+The Makefile should work under WSL2 with the same `apt` prerequisites above. Native Windows builds are not officially supported yet — PRs welcome.
+
+## Credits
+
+Inspired by the [SDL Game Development](https://www.packtpub.com/game-development/sdl-game-development) book (Packt Publishing) and [Pikuma's 2D Game Engine course](https://pikuma.com/courses/cpp-2d-game-engine-development).
+
+[SDL2](https://wiki.libsdl.org/SDL2/Installation) · [GLM](https://github.com/g-truc/glm) · [Igloo](https://github.com/codewars/igloo) · [TinyXML2](https://github.com/leethomason/tinyxml2) · [ImGui](https://github.com/ocornut/imgui) · [Lua](https://www.lua.org/)

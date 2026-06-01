@@ -3,128 +3,194 @@ name: Build And Release Multiplatform
 on: [push]
 
 jobs:
+
+  # ── amd64 (Debian / Ubuntu / Linux Mint) ────────────────────────────────────
   build-amd64-linux:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v1
+        uses: docker/setup-buildx-action@v3
 
-      - name: Build Docker image for Testing
+      - name: Build Docker image
         run: |
           docker build -t stormenginev2:linux-amd64 \
             --platform=linux/amd64 \
             --no-cache \
             . -f Dockerfile.debian
-          docker run --rm -t stormenginev2:linux-amd64
 
-      - name: Prepares artifacts
+      - name: Run tests
+        run: docker run --rm stormenginev2:linux-amd64
+
+      - name: Build library and create .deb
         run: |
-          make -f Makefile.debian
-          mkdir archives
-          cd bin
-          zip -r ../archives/stormenginev2-linux-amd64.zip libstormenginev2.so
+          # Compile inside the container and copy artefacts out
+          docker run --name build_amd64 stormenginev2:linux-amd64 make target
+          docker cp build_amd64:/opt/library/bin/libstormenginev2.so ./libstormenginev2.so
+          docker cp build_amd64:/opt/library/common ./common
+          docker rm build_amd64
 
-      - name: Save build-artifacts
-        uses: actions/upload-artifact@v3
+          # Assemble the .deb directory tree
+          mkdir -p deb/DEBIAN
+          mkdir -p deb/usr/local/lib
+          mkdir -p deb/usr/local/include/stormengine2
+
+          cp libstormenginev2.so deb/usr/local/lib/
+          cp -r common/* deb/usr/local/include/stormengine2/
+          # Remove compiled objects – headers only
+          find deb/usr/local/include/stormengine2 -name "*.o" -delete
+          find deb/usr/local/include/stormengine2 -name "*.cpp" -delete
+
+          # postinst: refresh the dynamic linker cache after install
+          cat > deb/DEBIAN/postinst << 'EOF'
+#!/bin/sh
+set -e
+ldconfig
+EOF
+          chmod 0755 deb/DEBIAN/postinst
+
+          # control file
+          cat > deb/DEBIAN/control << 'EOF'
+Package: libstormenginev2
+Version: 1.0.0
+Section: libs
+Priority: optional
+Architecture: amd64
+Depends: libsdl2-2.0-0, libsdl2-image-2.0-0, libsdl2-ttf-2.0-0, libsdl2-mixer-2.0-0
+Maintainer: Will Sams <will@samswebs.com>
+Homepage: https://github.com/storminator16/storm-engine-v2
+Description: Storm Engine v2 – C++ 2-D game-engine library
+ A lightweight ECS-based 2-D game engine built on SDL2.
+ Provides entity/component/system management, asset loading,
+ tilemap support, and game-state machine.
+EOF
+
+          dpkg-deb --build deb libstormenginev2_1.0.0_amd64.deb
+
+      - name: Upload amd64 .deb
+        uses: actions/upload-artifact@v4
         with:
-          name: build-artifacts
-          path: |
-            archives/stormenginev2-linux-amd64.zip
+          name: deb-amd64
+          path: libstormenginev2_1.0.0_amd64.deb
 
+
+  # ── arm64 (Raspberry Pi 4/5 with 64-bit OS, or any arm64 Debian system) ─────
   build-arm64-linux:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      - name: Set up QEMU dependency
-        uses: docker/setup-qemu-action@v1
+      - name: Set up QEMU (needed for arm64 emulation)
+        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v1
+        uses: docker/setup-buildx-action@v3
 
-      - name: Build Docker image for Testing
+      - name: Build Docker image (arm64)
         run: |
           docker build -t stormenginev2:linux-arm64 \
             --platform=linux/arm64 \
             --no-cache \
             . -f Dockerfile.debian
-          docker run --rm -t stormenginev2:linux-amd64
 
-      - name: Prepares artifacts
+      - name: Run tests (arm64)
+        run: docker run --rm --platform=linux/arm64 stormenginev2:linux-arm64
+
+      - name: Build library and create .deb
         run: |
-          make all -f Makefile.debian
-          mkdir archives
-          cd bin
-          zip -r ../archives/stormenginev2-linux-arm64.zip libstormenginev2.so
+          # Compile inside the arm64 container and copy artefacts out
+          docker run --name build_arm64 --platform=linux/arm64 \
+            stormenginev2:linux-arm64 make target
+          docker cp build_arm64:/opt/library/bin/libstormenginev2.so ./libstormenginev2.so
+          docker cp build_arm64:/opt/library/common ./common
+          docker rm build_arm64
 
-      - name: Save build-artifacts
-        uses: actions/upload-artifact@v3
+          # Assemble the .deb directory tree
+          mkdir -p deb/DEBIAN
+          mkdir -p deb/usr/local/lib
+          mkdir -p deb/usr/local/include/stormengine2
+
+          cp libstormenginev2.so deb/usr/local/lib/
+          cp -r common/* deb/usr/local/include/stormengine2/
+          find deb/usr/local/include/stormengine2 -name "*.o" -delete
+          find deb/usr/local/include/stormengine2 -name "*.cpp" -delete
+
+          cat > deb/DEBIAN/postinst << 'EOF'
+#!/bin/sh
+set -e
+ldconfig
+EOF
+          chmod 0755 deb/DEBIAN/postinst
+
+          cat > deb/DEBIAN/control << 'EOF'
+Package: libstormenginev2
+Version: 1.0.0
+Section: libs
+Priority: optional
+Architecture: arm64
+Depends: libsdl2-2.0-0, libsdl2-image-2.0-0, libsdl2-ttf-2.0-0, libsdl2-mixer-2.0-0
+Maintainer: Will Sams <will@samswebs.com>
+Homepage: https://github.com/storminator16/storm-engine-v2
+Description: Storm Engine v2 – C++ 2-D game-engine library
+ A lightweight ECS-based 2-D game engine built on SDL2.
+ Provides entity/component/system management, asset loading,
+ tilemap support, and game-state machine.
+ .
+ This build targets arm64 / AArch64 (Raspberry Pi 4/5 with 64-bit OS).
+EOF
+
+          dpkg-deb --build deb libstormenginev2_1.0.0_arm64.deb
+
+      - name: Upload arm64 .deb
+        uses: actions/upload-artifact@v4
         with:
-          name: build-artifacts
-          path: |
-            archives/stormenginev2-linux-arm64.zip
+          name: deb-arm64
+          path: libstormenginev2_1.0.0_arm64.deb
 
-  # build-nx:
-  #   runs-on: ubuntu-latest
 
-  #   steps:
-  #     - name: Checkout
-  #       uses: actions/checkout@v3
-
-  #     - name: Build Docker image for Testing
-  #       uses: docker/build-push-action@v2
-  #       with:
-  #         context: .
-  #         push: false
-  #         file: ./Dockerfile.nx
-  #         platforms: linux/amd64
-  #         tags: stormenginev2:linux-amd64
-
-  #     - name: Run Tests
-  #       run: |
-  #         docker run --rm \
-  #           stormenginev2:linux-amd64 \
-  #           /opt/library make test -f Makefile.nx
-
-  #     - name: Prepares artifacts
-  #       run: make all -f Makefile.nx
-
-  #     - name: Save build-artifacts
-  #       uses: actions/upload-artifact@v3
-  #       with:
-  #         name: build-artifacts
-  #         path: |
-  #           archives/stormenginev2-nx.zip
-
+  # ── GitHub Release ───────────────────────────────────────────────────────────
   release:
     runs-on: ubuntu-latest
-    needs: [
-        build-amd64-linux,
-        build-arm64-linux,
-        # build-nx
-      ]
-    steps:
-      - name: Load build-artifacts
-        uses: actions/download-artifact@v3
-        with:
-          name: build-artifacts
-          path: bin
+    needs: [build-amd64-linux, build-arm64-linux]
 
-      - name: Create Latest Release
-        uses: softprops/action-gh-release@v1
-        # if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Download amd64 artifact
+        uses: actions/download-artifact@v4
         with:
-          name: Release Latest Build
-          body: Release Latest Build
+          name: deb-amd64
+
+      - name: Download arm64 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: deb-arm64
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Latest Build
+          body: |
+            ## Storm Engine v2
+
+            ### Installation
+
+            **Debian / Ubuntu / Linux Mint (amd64)**
+            ```bash
+            sudo dpkg -i libstormenginev2_1.0.0_amd64.deb
+            ```
+
+            **Raspberry Pi 4/5 with 64-bit OS (arm64)**
+            ```bash
+            sudo dpkg -i libstormenginev2_1.0.0_arm64.deb
+            ```
+
+            After installing, link with `-lstormenginev2`.
           tag_name: latest-build
           files: |
-            ./archives/stormenginev2-linux-amd64.zip
-            ./archives/stormenginev2-linux-arm64.zip
-            # ./archives/stormenginev2-nx.zip
+            libstormenginev2_1.0.0_amd64.deb
+            libstormenginev2_1.0.0_arm64.deb
           prerelease: false

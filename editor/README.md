@@ -1,8 +1,8 @@
-# storm-engine-v2 Tilemap Editor
+# Storm! Engine Tilemap Editor
 
 A tilemap editor for storm-engine-v2 built with SDL2 and ImGui. Load tileset images, paint tiles onto a canvas, place box colliders, and save your work as a Lua project file that can be loaded back into your game.
 
----
+Adapted heavily (lifted) from Dustin Clark's [Jade Map Editor](https://github.com/dwjclark11/TilemapEditor), which he created to build a Zelda-clone game in C++ using SDL2. The editor's core features are intact, but now works on Linux and a few bug fixes.
 
 ## Building
 
@@ -14,8 +14,6 @@ make run    # launch without rebuilding
 ```
 
 The binary is written to `bin/editor`. All runtime assets (fonts, sample tilesets, Lua files) are in `bin/assets/` and must stay there — the clean rule does not touch them.
-
----
 
 ## Interface Overview
 
@@ -32,10 +30,9 @@ The editor uses a menu bar across the top of the window. Below it is the canvas 
 ```
 
 When **Create Tiles** or **Create Colliders** is active, two additional floating windows appear:
+
 - **Texture** — the loaded tileset image for picking tiles
 - **Tile Properties** / **Box Collider Properties** — controls for the tile you are about to place
-
----
 
 ## Menu Bar
 
@@ -70,8 +67,6 @@ Canvas resize operations are tracked on the command stack and are fully undoable
 | **Create Tiles** | Toggle tile-painting mode (mutually exclusive with Create Colliders) |
 | **Create Colliders** | Toggle collider-painting mode (mutually exclusive with Create Tiles) |
 | **Grid Snap** | Snap tile placement to the grid. When off, tiles can be placed at arbitrary pixel positions. |
-
----
 
 ## Working with Tiles
 
@@ -108,13 +103,12 @@ Go to **Tools** and check **Create Tiles**. Two floating windows appear:
 ### 3. Paint Tiles
 
 With **Create Tiles** active:
+
 - **Left-click** on the canvas to place a tile at the mouse position
 - **Right-click** on a placed tile to remove it
 - The status bar in the menu shows **Grid [X, Y]** and **Mouse [X, Y]** coordinates in real time
 
 Enable **Grid Snap** to have tiles snap to the grid automatically. Without grid snap, tiles are placed at the exact pixel position of the mouse.
-
----
 
 ## Working with Colliders
 
@@ -123,8 +117,6 @@ Go to **Tools** and check **Create Colliders** (this disables Create Tiles).
 The **Box Collider Properties** window appears with the same size/offset controls. Left-click on the canvas to place invisible collider boxes that will be saved alongside your tile data.
 
 Toggle collider visibility at any time with **C**.
-
----
 
 ## Navigating the Canvas
 
@@ -136,8 +128,6 @@ Toggle collider visibility at any time with **C**.
 | `C` | Toggle collider outlines on/off |
 
 Zoom range is 0.4× to 2.2×, interpolated smoothly.
-
----
 
 ## Saving and Loading
 
@@ -158,8 +148,6 @@ Zoom range is 0.4× to 2.2×, interpolated smoothly.
 ### Open
 
 **Ctrl+O** (or **File → Open**) opens a previously saved `.lua` project file. The editor reads the project metadata, reloads all tilesets into the asset manager, and restores the tile and collider entities on the canvas.
-
----
 
 ## Keyboard Shortcuts Reference
 

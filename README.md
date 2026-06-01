@@ -119,11 +119,13 @@ export DEVKITPRO=/opt/devkitpro
 make -f Makefile.nx
 ```
 
-This produces a `.nro` you can run on a homebrew-enabled Switch. To launch in the [Yuzu](https://yuzu-emu.org/) emulator:
+This produces a `.nro` you can run on a homebrew-enabled Switch. To launch in an emulator, use [Suyu](https://git.suyu.dev/suyu/suyu/releases) (the recommended Yuzu successor on Linux). Make sure to set the graphics backend to **OpenGL** in Suyu's settings before running:
 
 ```bash
-make -f Makefile.nx run
+make run EMULATOR=/path/to/Suyu.AppImage
 ```
+
+Copy the `.nro` to `switch/` on your SD card to run on real hardware via the Homebrew Menu.
 
 ## Credits
 

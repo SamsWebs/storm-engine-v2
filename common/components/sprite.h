@@ -19,7 +19,7 @@ struct SpriteComponent {
                   int srcRectX = 0, int srcRectY = 0,
                   glm::vec2 offset = glm::vec2(0))
       : assetId{assetId}, width{width}, height{height}, zIndex{zIndex},
-        isFixed{isFixed}, srcRect{srcRectX, srcRectY, width, height},
+        isFixed{isfixed}, srcRect{srcRectX, srcRectY, width, height},
         offset{offset} {
     flip = SDL_FLIP_NONE;
   }

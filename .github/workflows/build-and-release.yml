@@ -197,8 +197,12 @@ jobs:
           VERSION: ${{ needs.version.outputs.version }}
         run: |
           docker run --name build_nx stormenginev2:nx \
-            bash -c "cd /opt/library/examples/nx-platformer && make"
-          docker cp build_nx:/opt/library/examples/nx-platformer/nx-platformer.nro \
+            bash -c "export DEVKITPRO=/opt/devkitpro && \
+                     export DEVKITARM=/opt/devkitpro/devkitARM && \
+                     export PATH=/opt/devkitpro/devkitA64/bin:/opt/devkitpro/tools/bin:\$PATH && \
+                     export PKG_CONFIG_PATH=/opt/devkitpro/portlibs/switch/lib/pkgconfig:/opt/devkitpro/libnx/lib/pkgconfig && \
+                     cd /opt/library/examples/nx-platformer && make"
+          docker cp build_nx:/opt/library/examples/nx-platformer/bin/nx-platformer.nro \
             ./nx-platformer_${VERSION}.nro
           docker rm build_nx
 

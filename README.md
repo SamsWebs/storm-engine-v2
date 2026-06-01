@@ -119,14 +119,16 @@ export DEVKITPRO=/opt/devkitpro
 make -f Makefile.nx
 ```
 
-This produces a `.nro` you can run on a homebrew-enabled Switch. To launch in the [Yuzu](https://yuzu-emu.org/) emulator:
+This produces a `.nro` you can run on a homebrew-enabled Switch. To launch in an emulator, use [Suyu](https://git.suyu.dev/suyu/suyu/releases) (the recommended Yuzu successor on Linux). Make sure to set the graphics backend to **OpenGL** in Suyu's settings before running:
 
 ```bash
-make -f Makefile.nx run
+make run EMULATOR=/path/to/Suyu.AppImage
 ```
+
+Copy the `.nro` to `switch/` on your SD card to run on real hardware via the Homebrew Menu.
 
 ## Credits
 
-Inspired by the [SDL Game Development](https://www.packtpub.com/game-development/sdl-game-development) book (Packt Publishing) and [Pikuma's 2D Game Engine course](https://pikuma.com/courses/cpp-2d-game-engine-development).
+Inspired by the [SDL Game Development](https://www.packtpub.com/en-us/product/sdl-game-development-9781849696838) book by Shaun Mitchell and Gustavo Pezzi's [C++ Game Engine Programming course](https://pikuma.com/courses/cpp-2d-game-engine-development).
 
 [SDL2](https://wiki.libsdl.org/SDL2/Installation) · [GLM](https://github.com/g-truc/glm) · [Igloo](https://github.com/codewars/igloo) · [TinyXML2](https://github.com/leethomason/tinyxml2) · [ImGui](https://github.com/ocornut/imgui) · [Lua](https://www.lua.org/)

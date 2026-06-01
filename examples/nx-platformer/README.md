@@ -2,6 +2,8 @@
 
 A Nintendo Switch homebrew port of the storm-engine-v2 platformer example. Builds with [devkitPro](https://devkitpro.org/) and produces an `.nro` you can run on a homebrew-enabled Switch or in an emulator.
 
+![Storm Engine v2 platformer example](screenshot.png)
+
 ## Prerequisites
 
 Install devkitPro with the Switch portlibs:

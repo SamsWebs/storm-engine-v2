@@ -99,6 +99,32 @@ make && make run
 
 The Makefile should work under WSL2 with the same `apt` prerequisites above. Native Windows builds are not officially supported yet — PRs welcome.
 
+## Nintendo Switch
+
+Switch builds use [devkitPro](https://devkitpro.org/) and produce a `.nro` homebrew file.
+
+### Prerequisites
+
+Install devkitPro with the Switch portlibs:
+
+```bash
+# Follow the devkitPro pacman setup at https://devkitpro.org/wiki/Getting_Started
+sudo dkp-pacman -S switch-dev switch-sdl2 switch-sdl2_image switch-sdl2_ttf switch-sdl2_mixer switch-tinyxml2
+```
+
+### Build
+
+```bash
+export DEVKITPRO=/opt/devkitpro
+make -f Makefile.nx
+```
+
+This produces a `.nro` you can run on a homebrew-enabled Switch. To launch in the [Yuzu](https://yuzu-emu.org/) emulator:
+
+```bash
+make -f Makefile.nx run
+```
+
 ## Credits
 
 Inspired by the [SDL Game Development](https://www.packtpub.com/game-development/sdl-game-development) book (Packt Publishing) and [Pikuma's 2D Game Engine course](https://pikuma.com/courses/cpp-2d-game-engine-development).

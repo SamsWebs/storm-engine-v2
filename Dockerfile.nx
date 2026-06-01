@@ -12,6 +12,7 @@ COPY ./vendor /opt/library/vendor
 COPY ./specs /opt/library/specs
 COPY ./Makefile.nx /opt/library/Makefile
 COPY ./base.mk /opt/library/base.mk
+COPY ./examples/nx-platformer /opt/library/examples/nx-platformer
 
 # Build the project
 WORKDIR /opt/library

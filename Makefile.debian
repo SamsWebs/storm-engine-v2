@@ -22,8 +22,8 @@ install:
 	cp $(TARGET) /usr/local/lib && cp -r ./common/* /usr/local/include/stormengine2
 	rm -r /usr/local/include/stormengine2/*.o
 
-# For tests we don't need NFD (editor-only); override LIB to drop -lnfd
-TEST_LIB = $(filter-out -lnfd,$(LIB))
+# NFD is editor-only — strip it from both library and test builds
+LIB := $(filter-out -lnfd,$(LIB))
 
 test: test-target run-test
 
@@ -36,4 +36,4 @@ run-test:
 
 test-target: $(TESTOBJS)
 	mkdir -p $(BIN_DIR)
-	$(CC) $^ $(TEST_LIB) -pthread -o $(TEST_TARGET)
+	$(CC) $^ $(LIB) -pthread -o $(TEST_TARGET)

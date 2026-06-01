@@ -1,5 +1,11 @@
 FROM storminator16/igloo-testing:latest
 
+# Install dependencies missing from the base image
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libglm-dev \
+    libgtk-3-dev \
+    && rm -rf /var/lib/apt/lists/*
+
 # # Copy the source code into the container
 RUN mkdir -p /opt/library
 COPY ./common /opt/library/common

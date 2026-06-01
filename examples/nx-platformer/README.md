@@ -27,11 +27,13 @@ Output: `nx-platformer.nro`
 
 **In an emulator:**
 
+[Suyu](https://git.suyu.dev/suyu/suyu/releases) is the recommended emulator (Yuzu successor). Download the AppImage, then:
+
 ```bash
-make run EMULATOR=~/path/to/suyu.AppImage
+make run EMULATOR=/path/to/Suyu.AppImage
 ```
 
-The `EMULATOR` variable defaults to Yuzu (Flatpak). Override it with any emulator that accepts an `.nro` path — [Suyu](https://git.suyu.dev/suyu/suyu/releases) is the recommended alternative in 2024+.
+> **Important:** In Suyu, go to **Emulation → Configure → Graphics** and set the API to **OpenGL** before running. Vulkan may fail depending on your GPU driver version.
 
 **On hardware (homebrew-enabled Switch):**
 

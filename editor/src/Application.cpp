@@ -86,6 +86,9 @@ void Application::Init() {
   // Add the mouse hand texture right away
   mAssetManager->AddTexture(mRenderer, "mouse_hand",
                             "./assets/mouse_hand.png");
+
+  // Centre the camera on the canvas at startup
+  Registry::Instance().GetSystem<RenderGuiSystem>().CenterCamera(mCamera);
 }
 
 void Application::Draw() {
@@ -201,10 +204,9 @@ void Application::CameraControl(SDL_Event &event) {
     case SDLK_d: // Move Cam right
       mCamera.x += CAM_SPEED;
       break;
-    case SDLK_SPACE: // Space Resets Zoom and pan to orginal values
+    case SDLK_SPACE: // Space resets zoom and re-centres on the canvas
       mZoom = DEFAULT_ZOOM;
-      mCamera.x = DEFAULT_CAM_X;
-      mCamera.y = DEFAULT_CAM_Y;
+      Registry::Instance().GetSystem<RenderGuiSystem>().CenterCamera(mCamera);
       break;
     }
   }

@@ -3,7 +3,7 @@
 RenderGuiSystem::RenderGuiSystem()
     : mWindowName(""), mCreateTiles(false), mCreateColliders(false),
       mGridSnap(false), mExit(false), mTileRemoved(false), mCanvasWidth(640),
-      mCanvasHeight(448), mTileSize(64), mPrevTileSize(mTileSize), mGridX(0),
+      mCanvasHeight(448), mTileSize(16), mPrevTileSize(mTileSize), mGridX(0),
       mGridY(0)
 
 {
@@ -45,6 +45,7 @@ void RenderGuiSystem::Update(const AssetManager_Ptr &assetManager,
       if (ImGui::InputInt("Tile Size", &mTileSize, 8, 8)) {
         if (mTileSize <= 8)
           mTileSize = 8;
+        CenterCamera(camera);
       }
 
       // Clamp the minimum Canvas width
@@ -57,11 +58,12 @@ void RenderGuiSystem::Update(const AssetManager_Ptr &assetManager,
           mCommandManager->ExecuteCmd(std::make_shared<ChangeCanvasSizeCommand>(
               mCanvas, mPrevCanvasWidth, mPrevCanvasHeight));
           mPrevCanvasWidth = mCanvasWidth;
+          CenterCamera(camera);
         }
 
-        // Clamp the canvas width to 640
-        if (mCanvasWidth <= 640) {
-          mCanvasWidth = 640;
+        // Clamp the canvas width to a minimum of one tile size
+        if (mCanvasWidth < mTileSize) {
+          mCanvasWidth = mTileSize;
           mCanvas->SetWidth(mCanvasWidth);
           mPrevCanvasWidth = mCanvasWidth;
         }
@@ -77,11 +79,12 @@ void RenderGuiSystem::Update(const AssetManager_Ptr &assetManager,
           mCommandManager->ExecuteCmd(std::make_shared<ChangeCanvasSizeCommand>(
               mCanvas, mPrevCanvasWidth, mPrevCanvasHeight));
           mPrevCanvasHeight = mCanvasHeight;
+          CenterCamera(camera);
         }
 
-        // Clamp the canvas height to 480
-        if (mCanvasHeight <= 480) {
-          mCanvasHeight = 480;
+        // Clamp the canvas height to a minimum of one tile size
+        if (mCanvasHeight < mTileSize) {
+          mCanvasHeight = mTileSize;
           mCanvas->SetHeight(mCanvasHeight);
           mPrevCanvasHeight = mCanvasHeight;
         }
@@ -113,6 +116,12 @@ void RenderGuiSystem::Update(const AssetManager_Ptr &assetManager,
       ImGui::Spacing();
       ImGui::Spacing();
       ImGui::Checkbox("Grid Snap", &mGridSnap);
+
+      ImGui::Spacing();
+      ImGui::Separator();
+      ImGui::Spacing();
+      if (ImGui::MenuItem("Center View", "Space"))
+        CenterCamera(camera);
 
       ImGui::EndMenu();
     }
@@ -223,6 +232,20 @@ void RenderGuiSystem::RenderGrid(Renderer &renderer, SDL_Rect &camera,
       SDL_RenderFillRect(renderer.get(), &newRect);
     }
   }
+
+  // Draw a bright border around the entire canvas so the user can see
+  // exactly where tile placement is active.
+  int canvasScreenX = static_cast<int>(std::floor(0.0f * zoom)) - camera.x;
+  int canvasScreenY = static_cast<int>(std::floor(0.0f * zoom)) - camera.y;
+  int canvasScreenW = static_cast<int>(std::ceil(mCanvas->GetWidth()  * zoom));
+  int canvasScreenH = static_cast<int>(std::ceil(mCanvas->GetHeight() * zoom));
+  SDL_Rect border = {canvasScreenX - 2, canvasScreenY - 2,
+                     canvasScreenW + 4,  canvasScreenH + 4};
+  SDL_SetRenderDrawColor(renderer.get(), 255, 200, 0, 255); // bright yellow
+  SDL_RenderDrawRect(renderer.get(), &border);
+  SDL_Rect border2 = {canvasScreenX - 1, canvasScreenY - 1,
+                      canvasScreenW + 2,  canvasScreenH + 2};
+  SDL_RenderDrawRect(renderer.get(), &border2);
 }
 
 void RenderGuiSystem::CreateNewCanvas() {
@@ -231,7 +254,7 @@ void RenderGuiSystem::CreateNewCanvas() {
   mCreateTiles = false;
   mCreateColliders = false;
 
-  mTileSize = 64;
+  mTileSize = 16;
   mCanvasWidth = 640;
   mCanvasHeight = 448;
 
@@ -277,7 +300,9 @@ void RenderGuiSystem::ShowMouseLocationText(SDL_Rect &mouseBox,
 }
 
 const bool RenderGuiSystem::MouseOffCanvas() const {
-  if (mMouseControl->GetMousePosScreen().x > mCanvasWidth - (mTileSize / 3) ||
+  if (mMouseControl->GetMousePosScreen().x < 0 ||
+      mMouseControl->GetMousePosScreen().y < 0 ||
+      mMouseControl->GetMousePosScreen().x > mCanvasWidth - (mTileSize / 3) ||
       mMouseControl->GetMousePosScreen().y > mCanvasHeight - (mTileSize / 3))
     return true;
 

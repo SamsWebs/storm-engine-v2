@@ -76,6 +76,19 @@ MouseControl::MouseControl()
 void MouseControl::CreateTile(const AssetManager_Ptr &assetManager,
                               Renderer &renderer, SDL_Rect &mouseBox,
                               SDL_Rect &camera, SDL_Event &event) {
+  // Refresh mouse position with the current frame's data so tile placement
+  // matches exactly where the cursor is right now, not one frame behind.
+  {
+    int rawX, rawY;
+    SDL_GetMouseState(&rawX, &rawY);
+    if (mZoom != 0.0f) {
+      mMousePosX = static_cast<int>((rawX + camera.x) / mZoom);
+      mMousePosY = static_cast<int>((rawY + camera.y) / mZoom);
+      mMousePosScreen.x = mMousePosX;
+      mMousePosScreen.y = mMousePosY;
+    }
+  }
+
   // Draw the Mouse Box Image, this follows the mouse
   MouseBox(assetManager, renderer, mouseBox, camera, false);
 
@@ -117,6 +130,21 @@ void MouseControl::CreateTile(const AssetManager_Ptr &assetManager,
         mTransformComponent.position.y =
             static_cast<int>(mMousePosScreen.y -
                              (mMouseRect.y * mTransformComponent.scale.y / 2));
+      }
+
+      // Remove any existing tile at this grid position on the same z-layer
+      if (Registry::Instance().DoesGroupExist("tiles")) {
+        glm::vec2 newPos(mTransformComponent.position.x,
+                         mTransformComponent.position.y);
+        for (auto &existing : Registry::Instance().GetEntitiesByGroup("tiles")) {
+          const auto &t = existing.GetComponent<TransformComponent>();
+          const auto &s = existing.GetComponent<SpriteComponent>();
+          if (s.zIndex == mSpriteComponent.zIndex &&
+              static_cast<int>(t.position.x) == static_cast<int>(newPos.x) &&
+              static_cast<int>(t.position.y) == static_cast<int>(newPos.y)) {
+            existing.Kill();
+          }
+        }
       }
 
       // Create a new tile entity and add the necessary components
@@ -216,6 +244,18 @@ void MouseControl::CreateTile(const AssetManager_Ptr &assetManager,
 void MouseControl::CreateCollider(const AssetManager_Ptr &assetManager,
                                   Renderer &renderer, SDL_Rect &mouseBox,
                                   SDL_Rect &camera, SDL_Event &event) {
+  // Refresh mouse position for the current frame (same fix as CreateTile).
+  {
+    int rawX, rawY;
+    SDL_GetMouseState(&rawX, &rawY);
+    if (mZoom != 0.0f) {
+      mMousePosX = static_cast<int>((rawX + camera.x) / mZoom);
+      mMousePosY = static_cast<int>((rawY + camera.y) / mZoom);
+      mMousePosScreen.x = mMousePosX;
+      mMousePosScreen.y = mMousePosY;
+    }
+  }
+
   // Draw the collider mouse box
   MouseBox(assetManager, renderer, mouseBox, camera, true);
 

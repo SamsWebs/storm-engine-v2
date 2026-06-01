@@ -1,5 +1,13 @@
 FROM storminator16/igloo-testing:latest
 
+# Install dependencies missing from the base image
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libglm-dev \
+    libgtk-3-dev \
+    liblua5.4-dev \
+    && ln -sf $(find /usr/lib -name 'liblua5.4.so' | head -1) /usr/local/lib/liblua.so \
+    && rm -rf /var/lib/apt/lists/*
+
 # # Copy the source code into the container
 RUN mkdir -p /opt/library
 COPY ./common /opt/library/common

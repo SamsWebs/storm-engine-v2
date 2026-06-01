@@ -12,6 +12,8 @@ jobs:
   # manually), use it.  Otherwise find the latest vX.Y.Z tag and bump patch.
   version:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     outputs:
       version: ${{ steps.calc.outputs.version }}
 
@@ -175,6 +177,8 @@ jobs:
   # ── GitHub Release ───────────────────────────────────────────────────────────
   release:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     needs: [version, build-amd64-linux, build-arm64-linux]
 
     steps:

@@ -2,6 +2,8 @@
 
 A Tetris-style puzzle game built as a storm-engine-v2 example. Demonstrates custom ECS components and systems, entity reuse, deferred entity lifecycle, and SDL_ttf rendering — all wired together through the engine's Registry.
 
+![Storm Engine v2 puzzle example](screenshot.png)
+
 ## Building & Running
 
 From the `examples/puzzle/` directory:

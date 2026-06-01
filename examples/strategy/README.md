@@ -2,6 +2,8 @@
 
 A top-down strategy scene built as a storm-engine-v2 example. Demonstrates tilemap loading, multiple animated entities, box collider detection, and layered z-index rendering — all driven by the engine's ECS Registry.
 
+![Storm Engine v2 strategy example](screenshot.png)
+
 ## Building & Running
 
 From the `examples/strategy/` directory:

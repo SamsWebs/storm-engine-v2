@@ -2,8 +2,7 @@
 
 A lightweight, ECS-based 2D game engine built on SDL2 — made for game jams and personal projects.
 
-![Storm Engine v2 platformer example](docs/screenshot.png)
-<!-- TODO: replace with an actual screenshot or GIF of your game -->
+![Storm Engine v2 platformer example](examples/platformer/screenshot.png)
 
 ## Features
 

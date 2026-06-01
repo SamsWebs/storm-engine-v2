@@ -2,6 +2,8 @@
 
 A top-down hockey game built as a storm-engine-v2 example. Demonstrates custom ECS components and systems, AI behavior, puck physics, and SDL2 rendering — all wired together through the engine's Registry.
 
+![Storm Engine v2 sports example](screenshot.png)
+
 ## Building & Running
 
 From the `examples/sports/` directory:

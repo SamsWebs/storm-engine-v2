@@ -2,6 +2,8 @@
 
 A scrolling 2-D platformer built as a storm-engine-v2 example. Demonstrates tilemap loading with `TileMapLoader`, tile-based physics with gravity and AABB resolution, and a horizontally scrolling camera — all without modifying the engine.
 
+![Storm Engine v2 platformer example](screenshot.png)
+
 ## Building & Running
 
 From the `examples/platformer/` directory:

@@ -2,8 +2,7 @@
 
 A lightweight, ECS-based 2D game engine built on SDL2 — made for game jams and personal projects.
 
-![Storm Engine v2 platformer example](docs/screenshot.png)
-<!-- TODO: replace with an actual screenshot or GIF of your game -->
+![Storm Engine v2 platformer example](examples/platformer/screenshot.png)
 
 ## Features
 
@@ -83,6 +82,40 @@ make && make run
 
 Swap `platformer` for `shooter`, `strategy`, `puzzle`, `jrpg`, or `sports` to try the others.
 
+### How each example loads its world
+
+The three main examples each demonstrate a different approach to managing game resources — pick whichever matches your project's needs:
+
+#### Platformer — tile editor + `.map` file
+
+The level is painted in the built-in tile editor and saved as a `.map` file. At runtime, `TileMapLoader` reads the file and spawns tile entities automatically. This is the most data-driven approach for tilemap games and the best starting point if you want to design levels visually.
+
+```
+editor/ → paint level → saves level.map
+examples/platformer/ → TileMapLoader reads level.map at runtime
+```
+
+#### Sports — everything in code
+
+No external files. Entities, positions, sizes, and game rules are all defined directly in the game state. Simple and self-contained — a good starting point for understanding the ECS pipeline without any file I/O in the way.
+
+#### Shooter — XML data via `XmlLoader`
+
+Textures and initial entities are described in an XML file (`assets/attack.xml`). The engine's `XmlLoader` parses the file, and `LoadTexturesFromXml` (a helper in `<stormengine2/xmlLoader.h>`) loads them into the asset store. Entity spawning logic then reads the parsed data and creates ECS entities from it.
+
+```
+assets/attack.xml → XmlLoader → LoadTexturesFromXml → AssetStore
+                              → XmlObjectDef list → ECS entities
+```
+
+This approach keeps your texture IDs and initial object placement out of code and in data files — useful when designers or tools are generating the XML.
+
+| Example | Resource approach | Key engine type |
+|---|---|---|
+| **Platformer** | `.map` file from the tile editor | `TileMapLoader` |
+| **Sports** | Hard-coded in the game state | — |
+| **Shooter** | XML file via tinyxml2 | `XmlLoader`, `LoadTexturesFromXml` |
+
 ## Using the Tile Editor
 
 ```bash
@@ -116,7 +149,10 @@ sudo dkp-pacman -S switch-dev switch-sdl2 switch-sdl2_image switch-sdl2_ttf swit
 
 ```bash
 export DEVKITPRO=/opt/devkitpro
-make -f Makefile.nx
+export PATH=$DEVKITPRO/devkitA64/bin:$DEVKITPRO/tools/bin:$PATH
+
+cd examples/nx-platformer
+make
 ```
 
 This produces a `.nro` you can run on a homebrew-enabled Switch. To launch in an emulator, use [Suyu](https://git.suyu.dev/suyu/suyu/releases) (the recommended Yuzu successor on Linux). Make sure to set the graphics backend to **OpenGL** in Suyu's settings before running:
@@ -126,6 +162,15 @@ make run EMULATOR=/path/to/Suyu.AppImage
 ```
 
 Copy the `.nro` to `switch/` on your SD card to run on real hardware via the Homebrew Menu.
+
+### Using Storm Engine in your own Switch project
+
+There are no pre-built Switch packages — the engine is compiled directly into your game. Use `examples/nx-platformer` as your starting point:
+
+1. Copy `examples/nx-platformer` to your new project
+2. The `engine` symlink points to `common/` — keep it or copy the sources in directly
+3. Add your own game states, components, and assets under `src/` and `romfs/`
+4. Build with `make` as above
 
 ## Credits
 

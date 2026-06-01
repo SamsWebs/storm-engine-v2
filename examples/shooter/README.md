@@ -2,6 +2,8 @@
 
 A side-scrolling shoot-em-up built as a storm-engine-v2 example. Demonstrates the engine's built-in movement, animation, collision, and render systems working together, plus scrolling background layers, bullet spawning, and periodic enemy waves.
 
+![Storm Engine v2 shooter example](screenshot.png)
+
 ## Building & Running
 
 From the `examples/shooter/` directory:

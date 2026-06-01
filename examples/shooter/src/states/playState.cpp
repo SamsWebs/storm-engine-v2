@@ -1,4 +1,5 @@
 #include "playState.h"
+#include <stormengine2/xmlLoader.h>
 
 const std::string PlayState::s_playID = "PLAY";
 
@@ -42,8 +43,11 @@ bool PlayState::onExit() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 void PlayState::LoadAssets() {
-    assetStore_->AddTexture(renderer_, "player",    "./assets/gfx/helicopter.png");
-    assetStore_->AddTexture(renderer_, "enemy1",    "./assets/gfx/helicopter2.png");
+    // Load textures defined in the PLAY state of attack.xml
+    LoadTexturesFromXml("./assets/attack.xml", "PLAY", "./assets/gfx/",
+                        renderer_, assetStore_.get(), &logger_);
+
+    // These assets aren't in attack.xml — load them directly
     assetStore_->AddTexture(renderer_, "enemy2",    "./assets/gfx/enemy1.png");
     assetStore_->AddTexture(renderer_, "enemy3",    "./assets/gfx/enemy3.png");
     assetStore_->AddTexture(renderer_, "bullet",    "./assets/gfx/bullet1.png");
@@ -68,16 +72,43 @@ void PlayState::SpawnPlayer() {
     clouds2.AddComponent<RigidBodyComponent>(glm::vec2(-20.0, 0.0));
     clouds2.AddComponent<SpriteComponent>("clouds", 640, 480, 0);
 
-    // Player helicopter — faces right via SDL_FLIP_HORIZONTAL
-    Entity player = registry_.CreateEntity();
-    player.Tag("player");
-    player.AddComponent<TransformComponent>(
-        glm::vec2(100.0, windowHeight_ / 2.0 - PLAYER_H),
-        glm::vec2(1.0, 1.0), 0.0);
-    player.AddComponent<RigidBodyComponent>(glm::vec2(0.0, 0.0));
-    player.AddComponent<SpriteComponent>("player", PLAYER_W, PLAYER_H, 2);
-    player.GetComponent<SpriteComponent>().flip = SDL_FLIP_HORIZONTAL;
-    player.AddComponent<AnimationComponent>(PLAYER_FRAMES, 10, false, true);
+    // Spawn player and initial enemies from attack.xml PLAY state
+    {
+        XmlLoader xml("./assets/attack.xml");
+        if (!xml.IsValid()) {
+            logger_.Err("SpawnPlayer: failed to load attack.xml");
+        } else {
+            for (const auto &def : xml.GetObjects("PLAY")) {
+                if (def.type == "Player") {
+                    Entity e = registry_.CreateEntity();
+                    e.Tag("player");
+                    e.AddComponent<TransformComponent>(
+                        glm::vec2(def.x, def.y), glm::vec2(1.f, 1.f), 0.0);
+                    e.AddComponent<RigidBodyComponent>(glm::vec2(0.f, 0.f));
+                    e.AddComponent<SpriteComponent>(def.textureId, def.width, def.height,
+                                                    def.zIndex > 0 ? def.zIndex : 2);
+                    e.GetComponent<SpriteComponent>().flip = SDL_FLIP_HORIZONTAL;
+                    if (def.numFrames > 1)
+                        e.AddComponent<AnimationComponent>(def.numFrames, 10, false, true);
+
+                } else if (def.type == "Enemy") {
+                    Entity e = registry_.CreateEntity();
+                    e.Group("enemies");
+                    e.AddComponent<TransformComponent>(
+                        glm::vec2(def.x, def.y), glm::vec2(1.f, 1.f), 0.0);
+                    e.AddComponent<RigidBodyComponent>(glm::vec2(-120.f, 0.f));
+                    e.AddComponent<SpriteComponent>(def.textureId, def.width, def.height,
+                                                    def.zIndex > 0 ? def.zIndex : 1);
+                    if (def.numFrames > 1)
+                        e.AddComponent<AnimationComponent>(def.numFrames, 10, false, true);
+                    e.AddComponent<BoxColliderComponent>(def.width, def.height);
+
+                } else {
+                    logger_.Log("SpawnPlayer: skipping unsupported type '" + def.type + "'");
+                }
+            }
+        }
+    }
 
     registry_.Update();
 }

@@ -100,27 +100,10 @@ jobs:
           find deb/usr/local/include/stormengine2 -name "*.o" -delete
           find deb/usr/local/include/stormengine2 -name "*.cpp" -delete
 
-          cat > deb/DEBIAN/postinst << 'EOF'
-#!/bin/sh
-set -e
-ldconfig
-EOF
+          printf '#!/bin/sh\nset -e\nldconfig\n' > deb/DEBIAN/postinst
           chmod 0755 deb/DEBIAN/postinst
 
-          cat > deb/DEBIAN/control << EOF
-Package: libstormenginev2
-Version: ${VERSION}
-Section: libs
-Priority: optional
-Architecture: amd64
-Depends: libsdl2-2.0-0, libsdl2-image-2.0-0, libsdl2-ttf-2.0-0, libsdl2-mixer-2.0-0
-Maintainer: Will Sams <will@samswebs.com>
-Homepage: https://github.com/storminator16/storm-engine-v2
-Description: Storm Engine v2 - C++ 2-D game-engine library
- A lightweight ECS-based 2-D game engine built on SDL2.
- Provides entity/component/system management, asset loading,
- tilemap support, and game-state machine.
-EOF
+          printf "Package: libstormenginev2\nVersion: ${VERSION}\nSection: libs\nPriority: optional\nArchitecture: amd64\nDepends: libsdl2-2.0-0, libsdl2-image-2.0-0, libsdl2-ttf-2.0-0, libsdl2-mixer-2.0-0\nMaintainer: Will Sams <will@samswebs.com>\nHomepage: https://github.com/storminator16/storm-engine-v2\nDescription: Storm Engine v2 - C++ 2-D game-engine library\n A lightweight ECS-based 2-D game engine built on SDL2.\n Provides entity/component/system management, asset loading,\n tilemap support, and game-state machine.\n" > deb/DEBIAN/control
 
           dpkg-deb --build deb "libstormenginev2_${VERSION}_amd64.deb"
 
@@ -175,29 +158,10 @@ EOF
           find deb/usr/local/include/stormengine2 -name "*.o" -delete
           find deb/usr/local/include/stormengine2 -name "*.cpp" -delete
 
-          cat > deb/DEBIAN/postinst << 'EOF'
-#!/bin/sh
-set -e
-ldconfig
-EOF
+          printf '#!/bin/sh\nset -e\nldconfig\n' > deb/DEBIAN/postinst
           chmod 0755 deb/DEBIAN/postinst
 
-          cat > deb/DEBIAN/control << EOF
-Package: libstormenginev2
-Version: ${VERSION}
-Section: libs
-Priority: optional
-Architecture: arm64
-Depends: libsdl2-2.0-0, libsdl2-image-2.0-0, libsdl2-ttf-2.0-0, libsdl2-mixer-2.0-0
-Maintainer: Will Sams <will@samswebs.com>
-Homepage: https://github.com/storminator16/storm-engine-v2
-Description: Storm Engine v2 - C++ 2-D game-engine library
- A lightweight ECS-based 2-D game engine built on SDL2.
- Provides entity/component/system management, asset loading,
- tilemap support, and game-state machine.
- .
- This build targets arm64 / AArch64 (Raspberry Pi 4/5 with 64-bit OS).
-EOF
+          printf "Package: libstormenginev2\nVersion: ${VERSION}\nSection: libs\nPriority: optional\nArchitecture: arm64\nDepends: libsdl2-2.0-0, libsdl2-image-2.0-0, libsdl2-ttf-2.0-0, libsdl2-mixer-2.0-0\nMaintainer: Will Sams <will@samswebs.com>\nHomepage: https://github.com/storminator16/storm-engine-v2\nDescription: Storm Engine v2 - C++ 2-D game-engine library\n A lightweight ECS-based 2-D game engine built on SDL2.\n Provides entity/component/system management, asset loading,\n tilemap support, and game-state machine.\n .\n This build targets arm64 / AArch64 (Raspberry Pi 4/5 with 64-bit OS).\n" > deb/DEBIAN/control
 
           dpkg-deb --build deb "libstormenginev2_${VERSION}_arm64.deb"
 

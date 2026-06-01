@@ -6,7 +6,6 @@ on:
       - main
 
 jobs:
-
   # ── Determine version ────────────────────────────────────────────────────────
   # If the merge commit already carries a tag (major/minor bump you pushed
   # manually), use it.  Otherwise find the latest vX.Y.Z tag and bump patch.
@@ -61,7 +60,6 @@ jobs:
 
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 
-
   # ── amd64 (Debian / Ubuntu / Linux Mint) ────────────────────────────────────
   build-amd64-linux:
     runs-on: ubuntu-latest
@@ -114,7 +112,6 @@ jobs:
         with:
           name: deb-amd64
           path: libstormenginev2_${{ needs.version.outputs.version }}_amd64.deb
-
 
   # ── arm64 (Raspberry Pi 4/5 with 64-bit OS) ─────────────────────────────────
   build-arm64-linux:
@@ -173,7 +170,6 @@ jobs:
           name: deb-arm64
           path: libstormenginev2_${{ needs.version.outputs.version }}_arm64.deb
 
-
   # ── Nintendo Switch (.nro) ───────────────────────────────────────────────────
   build-nx:
     runs-on: ubuntu-latest
@@ -197,11 +193,7 @@ jobs:
           VERSION: ${{ needs.version.outputs.version }}
         run: |
           docker run --name build_nx stormenginev2:nx \
-            bash -c "export DEVKITPRO=/opt/devkitpro && \
-                     export DEVKITARM=/opt/devkitpro/devkitARM && \
-                     export PATH=/opt/devkitpro/devkitA64/bin:/opt/devkitpro/tools/bin:\$PATH && \
-                     export PKG_CONFIG_PATH=/opt/devkitpro/portlibs/switch/lib/pkgconfig:/opt/devkitpro/libnx/lib/pkgconfig && \
-                     cd /opt/library/examples/nx-platformer && make"
+            bash -c "cd /opt/library/examples/nx-platformer && make"
           docker cp build_nx:/opt/library/examples/nx-platformer/bin/nx-platformer.nro \
             ./nx-platformer_${VERSION}.nro
           docker rm build_nx
@@ -211,7 +203,6 @@ jobs:
         with:
           name: nro-nx
           path: nx-platformer_${{ needs.version.outputs.version }}.nro
-
 
   # ── GitHub Release ───────────────────────────────────────────────────────────
   release:

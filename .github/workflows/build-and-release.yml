@@ -18,7 +18,7 @@ jobs:
 
     steps:
       - name: Checkout (full history for tags)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -67,10 +67,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Build Docker image
         run: |
@@ -108,7 +108,7 @@ jobs:
           dpkg-deb --build deb "libstormenginev2_${VERSION}_amd64.deb"
 
       - name: Upload amd64 .deb
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: deb-amd64
           path: libstormenginev2_${{ needs.version.outputs.version }}_amd64.deb
@@ -120,13 +120,13 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Build Docker image (arm64)
         run: |
@@ -165,7 +165,7 @@ jobs:
           dpkg-deb --build deb "libstormenginev2_${VERSION}_arm64.deb"
 
       - name: Upload arm64 .deb
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: deb-arm64
           path: libstormenginev2_${{ needs.version.outputs.version }}_arm64.deb
@@ -189,7 +189,7 @@ jobs:
           name: deb-arm64
 
       - name: Create release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         env:
           VERSION: ${{ needs.version.outputs.version }}
         with:

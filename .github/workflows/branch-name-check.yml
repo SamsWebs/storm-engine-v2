@@ -1,25 +1,25 @@
-name: Enforce Branch Name "feature/", "chore/", "fix/", or "refactor/"
+name: Enforce Branch Name Semantics
 on:
   pull_request:
     branches: ["main"]
-  workflow_dispatch:
 jobs:
   lint-branch-name:
     name: Lint Branch Name
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/github-script@v6
+      - uses: actions/checkout@v6
+      - uses: actions/github-script@v7
         with:
           result-encoding: string
           script: |
-            const enforceGitFlow = (branchName) => {
-              const gitFlowFormat = /(feat\W|feature\/|fix\/|chore\/|refactor\/)/
-              if (!gitFlowFormat.test(currentBranch)) {
+            const enforceSemantic = (branchName) => {
+              const semanticFormat = /(feat\W|feature\/|fix\/|chore\/|refactor\/|dependabot\/|docs\/|style\/|test\/)/
+              if (!semanticFormat.test(currentBranch)) {
                 core.setFailed(
-                  `Branch names in PRs should use Gitflow. e.g. (feat, fix, chore, refactor).  To fix. ` +
-                  `perform: git branch -m <new_branch_name> && git push origin -u <:<old_branch_name> <new_branch_name>`)
+                  `Branch names in PRs should use semantic conventions, e.g. (feat, fix, chore, refactor).  To fix. ` +
+                  `perform: git branch -m <new_branch_name> && git push origin -u <:<old_branch_name> <new_branch_name>` +
+                  `For more details, please review https://www.conventionalcommits.org/ and https://gist.github.com/joshbuchea/6f47e86d2510bce28f8e7f42ae84c716`)
               }
             }
             const currentBranch = context.payload.pull_request.head.ref
-            enforceGitFlow(currentBranch)
+            enforceSemantic(currentBranch)

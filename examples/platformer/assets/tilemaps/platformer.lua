@@ -6,12 +6,12 @@ project = {
     assets = {
         [0] = {
             asset_id = "16x16-platformer",
-            file_path = "/home/wsams/Projects/personal/gamedev/storm-engine-v2/examples/platformer/assets/tilemaps/16x16-platformer.png"
+            file_path = "../examples/platformer/assets/tilemaps/16x16-platformer.png"
         }
     },
     maps = {
         [0] = {
-            file_path = "/home/wsams/Projects/personal/gamedev/storm-engine-v2/examples/platformer/assets/tilemaps/platformer.map",
+            file_path = "../examples/platformer/assets/tilemaps/platformer.map",
         },
     },
     canvas = {

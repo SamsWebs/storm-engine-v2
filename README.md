@@ -84,9 +84,9 @@ Swap `platformer` for `shooter`, `strategy`, `puzzle`, `jrpg`, or `sports` to tr
 
 ### How each example loads its world
 
-The three main examples each demonstrate a different approach to managing game resources — pick whichever matches your project's needs:
+Each example demonstrates a different approach to managing game resources — pick whichever matches your project's needs:
 
-#### Platformer — tile editor + `.map` file
+#### Platformer / Strategy — tile editor + `.map` file
 
 The level is painted in the built-in tile editor and saved as a `.map` file. At runtime, `TileMapLoader` reads the file and spawns tile entities automatically. This is the most data-driven approach for tilemap games and the best starting point if you want to design levels visually.
 
@@ -95,9 +95,9 @@ editor/ → paint level → saves level.map
 examples/platformer/ → TileMapLoader reads level.map at runtime
 ```
 
-#### Sports — everything in code
+#### Sports / Puzzle — everything in code
 
-No external files. Entities, positions, sizes, and game rules are all defined directly in the game state. Simple and self-contained — a good starting point for understanding the ECS pipeline without any file I/O in the way.
+No external level files. Entities, positions, sizes, and game rules are all defined directly in the game state. Simple and self-contained — a good starting point for understanding the ECS pipeline without any file I/O in the way.
 
 #### Shooter — XML data via `XmlLoader`
 
@@ -110,11 +110,26 @@ assets/attack.xml → XmlLoader → LoadTexturesFromXml → AssetStore
 
 This approach keeps your texture IDs and initial object placement out of code and in data files — useful when designers or tools are generating the XML.
 
+#### JRPG — tile editor `.map` + custom colliders map
+
+The world is painted in the tile editor (`jrpg.map`). A second file, `jrpg_colliders.map`, lists solid tiles using a simple `collider worldX worldY ...` format. At runtime, `TileMapLoader` spawns tile entities (using `tileSize=8` to preserve exact editor pixel coordinates), and a custom parser reads the colliders file into a list of `SDL_Rect` obstacles used for AABB collision.
+
+```
+editor/ → paint level → jrpg.map + jrpg_colliders.map
+examples/jrpg/ → TileMapLoader reads jrpg.map
+              → custom parser reads jrpg_colliders.map → SDL_Rect list
+```
+
+NPC interaction and Final Fantasy-style typewriter dialogue are handled via `NpcComponent` and `DialogueState` — no external scripting required.
+
 | Example | Resource approach | Key engine type |
 |---|---|---|
 | **Platformer** | `.map` file from the tile editor | `TileMapLoader` |
+| **Strategy** | `.map` file from the tile editor | `TileMapLoader` |
 | **Sports** | Hard-coded in the game state | — |
+| **Puzzle** | Hard-coded in the game state | — |
 | **Shooter** | XML file via tinyxml2 | `XmlLoader`, `LoadTexturesFromXml` |
+| **JRPG** | `.map` + custom colliders map | `TileMapLoader`, custom parser |
 
 ## Using the Tile Editor
 

@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<States>
+    <PLAY>
+        <TEXTURES>
+            <texture filename="player.png" ID="player"/>
+            <texture filename="tiles.png" ID="tiles"/>
+        </TEXTURES>
+        <OBJECTS>
+            <object type="Player" textureID="player" x="100" y="200"
+                    width="64" height="48" numFrames="4" zIndex="3"/>
+            <object type="Enemy" textureID="enemy" x="10.5" y="20.25"
+                    health="50" speed="120"/>
+        </OBJECTS>
+    </PLAY>
+    <MENU>
+        <TEXTURES>
+            <texture filename="background.png" ID="bg"/>
+        </TEXTURES>
+    </MENU>
+    <EMPTY>
+    </EMPTY>
+</States>

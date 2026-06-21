@@ -2,6 +2,8 @@
 
 A lightweight, ECS-based 2D game engine built on SDL2 — made for game jams and personal projects.
 
+> **"v2" is the second-generation engine; the current release is v1.0.0.** The public API is considered stable for the 1.x line. See [CHANGELOG.md](CHANGELOG.md) for release notes.
+
 ![Storm Engine v2 platformer example](examples/platformer/screenshot.png)
 
 ## Features
@@ -186,6 +188,10 @@ There are no pre-built Switch packages — the engine is compiled directly into 
 2. The `engine` symlink points to `common/` — keep it or copy the sources in directly
 3. Add your own game states, components, and assets under `src/` and `romfs/`
 4. Build with `make` as above
+
+## License
+
+Released under the [WTFPL](LICENSE.md) — do what you want with it.
 
 ## Credits
 

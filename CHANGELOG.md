@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.0.0] — 2026-06-21
+
+First stable release. The engine API (`Registry`, `GameStateMachine`, `XmlLoader`, `TileMapLoader`, components, and systems) is now considered locked for the 1.x line.
+
+### Added
+- `specs/xmlLoader.spec.cpp` + `specs/assets/xml/states.xml` — full coverage of the `XmlLoader` parser: `IsValid`, `GetTextures`, `GetObjects`, including default values, fractional float attributes, the unknown-attribute map, and missing states/sections
+- `specs/registry.spec.cpp` — comprehensive `Registry` coverage: component add/remove/has/get, system management, signature-based entity/system matching, tag management, group management, entity kill with id recycling, and the deferred `Update()` add/kill queue
+- `specs/tilemapLoaderEditor.spec.cpp` + `specs/assets/tilemaps/editor.map` — coverage of the editor map format: world-to-grid position math, `tileSize` variants, per-tile scale, and collider flags
+- `specs/states/gameStateMachine.spec.cpp` — expanded coverage for `changeState` (including the same-state-id no-op), `resume()` on pop, `clean()`, and empty-stack safety
+- `specs/components/animation.spec.cpp`, `specs/components/sprite.spec.cpp` — deeper component coverage: animation `vertical`/`isLooped` constructor argument order, frame offset and start frame; sprite `flip`, `isFixed`, and `offset`
+
+### Notes
+- Engine unit test suite expanded from 57 to 113 tests, all passing
+- No engine source changes were required for testability — the existing API was already test-friendly via fixtures and direct construction
+
 ## [0.5.0] — 2026-06-01
 
 ### Added

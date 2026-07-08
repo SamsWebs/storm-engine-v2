@@ -104,6 +104,7 @@ void Registry::Update() {
   for (auto entity : entitiesToBeKilled) {
     RemoveEntityFromSystems(entity);
     RemoveEntityGroup(entity);
+    RemoveEntityTag(entity); // otherwise a recycled id inherits the stale tag
 
     entityComponentSignatures[entity.GetId()].reset();
 
@@ -113,8 +114,17 @@ void Registry::Update() {
   entitiesToBeKilled.clear();
 }
 void Registry::TagEntity(Entity entity, const std::string &tag) {
-  entityPerTag.emplace(tag, entity);
-  tagPerEntity.emplace(entity.GetId(), tag);
+  // One tag per entity, one entity per tag — last write wins on both sides.
+  // (emplace would silently no-op and leave the two maps inconsistent.)
+  RemoveEntityTag(entity); // drop this entity's previous tag, if any
+
+  auto existing = entityPerTag.find(tag);
+  if (existing != entityPerTag.end()) {
+    tagPerEntity.erase(existing->second.GetId()); // untag the previous holder
+  }
+
+  entityPerTag.insert_or_assign(tag, entity);
+  tagPerEntity.insert_or_assign(entity.GetId(), tag);
 }
 
 bool Registry::EntityHasTag(Entity entity, const std::string &tag) const {
@@ -143,21 +153,23 @@ void Registry::RemoveEntityTag(Entity entity) {
 }
 
 void Registry::GroupEntity(Entity entity, const std::string &group) {
+  // One group per entity — re-grouping moves the entity, so a later kill
+  // can't leave it stranded in a group groupPerEntity no longer records.
+  RemoveEntityGroup(entity);
+
   entitiesPerGroup.emplace(group, std::set<Entity>());
   entitiesPerGroup[group].emplace(entity);
-  groupPerEntity.emplace(entity.GetId(), group);
+  groupPerEntity.insert_or_assign(entity.GetId(), group);
 }
 
 bool Registry::EntityBelongsToGroup(Entity entity,
                                     const std::string &group) const {
-  // Error checking and Validation
-
-  if (entitiesPerGroup.find(group) == entitiesPerGroup.end()) {
-    // Logger::Err("The Group [" + group + "]  Does Not Exist");
+  auto it = entitiesPerGroup.find(group);
+  if (it == entitiesPerGroup.end()) {
     return false;
   }
 
-  auto groupEntities = entitiesPerGroup.at(group);
+  const auto &groupEntities = it->second; // by reference — don't copy the set
 
   return groupEntities.find(entity.GetId()) != groupEntities.end();
 }

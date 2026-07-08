@@ -248,7 +248,8 @@ void MouseControl::CreateTile(const AssetManager_Ptr &assetManager,
           mRightPressed = true;
           mTileRemoved = true;
           mPrevMousePosErase = pos;
-          logger.Log("Tile with ID: {0} has been removed! " + entity.GetId());
+          logger.Log("Tile with ID: " + std::to_string(entity.GetId()) +
+                     " has been removed!");
         }
       }
       // Even if no tile was found under the cursor, advance the erase position
@@ -299,7 +300,7 @@ void MouseControl::CreateCollider(const AssetManager_Ptr &assetManager,
           mTransformComponent.scale, mTransformComponent.rotation);
 
       boxCollider.AddComponent<BoxColliderComponent>(
-          mBoxColliderComponent.height, mBoxColliderComponent.width,
+          mBoxColliderComponent.width, mBoxColliderComponent.height,
           mBoxColliderComponent.offset);
       mLeftPressed = true;
     }
@@ -328,8 +329,8 @@ void MouseControl::CreateCollider(const AssetManager_Ptr &assetManager,
                               box_collider.height * transform.scale.y) {
           entity.Kill();
           mRightPressed = true;
-          logger.Log("Collider with ID: {0} has been removed! " +
-                     entity.GetId());
+          logger.Log("Collider with ID: " + std::to_string(entity.GetId()) +
+                     " has been removed!");
         }
       }
     }

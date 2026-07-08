@@ -83,6 +83,12 @@ Describe(RegistrySpec) {
       Assert::That(registry.HasSystem<PositionSystem>(), Equals(false));
     };
 
+    It(should_treat_removing_an_absent_system_as_a_no_op) {
+      Registry registry;
+      registry.RemoveSystem<PositionSystem>(); // must not crash or corrupt
+      Assert::That(registry.HasSystem<PositionSystem>(), Equals(false));
+    };
+
     It(should_retrieve_a_system) {
       Registry registry;
       registry.AddSystem<PositionSystem>();
@@ -145,6 +151,26 @@ Describe(RegistrySpec) {
       registry.RemoveEntityTag(e);
       Assert::That(registry.EntityHasTag(e, "player"), Equals(false));
     };
+
+    It(should_replace_an_entitys_tag_when_retagged) {
+      Registry registry;
+      Entity e = registry.CreateEntity();
+      registry.TagEntity(e, "player");
+      registry.TagEntity(e, "goalie"); // last write wins
+      Assert::That(registry.EntityHasTag(e, "goalie"), Equals(true));
+      Assert::That(registry.EntityHasTag(e, "player"), Equals(false));
+    };
+
+    It(should_move_a_tag_between_entities_when_reused) {
+      Registry registry;
+      Entity a = registry.CreateEntity();
+      Entity b = registry.CreateEntity();
+      registry.TagEntity(a, "player");
+      registry.TagEntity(b, "player"); // last write wins
+      Assert::That(registry.EntityHasTag(b, "player"), Equals(true));
+      Assert::That(registry.EntityHasTag(a, "player"), Equals(false));
+      Assert::That(registry.GetEntityByTag("player").GetId(), Equals(b.GetId()));
+    };
   };
 
   Describe(GroupManagement) {
@@ -189,6 +215,15 @@ Describe(RegistrySpec) {
       Entity e = registry.CreateEntity();
       registry.GroupEntity(e, "enemies");
       registry.RemoveEntityGroup(e);
+      Assert::That(registry.EntityBelongsToGroup(e, "enemies"), Equals(false));
+    };
+
+    It(should_move_an_entity_when_regrouped) {
+      Registry registry;
+      Entity e = registry.CreateEntity();
+      registry.GroupEntity(e, "enemies");
+      registry.GroupEntity(e, "allies"); // one group per entity — a move
+      Assert::That(registry.EntityBelongsToGroup(e, "allies"), Equals(true));
       Assert::That(registry.EntityBelongsToGroup(e, "enemies"), Equals(false));
     };
   };
@@ -250,6 +285,27 @@ Describe(RegistrySpec) {
       registry.KillEntity(e);
       registry.Update();
       Assert::That(registry.EntityBelongsToGroup(e, "enemies"), Equals(false));
+    };
+
+    It(should_release_a_killed_entitys_tag) {
+      Registry registry;
+      Entity e = registry.CreateEntity();
+      registry.TagEntity(e, "player");
+      registry.Update();
+      registry.KillEntity(e);
+      registry.Update();
+      Assert::That(registry.EntityHasTag(e, "player"), Equals(false));
+    };
+
+    It(should_not_let_a_recycled_id_inherit_the_old_tag) {
+      Registry registry;
+      Entity a = registry.CreateEntity(); // id 0
+      registry.TagEntity(a, "player");
+      registry.Update();
+      registry.KillEntity(a);
+      registry.Update();                  // id 0 freed — tag must go with it
+      Entity b = registry.CreateEntity(); // reuses id 0
+      Assert::That(registry.EntityHasTag(b, "player"), Equals(false));
     };
   };
 };

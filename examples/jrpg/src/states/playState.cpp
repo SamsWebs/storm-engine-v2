@@ -156,10 +156,8 @@ void PlayState::SpawnNPC(float x, float y, const std::string &name,
         "NPC-Sprite-Sheet", PLAYER_FRAME_W, PLAYER_FRAME_H, 4,
         false, idleFrame * PLAYER_FRAME_W, 0);
     npc.AddComponent<NpcComponent>(NpcComponent{name, dialogue, facing});
-
-    // Apply a color tint to differentiate NPC from player
-    SDL_Texture *tex = assetStore_->GetTexture("NPC-Sprite-Sheet");
-    if (tex) SDL_SetTextureColorMod(tex, 100, 180, 255); // blue tint for NPC
+    // NPC tinting happens per-draw in RenderWorld (the sheet is shared with
+    // the player, so a spawn-time color mod would tint both).
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -271,7 +269,9 @@ void PlayState::UpdatePlayer(float dt) {
     if (!CollidesWithLevel(testX))
         transform.position.x += vx * dt;
 
-    // Try Y movement
+    // Try Y movement from the post-X position, so a diagonal step can't clip
+    // through a corner the X move just slid along.
+    fx = static_cast<int>(transform.position.x) + 4;
     SDL_Rect testY = {fx, static_cast<int>(fy + vy * dt), fw, fh};
     if (!CollidesWithLevel(testY))
         transform.position.y += vy * dt;
@@ -481,22 +481,24 @@ void PlayState::RenderDialogueBox() {
 
     // Speaker name (gold)
     DrawText(dialogue_.speakerName, 10 + margin, boxY + 10,
-             {255, 220, 0, 255}, 18);
+             {255, 220, 0, 255});
 
     // Dialogue text (typewriter)
     std::string visible = dialogue_.fullText.substr(0, dialogue_.visibleChars);
-    DrawText(visible, 10 + margin, boxY + 36, {255, 255, 255, 255}, 18);
+    DrawText(visible, 10 + margin, boxY + 36, {255, 255, 255, 255});
 
     // Prompt when complete
     if (dialogue_.complete) {
         DrawText("[ Press E / Space ]",
                  windowWidth_ - 190, boxY + boxH - 24,
-                 {200, 200, 200, 255}, 14);
+                 {200, 200, 200, 255});
     }
 }
 
+// Renders at the font's fixed point size (18) — the font is opened once in the
+// constructor, so per-call sizes aren't supported.
 void PlayState::DrawText(const std::string &text, int x, int y,
-                         SDL_Color color, int ptSize) {
+                         SDL_Color color) {
     if (!font_ || text.empty()) return;
 
     SDL_Surface *surf = TTF_RenderText_Blended(font_, text.c_str(), color);

@@ -175,10 +175,11 @@ void Application::Update() {
 
 void Application::UpdateDeltaTime() {
   // If we are too fast, waste some time until we reach the desired time per
-  // frame.
-  int timeToWait = MILLISECONDS_PER_FRAME - (SDL_GetTicks() - mMsPerFrame);
+  // frame. (Measured against the previous frame's timestamp — the old code
+  // compared against an always-zero field, so the delay never ran.)
+  int timeToWait = MILLISECONDS_PER_FRAME - (SDL_GetTicks() - mMsPrevFrame);
 
-  if (timeToWait > 0 && timeToWait <= mMsPerFrame) {
+  if (timeToWait > 0 && timeToWait <= MILLISECONDS_PER_FRAME) {
     SDL_Delay(timeToWait);
   }
 
@@ -230,9 +231,11 @@ void Application::Zoom(SDL_Event &event) {
       mZoom = 0.4;
   }
 
-  // Zoom in the camera as well?
-  mCamera.h *= mZoom;
-  mCamera.w *= mZoom;
+  // Recompute the visible area absolutely from the window size and zoom —
+  // compounding (`*= mZoom` per wheel tick) drifted the culling rect
+  // permanently and never restored it on zoom-out.
+  mCamera.w = static_cast<int>(WINDOW_WIDTH / mZoom);
+  mCamera.h = static_cast<int>(WINDOW_HEIGHT / mZoom);
 }
 
 Application::Application()
@@ -257,8 +260,11 @@ void Application::ShutDown() {
   ImGuiSDL::Deinitialize();
   ImGui::DestroyContext();
 
-  // Shutdown SDL
-  SDL_DestroyRenderer(mRenderer.get());
-  SDL_DestroyWindow(mWindow.get());
+  // Shutdown SDL. The window/renderer are unique_ptrs with SDL deleters —
+  // reset() lets the deleters run once (a manual SDL_Destroy* here would
+  // double-free when the members are destroyed again).
+  mRenderer.reset();
+  mWindow.reset();
+  TTF_Quit();
   SDL_Quit();
 }

@@ -112,45 +112,54 @@ Describe(GameStateMachinePopResumeSpec) {
   };
 };
 
-// The machine owns its states: discarding a state must free it. These pin the
-// leak fixes — every path that removes a state from the stack deletes it.
+// The machine owns its states: discarding a state must free it — but NOT
+// inline. changeState/popState are usually called from inside the discarded
+// state, so deletion is deferred to the machine's next tick (the sweep at the
+// start of processInput/update), after the old state's call frame unwinds.
 Describe(GameStateMachineOwnershipSpec) {
-  It(should_delete_the_popped_state) {
+  It(should_not_delete_the_discarded_state_until_the_next_tick) {
+    GameStateMachine sm;
+    int dtors = 0;
+    sm.changeState(new TrackedState("A", nullptr, nullptr, nullptr, &dtors));
+    sm.changeState(new TrackedState("B"));
+    // The old state must survive the changeState call itself — it is usually
+    // the caller, and an inline delete would free it mid-call.
+    Assert::That(dtors, Equals(0));
+    sm.update(); // next tick sweeps
+    Assert::That(dtors, Equals(1));
+    sm.clean();
+  };
+
+  It(should_delete_the_popped_state_on_the_next_tick) {
     GameStateMachine sm;
     int dtors = 0;
     sm.pushState(new TrackedState("A"));
     sm.pushState(new TrackedState("B", nullptr, nullptr, nullptr, &dtors));
     sm.popState();
+    Assert::That(dtors, Equals(0)); // deferred
+    sm.processInput(); // either tick entry sweeps
     Assert::That(dtors, Equals(1));
     sm.clean();
   };
 
-  It(should_delete_the_state_replaced_by_a_change) {
-    GameStateMachine sm;
-    int dtors = 0;
-    sm.changeState(new TrackedState("A", nullptr, nullptr, nullptr, &dtors));
-    sm.changeState(new TrackedState("B"));
-    Assert::That(dtors, Equals(1));
-    sm.clean();
-  };
-
-  It(should_delete_a_duplicate_change_target_instead_of_leaking_it) {
+  It(should_delete_a_duplicate_change_target_immediately) {
     GameStateMachine sm;
     int dtors = 0;
     sm.changeState(new TrackedState("SAME"));
     sm.changeState(new TrackedState("SAME", nullptr, nullptr, nullptr, &dtors));
-    Assert::That(dtors, Equals(1)); // rejected duplicate is freed, not dropped
+    // The rejected duplicate was never entered and has no live call frames.
+    Assert::That(dtors, Equals(1));
     sm.clean();
   };
 
-  It(should_delete_every_state_on_clean) {
+  It(should_delete_every_state_on_clean_including_defunct_ones) {
     GameStateMachine sm;
     int dtors = 0;
-    sm.pushState(new TrackedState("A", nullptr, nullptr, nullptr, &dtors));
-    sm.pushState(new TrackedState("B", nullptr, nullptr, nullptr, &dtors));
+    sm.changeState(new TrackedState("A", nullptr, nullptr, nullptr, &dtors));
+    sm.changeState(new TrackedState("B", nullptr, nullptr, nullptr, &dtors)); // A defunct
     sm.pushState(new TrackedState("C", nullptr, nullptr, nullptr, &dtors));
-    sm.clean();
-    Assert::That(dtors, Equals(3)); // the whole stack, not just the top
+    sm.clean(); // deletes the stack (B, C) and sweeps the defunct list (A)
+    Assert::That(dtors, Equals(3));
     Assert::That(sm.getGameStates().size(), Equals(0));
   };
 };

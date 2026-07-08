@@ -23,5 +23,12 @@ public:
   std::vector<GameState *> &getGameStates() { return m_gameStates; }
 
 private:
+  // Deletes states discarded by changeState/popState. Deferred to the next
+  // processInput/update because those calls usually come from INSIDE the
+  // state being discarded — an inline delete would free the caller's `this`
+  // mid-call (use-after-free).
+  void sweepDefunct();
+
   std::vector<GameState *> m_gameStates;
+  std::vector<GameState *> m_defunctStates;
 };

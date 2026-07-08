@@ -1,5 +1,32 @@
 # Changelog
 
+## [1.0.1] — 2026-07-08
+
+Post-v1 code review: engine memory/correctness fixes, ECS edge-case hardening, and editor bug fixes. No new API surface; one behavioral contract is now enforced (see **Changed**).
+
+### Fixed
+- `common/gameStateMachine.cpp` — the machine now owns every state it is handed: `popState()` and `changeState()` delete the state they discard, the same-state-id early return frees the rejected duplicate, and `clean()` deletes the whole stack instead of only the top. Previously **every state transition leaked a state**
+- `common/ecs.cpp` — killed entities now release their tag; a recycled entity id no longer inherits the dead entity's tag (`GetEntityByTag` could return the wrong entity)
+- `common/assetStore.cpp` — `AddTexture` checks `IMG_Load`/`SDL_CreateTextureFromSurface` failures instead of silently storing a null texture, and re-adding an existing id replaces (and frees) the old texture instead of leaking the new one
+- `common/logger.cpp` — the static in-memory log history is capped at 1000 entries; it previously grew unbounded for the whole session
+- `common/ecs.cpp` — `TagEntity` is last-write-wins on both sides (retagging replaces, tag reuse moves), and `GroupEntity` moves an entity between groups; the old `emplace` calls silently no-op'd and left the maps inconsistent
+- `common/ecs.h` — `RemoveSystem` no-ops when the system is absent and `GetSystem` throws for a missing system; both previously hit end()-iterator undefined behavior
+- `examples/jrpg/` — Y-collision tests from the post-X-move position so diagonal movement can't clip corners; removed the ignored `ptSize` parameter, a dead spawn-time texture tint, and the unused `INTERACT_DIST` constant
+- `editor/` — un-swapped width/height when placing box colliders (non-square colliders were saved transposed); fixed string-literal pointer arithmetic in two removal logs (undefined behavior); removed a stray trailing `end` that made Save-as-Lua-table exports invalid Lua; fixed the frame limiter (SDL_Delay was unreachable — only vsync capped the editor); shutdown no longer double-frees the window/renderer and now calls `TTF_Quit`; zoom recomputes the camera cull rect instead of compounding it every wheel tick; `AssetManager` no longer inserts null textures on missing-id lookups or failed loads
+
+### Changed
+- `AssetStore::GetTexture` returns `nullptr` for a missing id instead of throwing out of `std::map::at` — matching what call sites already assumed
+- `GameStateMachine` **owns the states it is handed** (pass `new`-allocated states and do not delete them yourself). State `onExit()` may now run twice on a transition (machine call + destructor) — keep `onExit` idempotent
+- `Entity` and `System` no longer carry unused `Logger` members — `Entity` shrinks from ~90 to 16 bytes and is copied everywhere
+- Component pools grow geometrically instead of resizing to exactly-n per entity (was O(n²) copying)
+
+### CI
+- `build-and-release.yml` (shipped with the v1.0.0 retag) — the workflow now triggers on `v*.*.*` tag pushes and supports `workflow_dispatch`, runs are serialized via a concurrency group, and the `.deb` Homepage points at the correct repository. This is what restored the missing v1.0.0 release assets
+
+### Notes
+- Engine unit test suite expanded from 113 to 125 tests, all passing: state-machine ownership, tag-release-on-kill, tag/group replace semantics, and the asset store error contract
+- README: documented two upcoming examples (arena survival, menu-flow skeleton)
+
 ## [1.0.0] — 2026-06-21
 
 First stable release. The engine API (`Registry`, `GameStateMachine`, `XmlLoader`, `TileMapLoader`, components, and systems) is now considered locked for the 1.x line.

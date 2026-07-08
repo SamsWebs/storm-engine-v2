@@ -37,11 +37,11 @@ public:
   }
 };
 
+// Entity is a value type copied into every system list, set, and sort — keep
+// it lean (an id + registry pointer, nothing else).
 class Entity {
 private:
   std::size_t id;
-
-  Logger logger;
 
 public:
   Entity(std::size_t id) : id(id){};
@@ -83,7 +83,6 @@ private:
   Signature componentSignature;
   using EntitiesContainer = std::vector<Entity>;
   EntitiesContainer entities;
-  Logger log;
 
 protected:
   void

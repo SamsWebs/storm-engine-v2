@@ -2,13 +2,15 @@
 #include <iostream>
 
 void GameStateMachine::clean() {
+  // The machine owns every state on the stack — exit the active one, then
+  // delete them all (not just the top; a pushed stack would otherwise leak).
   if (!m_gameStates.empty()) {
     m_gameStates.back()->onExit();
-
-    delete m_gameStates.back();
-
-    m_gameStates.clear();
   }
+  for (GameState *state : m_gameStates) {
+    delete state;
+  }
+  m_gameStates.clear();
 }
 
 void GameStateMachine::processInput() {
@@ -37,6 +39,7 @@ void GameStateMachine::pushState(GameState *pState) {
 void GameStateMachine::popState() {
   if (!m_gameStates.empty()) {
     m_gameStates.back()->onExit();
+    delete m_gameStates.back(); // the machine owns the states it holds
     m_gameStates.pop_back();
   }
 
@@ -48,10 +51,12 @@ void GameStateMachine::popState() {
 void GameStateMachine::changeState(GameState *pState) {
   if (!m_gameStates.empty()) {
     if (m_gameStates.back()->getStateID() == pState->getStateID()) {
-      return; // do nothing
+      delete pState; // we own what we're handed — don't leak the duplicate
+      return;
     }
 
     m_gameStates.back()->onExit();
+    delete m_gameStates.back(); // the machine owns the states it holds
     m_gameStates.pop_back();
   }
 

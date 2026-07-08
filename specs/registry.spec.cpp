@@ -251,5 +251,26 @@ Describe(RegistrySpec) {
       registry.Update();
       Assert::That(registry.EntityBelongsToGroup(e, "enemies"), Equals(false));
     };
+
+    It(should_release_a_killed_entitys_tag) {
+      Registry registry;
+      Entity e = registry.CreateEntity();
+      registry.TagEntity(e, "player");
+      registry.Update();
+      registry.KillEntity(e);
+      registry.Update();
+      Assert::That(registry.EntityHasTag(e, "player"), Equals(false));
+    };
+
+    It(should_not_let_a_recycled_id_inherit_the_old_tag) {
+      Registry registry;
+      Entity a = registry.CreateEntity(); // id 0
+      registry.TagEntity(a, "player");
+      registry.Update();
+      registry.KillEntity(a);
+      registry.Update();                  // id 0 freed — tag must go with it
+      Entity b = registry.CreateEntity(); // reuses id 0
+      Assert::That(registry.EntityHasTag(b, "player"), Equals(false));
+    };
   };
 };

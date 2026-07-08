@@ -1,40 +1,28 @@
-#include <SDL2/SDL.h>
-#include <SDL2/SDL_image.h>
 #include <igloo/igloo_alt.h>
-#include <map>
-#include <string>
 
 #include "../common/assetStore.h"
 
 using namespace igloo;
 
-Describe(AssetStoreSpec){
-    It(should_add_and_retrieve_textures){// Arrange
-                                         SDL_Init(SDL_INIT_VIDEO);
-SDL_Window *window =
-    SDL_CreateWindow("AssetStore Test", SDL_WINDOWPOS_CENTERED,
-                     SDL_WINDOWPOS_CENTERED, 640, 480, SDL_WINDOW_SHOWN);
-SDL_Renderer *renderer =
-    SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
+// Headless specs — no window/renderer needed. They pin the store's error
+// contract: lookups and failed loads yield nullptr, never a throw or a
+// silently stored null texture.
+Describe(AssetStoreSpec) {
 
-AssetStore assetStore;
+  It(should_return_nullptr_for_a_missing_id) {
+    AssetStore store;
+    Assert::That(store.GetTexture("does-not-exist") == nullptr, Equals(true));
+  };
 
-// Act
-assetStore.AddTexture(renderer, "texture1", "path/to/texture1.png");
-assetStore.AddTexture(renderer, "texture2", "path/to/texture2.png");
+  It(should_not_store_a_texture_when_the_file_fails_to_load) {
+    AssetStore store;
+    store.AddTexture(nullptr, "bad", "path/that/does/not/exist.png");
+    Assert::That(store.GetTexture("bad") == nullptr, Equals(true));
+  };
 
-// Assert
-SDL_Texture *texture1 = assetStore.GetTexture("texture1");
-// Assert::That(texture1, Is().Not().EqualTo(nullptr));
-
-SDL_Texture *texture2 = assetStore.GetTexture("texture2");
-// Assert::That(texture2, Is().Not().EqualTo(nullptr));
-
-// Clean up
-assetStore.ClearAssets();
-SDL_DestroyRenderer(renderer);
-SDL_DestroyWindow(window);
-SDL_Quit();
-}
-}
-;
+  It(should_be_safe_to_clear_an_empty_store) {
+    AssetStore store;
+    store.ClearAssets();
+    Assert::That(store.GetTexture("anything") == nullptr, Equals(true));
+  };
+};

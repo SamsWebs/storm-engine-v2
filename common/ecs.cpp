@@ -104,6 +104,7 @@ void Registry::Update() {
   for (auto entity : entitiesToBeKilled) {
     RemoveEntityFromSystems(entity);
     RemoveEntityGroup(entity);
+    RemoveEntityTag(entity); // otherwise a recycled id inherits the stale tag
 
     entityComponentSignatures[entity.GetId()].reset();
 

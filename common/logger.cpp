@@ -54,6 +54,14 @@ void Logger::logHelper(const std::string &message, LogType logType) {
       logDesc + " [ " + CurrentDateTimeToString() + "]: " + message;
 
   std::cout << color << logEntry.message << RESET << std::endl;
+
+  // Keep the in-memory history bounded — the engine logs on every entity /
+  // component operation, so an uncapped vector grows for the whole session.
+  constexpr std::size_t MAX_LOG_ENTRIES = 1000;
+  if (messages.size() >= MAX_LOG_ENTRIES) {
+    messages.erase(messages.begin(),
+                   messages.begin() + MAX_LOG_ENTRIES / 2);
+  }
   messages.push_back(logEntry);
 
   if (log_callback_) {

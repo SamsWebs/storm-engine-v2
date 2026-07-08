@@ -40,9 +40,6 @@ constexpr int TILE_SRC_H       = 32;  // source tile height in the tileset PNG
 constexpr float LEVEL_W = 1248.0f;
 constexpr float LEVEL_H = 448.0f;
 
-// ─── NPC interact prompt ──────────────────────────────────────────────────────
-constexpr float INTERACT_DIST = 56.0f;
-
 // ─────────────────────────────────────────────────────────────────────────────
 struct DialogueState {
     bool        active       = false;
@@ -83,7 +80,7 @@ private:
 
     void RenderWorld();
     void RenderDialogueBox();
-    void DrawText(const std::string &text, int x, int y, SDL_Color color, int ptSize = 18);
+    void DrawText(const std::string &text, int x, int y, SDL_Color color);
 
     // Returns the srcX for a given direction + idle/walk state
     int PlayerSrcX(const PlayerComponent &pc) const;

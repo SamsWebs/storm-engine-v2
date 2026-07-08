@@ -251,7 +251,9 @@ void Registry::AddSystem(Targs &... args) {
 
 template <typename TSystem> void Registry::RemoveSystem() {
   auto system = systems.find(std::type_index(typeid(TSystem)));
-  systems.erase(system);
+  if (system != systems.end()) { // erasing end() is UB — no-op when absent
+    systems.erase(system);
+  }
 }
 
 template <typename TSystem> bool Registry::HasSystem() const {
@@ -259,8 +261,10 @@ template <typename TSystem> bool Registry::HasSystem() const {
 }
 
 template <typename TSystem> TSystem &Registry::GetSystem() const {
-  auto system = systems.find(std::type_index(typeid(TSystem)));
-  return *(std::static_pointer_cast<TSystem>(system->second));
+  // .at throws for a missing system — defined behavior instead of the UB of
+  // dereferencing end(). Check HasSystem() first if absence is expected.
+  return *(std::static_pointer_cast<TSystem>(
+      systems.at(std::type_index(typeid(TSystem)))));
 }
 
 template <typename TComponent, typename... Targs>
@@ -282,7 +286,10 @@ void Registry::AddComponent(Entity entity, Targs &&... args) {
       std::static_pointer_cast<Pool<TComponent>>(componentPools[componentId]);
 
   if (entityId >= componentPool->GetSize()) {
-    componentPool->Resize(numEntities);
+    // Grow geometrically — resizing to exactly-n on every new entity would
+    // re-copy the whole pool each time (O(n²) over n entities).
+    std::size_t newSize = std::max(entityId + 1, componentPool->GetSize() * 2);
+    componentPool->Resize(newSize);
   }
 
   TComponent newComponent(std::forward<Targs>(args)...);

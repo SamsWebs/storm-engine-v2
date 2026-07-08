@@ -484,7 +484,8 @@ void FileLoader::SaveToLuaTable(const std::string &filename,
   // Loop through all the tiles
   luaWriter.WriteEndTable(false, projFile);
   luaWriter.WriteEndTable(false, projFile);
+  // No trailing "end" — the document is a plain `return { ... }` table, and a
+  // stray `end` made the exported file a Lua syntax error.
   luaWriter.WriteEndDocument(projFile);
-  luaWriter.WriteWords("end", projFile);
   projFile.close();
 }

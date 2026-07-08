@@ -1,11 +1,19 @@
 # Changelog
 
+## [1.0.2] — 2026-07-08
+
+### Fixed
+- `common/gameStateMachine.cpp` — discarded-state deletion is now **deferred to the machine's next tick** instead of happening inline. `changeState`/`popState` are usually called from inside the state being discarded (the normal pattern for in-game transitions), and 1.0.1's inline delete freed the caller's `this` while its member function was still on the stack — a use-after-free for any game that changes state from within a state. Discarded states land in a defunct list swept at the start of the next `processInput`/`update`; `clean()` also sweeps it. The same-state-id duplicate is still freed immediately (it was never entered and has no live call frames)
+
+### Notes
+- The state-machine ownership specs now pin the deferred contract, including that the discarded state survives the `changeState` call that removes it
+
 ## [1.0.1] — 2026-07-08
 
 Post-v1 code review: engine memory/correctness fixes, ECS edge-case hardening, and editor bug fixes. No new API surface; one behavioral contract is now enforced (see **Changed**).
 
 ### Fixed
-- `common/gameStateMachine.cpp` — the machine now owns every state it is handed: `popState()` and `changeState()` delete the state they discard, the same-state-id early return frees the rejected duplicate, and `clean()` deletes the whole stack instead of only the top. Previously **every state transition leaked a state**
+- `common/gameStateMachine.cpp` — the machine now owns every state it is handed: `popState()` and `changeState()` delete the state they discard, the same-state-id early return frees the rejected duplicate, and `clean()` deletes the whole stack instead of only the top. Previously **every state transition leaked a state** (see 1.0.2 for a follow-up fix to the deletion timing)
 - `common/ecs.cpp` — killed entities now release their tag; a recycled entity id no longer inherits the dead entity's tag (`GetEntityByTag` could return the wrong entity)
 - `common/assetStore.cpp` — `AddTexture` checks `IMG_Load`/`SDL_CreateTextureFromSurface` failures instead of silently storing a null texture, and re-adding an existing id replaces (and frees) the old texture instead of leaking the new one
 - `common/logger.cpp` — the static in-memory log history is capped at 1000 entries; it previously grew unbounded for the whole session

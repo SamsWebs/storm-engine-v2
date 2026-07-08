@@ -133,6 +133,13 @@ NPC interaction and Final Fantasy-style typewriter dialogue are handled via `Npc
 | **Shooter** | XML file via tinyxml2 | `XmlLoader`, `LoadTexturesFromXml` |
 | **JRPG** | `.map` + custom colliders map | `TileMapLoader`, custom parser |
 
+### Coming soon
+
+| Example | What it will demonstrate |
+|---|---|
+| **Arena survival** (Robotron-style) | Heavy ECS churn — waves of enemies spawning and dying exercises entity kill, id recycling, and tag/group cleanup — plus the full state stack: pause overlay via `pushState`/`popState`/`resume()`, and a game-over → restart flow |
+| **Menu-flow skeleton** | A minimal, non-game walkthrough of `GameStateMachine` patterns: title → options (pushed) → play (changed) → pause (pushed) → game over — the reference for wiring multi-state flows |
+
 ## Using the Tile Editor
 
 ```bash

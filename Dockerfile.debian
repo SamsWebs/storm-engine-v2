@@ -13,6 +13,8 @@ RUN mkdir -p /opt/library
 COPY ./common /opt/library/common
 COPY ./vendor /opt/library/vendor
 COPY ./specs /opt/library/specs
+# specs/examples covers pure example logic (touch controls) via relative includes
+COPY ./examples/android-platformer/src/input /opt/library/examples/android-platformer/src/input
 COPY ./Makefile.debian /opt/library/Makefile
 COPY ./base.mk /opt/library/base.mk
 

@@ -7,3 +7,4 @@ docs
 .github
 .gitignore
 README.md
+vendor/android

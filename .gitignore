@@ -43,3 +43,4 @@ examples/android-platformer/build/
 examples/android-platformer/app/build/
 examples/android-platformer/app/.cxx/
 local.properties
+.vscode/

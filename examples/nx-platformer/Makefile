@@ -5,7 +5,7 @@ endif
 TOPDIR      ?= $(CURDIR)
 TARGET      := nx-platformer
 BUILD       := bin
-SOURCES     := src src/states src/components engine
+SOURCES     := src src/states src/components include/stormengine2
 DATA        := data
 INCLUDES    := include
 ROMFS       := $(TOPDIR)/romfs

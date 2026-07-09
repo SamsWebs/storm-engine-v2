@@ -1,0 +1,51 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.stormengine.platformer'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'com.stormengine.platformer'
+        minSdk 21
+        targetSdk 34
+        versionCode 1
+        versionName '1.0'
+
+        ndk {
+            // arm64 for devices, x86_64 for the emulator
+            abiFilters 'arm64-v8a', 'x86_64'
+        }
+
+        externalNativeBuild {
+            cmake {
+                // Only build the game library (and what it links); without this
+                // AGP builds every top-level CMake target it can find.
+                targets 'main'
+            }
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            path 'jni/CMakeLists.txt'
+            version '3.22.1'
+        }
+    }
+
+    sourceSets {
+        main {
+            // SDL's Java activity shim comes straight from the pinned submodule.
+            java.srcDirs += ['../../../vendor/android/SDL2/android-project/app/src/main/java']
+            // Reuse the desktop platformer's assets — no duplication.
+            assets.srcDirs += ['../../platformer/assets']
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+        }
+    }
+}

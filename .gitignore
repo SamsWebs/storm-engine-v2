@@ -33,3 +33,14 @@ nbproject/
 
 claude/
 main
+
+# Java/Android files
+.gradle
+gradlew
+gradlew.bat
+# Android build outputs
+examples/android-platformer/build/
+examples/android-platformer/app/build/
+examples/android-platformer/app/.cxx/
+local.properties
+.vscode/

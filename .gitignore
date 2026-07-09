@@ -32,12 +32,10 @@ CON
 nbproject/
 
 claude/
-main
+/main
 
 # Java/Android files
 .gradle
-gradlew
-gradlew.bat
 # Android build outputs
 examples/android-platformer/build/
 examples/android-platformer/app/build/

@@ -71,7 +71,7 @@ Assets live in `romfs/` and are embedded into the `.nro` at build time via the `
 nx-platformer/
 ├── Makefile
 ├── README.md
-├── engine -> ../../common        ← symlink so devkitPro can find engine sources
+├── include/stormengine2 -> ../../../common  ← symlink: engine sources + <stormengine2/...> includes
 ├── romfs/
 │   └── assets/
 │       ├── gfx/

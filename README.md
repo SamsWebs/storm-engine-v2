@@ -193,7 +193,7 @@ Copy the `.nro` to `switch/` on your SD card to run on real hardware via the Hom
 There are no pre-built Switch packages — the engine is compiled directly into your game. Use `examples/nx-platformer` as your starting point:
 
 1. Copy `examples/nx-platformer` to your new project
-2. The `engine` symlink points to `common/` — keep it or copy the sources in directly
+2. The `include/stormengine2` symlink points to `common/` — keep it or copy the sources in directly
 3. Add your own game states, components, and assets under `src/` and `romfs/`
 4. Build with `make` as above
 

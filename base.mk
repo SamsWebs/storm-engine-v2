@@ -7,8 +7,12 @@ INCLUDE = -I/usr/local/include -I$(ROOT_DIR)/vendor
 CCFLAGS = -Wall -c -g -fPIC -std=c++17 -Wno-reorder -Wno-unused-parameter \
 	-Wno-unused-variable -Wno-unused-function $(INCLUDE) $(shell pkg-config --cflags gtk+-3.0)
 
+# find -exec batches the deletes (no argument-list limit) and prunes trees the
+# desktop build doesn't own: git internals, vendored submodules, and the
+# Android build outputs (.cxx / gradle build dirs full of NDK objects).
 clean:
-	rm -f $(BIN_DIR)/* && rm -f $(shell find $(ROOT_DIR) -name "*.o")
+	rm -f $(BIN_DIR)/*
+	find $(ROOT_DIR) \( -name .git -o -name .cxx -o -name build -o -path '$(ROOT_DIR)/vendor/android' \) -prune -o -name '*.o' -exec rm -f {} +
 
 %.o: %.cpp
 	$(CC) $(CCFLAGS) -o $@ $<

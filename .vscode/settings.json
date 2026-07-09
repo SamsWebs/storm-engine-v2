@@ -96,5 +96,7 @@
         }
       }
     ]
-  }
+  },
+  "cmake.sourceDirectory": "/home/wsams/Projects/personal/gamedev/storm-engine-v2/vendor/android/SDL",
+  "java.configuration.updateBuildConfiguration": "automatic"
 }

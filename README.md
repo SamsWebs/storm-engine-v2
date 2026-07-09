@@ -2,7 +2,7 @@
 
 A lightweight, ECS-based 2D game engine built on SDL2 — made for game jams and personal projects.
 
-> **"v2" is the second-generation engine; the current release is v1.0.0.** The public API is considered stable for the 1.x line. See [CHANGELOG.md](CHANGELOG.md) for release notes.
+> **"v2" is the second-generation engine; the current release is v1.1.0.** The public API is considered stable for the 1.x line. See [CHANGELOG.md](CHANGELOG.md) for release notes.
 
 ![Storm Engine v2 platformer example](examples/platformer/screenshot.png)
 
@@ -17,7 +17,8 @@ A lightweight, ECS-based 2D game engine built on SDL2 — made for game jams and
 - **Logger** utility
 - **Lua scripting** support
 - Built-in **tile map editor** with drag-to-paint, drag-to-erase, and layer support
-- Example games: platformer, shooter, strategy, puzzle, JRPG, sports
+- Example games: platformer, shooter, strategy, puzzle, JRPG, sports, Android platformer
+- Platforms: Linux, Nintendo Switch (source builds), Android (source builds, verified on hardware); iOS possible via the same SDL layer
 
 ## Installation
 
@@ -92,7 +93,7 @@ Each example demonstrates a different approach to managing game resources — pi
 
 The level is painted in the built-in tile editor and saved as a `.map` file. At runtime, `TileMapLoader` reads the file and spawns tile entities automatically. This is the most data-driven approach for tilemap games and the best starting point if you want to design levels visually.
 
-```
+```text
 editor/ → paint level → saves level.map
 examples/platformer/ → TileMapLoader reads level.map at runtime
 ```
@@ -105,7 +106,7 @@ No external level files. Entities, positions, sizes, and game rules are all defi
 
 Textures and initial entities are described in an XML file (`assets/attack.xml`). The engine's `XmlLoader` parses the file, and `LoadTexturesFromXml` (a helper in `<stormengine2/xmlLoader.h>`) loads them into the asset store. Entity spawning logic then reads the parsed data and creates ECS entities from it.
 
-```
+```text
 assets/attack.xml → XmlLoader → LoadTexturesFromXml → AssetStore
                               → XmlObjectDef list → ECS entities
 ```
@@ -116,7 +117,7 @@ This approach keeps your texture IDs and initial object placement out of code an
 
 The world is painted in the tile editor (`jrpg.map`). A second file, `jrpg_colliders.map`, lists solid tiles using a simple `collider worldX worldY ...` format. At runtime, `TileMapLoader` spawns tile entities (using `tileSize=8` to preserve exact editor pixel coordinates), and a custom parser reads the colliders file into a list of `SDL_Rect` obstacles used for AABB collision.
 
-```
+```text
 editor/ → paint level → jrpg.map + jrpg_colliders.map
 examples/jrpg/ → TileMapLoader reads jrpg.map
               → custom parser reads jrpg_colliders.map → SDL_Rect list
@@ -195,6 +196,48 @@ There are no pre-built Switch packages — the engine is compiled directly into 
 2. The `engine` symlink points to `common/` — keep it or copy the sources in directly
 3. Add your own game states, components, and assets under `src/` and `romfs/`
 4. Build with `make` as above
+
+## Android
+
+Android builds compile the engine and your game into a single JNI library via
+Gradle + CMake + NDK, hosted by SDL's `SDLActivity`. Verified on real hardware
+(arm64) over USB debugging.
+
+### Prerequisites
+
+- Java 17, Android cmdline-tools, NDK, and CMake — full install commands in
+  [`examples/android-platformer/README.md`](examples/android-platformer/README.md)
+- The pinned dependency submodules:
+
+```bash
+git submodule update --init --recursive vendor/android   # SDL2, SDL_image, SDL_ttf, SDL_mixer, tinyxml2, glm
+```
+
+### Build
+
+```bash
+cd examples/android-platformer
+./gradlew assembleDebug      # app/build/outputs/apk/debug/app-debug.apk
+./gradlew installDebug       # install onto a USB-debugging device
+adb shell am start -n com.stormengine.platformer/.PlatformerActivity
+```
+
+The example adds on-screen touch pads (pure, spec'd zone logic) on top of the
+desktop platformer, letterboxes a fixed logical resolution onto any screen, and
+extracts APK assets to internal storage at first launch so the engine's
+plain-file I/O works unchanged. See the example README for the build gotchas
+(shared vs. static SDL, the `SDL2/SDL_image.h` include shim, adb multi-device).
+
+### Using Storm Engine in your own Android project
+
+Like the Switch, there are no pre-built Android packages — the engine compiles
+into your app. Use `examples/android-platformer` as your starting point:
+
+1. Copy `examples/android-platformer` to your new project
+2. The `include/stormengine2` symlink points to `common/` — keep it or copy the sources in
+3. Change the `applicationId`/package name, add your states under `src/`, point
+   the `assets.srcDirs` at your asset folder
+4. Build with `./gradlew` as above
 
 ## License
 

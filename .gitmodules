@@ -1,0 +1,18 @@
+[submodule "vendor/android/SDL"]
+	path = vendor/android/SDL2
+	url = https://github.com/libsdl-org/SDL.git
+[submodule "vendor/android/SDL_image"]
+	path = vendor/android/SDL_image2
+	url = https://github.com/libsdl-org/SDL_image.git
+[submodule "vendor/android/tinyxml2"]
+	path = vendor/android/tinyxml2
+	url = https://github.com/leethomason/tinyxml2.git
+[submodule "vendor/android/glm"]
+	path = vendor/android/glm
+	url = https://github.com/g-truc/glm.git
+[submodule "vendor/android/SDL_ttf2"]
+	path = vendor/android/SDL_ttf2
+	url = https://github.com/libsdl-org/SDL_ttf.git
+[submodule "vendor/android/SDL_mixer2"]
+	path = vendor/android/SDL_mixer2
+	url = https://github.com/libsdl-org/SDL_mixer.git

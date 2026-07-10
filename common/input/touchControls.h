@@ -1,16 +1,24 @@
 #pragma once
 
-// ── Pure virtual-gamepad logic (SDL-free) ───────────────────────────────────
-// Three on-screen zones: ◀ and ▶ in the bottom-left corner, A (jump) in the
-// bottom-right. EvalTouches maps the current finger positions (in window
-// pixels) onto held controls; the render layer draws the zones and PlayState
-// edge-detects jump itself.
+// ── Touch input primitives (SDL-free) ───────────────────────────────────────
+// Shared building blocks for on-screen controls: a rectangular hit zone and a
+// finger position, both in the game's logical (letterboxed) coordinate space.
+// The caller reads raw touches from SDL, converts them into logical points, and
+// feeds them here — keeping all the layout/hit-test math pure and testable.
+//
+// A simple three-zone scheme (◀ ▶ move, one action) lives here too; the fuller
+// d-pad + action-diamond layout is in virtualGamepad.h.
 
 struct TouchZone {
     float x = 0.f, y = 0.f, w = 0.f, h = 0.f;
     bool contains(float px, float py) const {
         return px >= x && px <= x + w && py >= y && py <= y + h;
     }
+};
+
+struct TouchPoint {
+    float x = 0.f;
+    float y = 0.f;
 };
 
 struct TouchZones {
@@ -21,10 +29,10 @@ struct TouchInput {
     bool left = false, right = false, jump = false;
 };
 
-// Zone layout scaled from the window size: two movement pads bottom-left, one
-// jump pad bottom-right, with a small margin.
+// Two movement pads bottom-left, one action pad bottom-right, scaled from the
+// window size with a small margin.
 inline TouchZones MakeDefaultZones(float windowW, float windowH) {
-    float pad    = windowH * 0.22f; // pad side length
+    float pad    = windowH * 0.22f;
     float margin = windowH * 0.04f;
     float y      = windowH - pad - margin;
 
@@ -34,10 +42,6 @@ inline TouchZones MakeDefaultZones(float windowW, float windowH) {
     z.jump  = {windowW - pad - margin, y, pad, pad};
     return z;
 }
-
-struct TouchPoint {
-    float x = 0.f, y = 0.f;
-};
 
 // Any finger inside a zone holds that control; multiple fingers are fine.
 inline TouchInput EvalTouches(const TouchZones &zones,

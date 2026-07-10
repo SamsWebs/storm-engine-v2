@@ -1,6 +1,6 @@
 #include <igloo/igloo_alt.h>
 
-#include "../../examples/android-platformer/src/input/touchControls.h"
+#include "../../common/input/touchControls.h"
 
 using namespace igloo;
 
@@ -11,7 +11,7 @@ Describe(TouchControlsSpec) {
     It(should_lay_the_zones_out_along_the_bottom) {
         TouchZones z = MakeDefaultZones(800.f, 480.f);
         Assert::That(z.left.y > 300.f, Equals(true));
-        Assert::That(z.jump.x > 600.f, Equals(true));         // bottom-right
+        Assert::That(z.jump.x > 600.f, Equals(true));                // bottom-right
         Assert::That(z.right.x > z.left.x + z.left.w, Equals(true)); // no overlap
     };
 

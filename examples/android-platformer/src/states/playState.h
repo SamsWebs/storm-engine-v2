@@ -20,7 +20,7 @@
 // Shared with the desktop platformer example (see CMake include path).
 #include "components/playerComponent.h"
 
-#include "../input/touchControls.h"
+#include <stormengine2/input/touchControls.h>
 
 // Tile constants — must match the tile size used in the editor
 constexpr int   TILE_SIZE     = 16;

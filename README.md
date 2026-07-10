@@ -2,7 +2,7 @@
 
 A lightweight, ECS-based 2D game engine built on SDL2 — made for game jams and personal projects.
 
-> **"v2" is the second-generation engine; the current release is v1.1.0.** The public API is considered stable for the 1.x line. See [CHANGELOG.md](CHANGELOG.md) for release notes.
+> **"v2" is the second-generation engine; the current release is v1.2.0.** The public API is considered stable for the 1.x line. See [CHANGELOG.md](CHANGELOG.md) for release notes.
 
 ![Storm Engine v2 platformer example](examples/platformer/screenshot.png)
 
@@ -15,6 +15,7 @@ A lightweight, ECS-based 2D game engine built on SDL2 — made for game jams and
 - **Asset store** for textures, fonts, and audio
 - **Game state machine** for managing scenes
 - **Logger** utility
+- **Virtual gamepad** for touch devices — d-pad + action-button layout, pure and spec'd (`<stormengine2/input/virtualGamepad.h>`)
 - **Lua scripting** support
 - Built-in **tile map editor** with drag-to-paint, drag-to-erase, and layer support
 - Example games: platformer, shooter, strategy, puzzle, JRPG, sports, Android platformer

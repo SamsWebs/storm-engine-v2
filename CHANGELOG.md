@@ -1,5 +1,29 @@
 # Changelog
 
+## [1.2.0] — 2026-07-10
+
+Virtual gamepad promoted from the Android platformer into the engine core.
+
+### Added
+
+- `common/input/touchControls.h` — pure touch primitives: `TouchZone` (rect hit-test), `TouchPoint`, and a simple three-zone (◀ ▶ / action) scheme with `MakeDefaultZones` / `EvalTouches`. First-class engine headers under a new `<stormengine2/input/...>` path.
+- `common/input/virtualGamepad.h` — the standard mobile layout: a circular d-pad (8-way via angle sectors, with a deadzone) bottom-left and a SNES-style A/B/X/Y action diamond bottom-right. `MakeVPadLayout(w, h)` + `EvalVPad(layout, fingers)`, all SDL-free. Proven on a real device in the Conan the Caveman Android port.
+
+### Changed
+
+- `examples/android-platformer` now includes the touch controls from the engine (`<stormengine2/input/touchControls.h>`) instead of a local copy.
+- Specs moved from `specs/examples/` to `specs/input/`; `Dockerfile.debian` no longer needs to copy the example's input dir.
+
+### Notes
+
+- Suite: 130 → 137 specs (the virtual gamepad's d-pad sectors, deadzone, and action diamond).
+
+## [1.1.1] — 2026-07-09
+
+### Fixed
+
+- `.gitignore` — a bare `main` entry matched the Android example's `app/src/main/` directory, silently excluding the `AndroidManifest.xml` and the `SDLActivity` subclass from the 1.1.0 release (the app couldn't be built from a clean clone). Root-anchored it as `/main` and stopped ignoring the committed `gradlew`/`gradlew.bat`.
+
 ## [1.1.0] — 2026-07-09
 
 First minor release of the 1.x line: Android as a platform target.

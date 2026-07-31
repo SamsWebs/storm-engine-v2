@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../components/boxCollider.h"
+#include "../components/rigidBody.h"
 #include "../components/transform.h"
 #include "../ecs.h"
 
@@ -19,12 +20,14 @@ public:
         if (it == loopIt)
           continue;
         auto entityB = *loopIt;
-        if (entityA != entityB &&
-            entityA.HasComponent<BoxColliderComponent>() &&
-            entityB.HasComponent<BoxColliderComponent>() &&
-            isCollision(entityA, entityB)) {
-          entityA.Kill();
-          entityB.Kill();
+        if (isCollision(entityA, entityB)) {
+          // Only kill entities that can move: a wall or other static object
+          // (no RigidBodyComponent) survives contact, so a moving entity
+          // slamming into scenery dies instead of taking it with it.
+          if (entityA.HasComponent<RigidBodyComponent>())
+            entityA.Kill();
+          if (entityB.HasComponent<RigidBodyComponent>())
+            entityB.Kill();
 
           // TODO: emit an event
         }

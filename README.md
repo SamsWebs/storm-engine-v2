@@ -12,12 +12,11 @@ A lightweight, ECS-based 2D game engine built on SDL2 — made for game jams and
 - **Sprite rendering** with camera, z-index sorting, and flip support
 - **Tilemap support** — load maps painted with the built-in tile editor (`.map` format, auto-detected)
 - **Box collider** components with debug overlay
-- **Asset store** for textures, fonts, and audio
+- **Asset store** for textures
 - **Game state machine** for managing scenes
 - **Logger** utility
 - **Virtual gamepad** for touch devices — d-pad + action-button layout, pure and spec'd (`<stormengine2/input/virtualGamepad.h>`)
 - **UDP networking** — host/join LAN play: reliable + unreliable chunks, kick/ban/timeout, snapshot replication with per-client deltas and a prediction cache (`<stormengine2/net/net.h>`, see [docs/networking.md](docs/networking.md))
-- **Lua scripting** support
 - Built-in **tile map editor** with drag-to-paint, drag-to-erase, and layer support
 - Example games: platformer, shooter, strategy, puzzle, JRPG, sports, Android platformer
 - Platforms: Linux, Nintendo Switch (source builds), Android (source builds, verified on hardware); iOS possible via the same SDL layer
@@ -146,6 +145,7 @@ NPC interaction and Final Fantasy-style typewriter dialogue are handled via `Npc
 |---|---|
 | **Arena survival** (Robotron-style) | Heavy ECS churn — waves of enemies spawning and dying exercises entity kill, id recycling, and tag/group cleanup — plus the full state stack: pause overlay via `pushState`/`popState`/`resume()`, and a game-over → restart flow |
 | **Menu-flow skeleton** | A minimal, non-game walkthrough of `GameStateMachine` patterns: title → options (pushed) → play (changed) → pause (pushed) → game over — the reference for wiring multi-state flows |
+| **Checkers (netplay)** | Authoritative turn-based play over the net module: the host validates every move, a full-state message syncs late joiners, and turns flow over reliable chunks is the cheapest way to learn networked game rules without prediction. Also this example will use audio: move/capture SFX and a win fanfare via SDL_mixer
 
 ## Using the Tile Editor
 

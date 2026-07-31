@@ -59,12 +59,14 @@ void Logger::logHelper(const std::string &message, LogType logType) {
   // component operation, so an uncapped vector grows for the whole session.
   constexpr std::size_t MAX_LOG_ENTRIES = 1000;
   if (messages.size() >= MAX_LOG_ENTRIES) {
-    messages.erase(messages.begin(),
-                   messages.begin() + MAX_LOG_ENTRIES / 2);
+    messages.erase(messages.begin(), messages.begin() + MAX_LOG_ENTRIES / 2);
   }
   messages.push_back(logEntry);
 
   if (log_callback_) {
     log_callback_(logEntry);
+  }
+  if (logType == LogType::LOG_ERROR && err_callback_) {
+    err_callback_(logEntry);
   }
 }

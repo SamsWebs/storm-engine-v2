@@ -12,11 +12,11 @@ A lightweight, ECS-based 2D game engine built on SDL2 — made for game jams and
 - **Sprite rendering** with camera, z-index sorting, and flip support
 - **Tilemap support** — load maps painted with the built-in tile editor (`.map` format, auto-detected)
 - **Box collider** components with debug overlay
-- **Asset store** for textures, fonts, and audio
+- **Asset store** for textures
 - **Game state machine** for managing scenes
 - **Logger** utility
 - **Virtual gamepad** for touch devices — d-pad + action-button layout, pure and spec'd (`<stormengine2/input/virtualGamepad.h>`)
-- **Lua scripting** support
+- **UDP networking** — host/join LAN play: reliable + unreliable chunks, kick/ban/timeout, snapshot replication with per-client deltas and a prediction cache (`<stormengine2/net/net.h>`, see [docs/networking.md](docs/networking.md))
 - Built-in **tile map editor** with drag-to-paint, drag-to-erase, and layer support
 - Example games: platformer, shooter, strategy, puzzle, JRPG, sports, Android platformer
 - Platforms: Linux, Nintendo Switch (source builds), Android (source builds, verified on hardware); iOS possible via the same SDL layer
@@ -84,7 +84,9 @@ cd examples/platformer
 make && make run
 ```
 
-Swap `platformer` for `shooter`, `strategy`, `puzzle`, `jrpg`, or `sports` to try the others.
+Swap `platformer` for `shooter`, `strategy`, `puzzle`, `jrpg`, `sports`, or `checkers` to try the others. `checkers` is a graphical 2-player game: the host validates every move over the net module and the first two joiners are seated RED and BLACK (`host` starts it with `S`).
+
+Two examples are headless console demos of the networking module — no graphics, run from a terminal. `cd examples/netchat && make && ./bin/netchat host` opens a room; `./bin/netchat join 127.0.0.1 5000` joins it from another terminal. `examples/netrepl` is the same shape (`host` / `join`) and streams snapshot deltas. See each example's README for usage.
 
 ### How each example loads its world
 
@@ -134,13 +136,9 @@ NPC interaction and Final Fantasy-style typewriter dialogue are handled via `Npc
 | **Puzzle** | Hard-coded in the game state | — |
 | **Shooter** | XML file via tinyxml2 | `XmlLoader`, `LoadTexturesFromXml` |
 | **JRPG** | `.map` + custom colliders map | `TileMapLoader`, custom parser |
-
-### Coming soon
-
-| Example | What it will demonstrate |
-|---|---|
-| **Arena survival** (Robotron-style) | Heavy ECS churn — waves of enemies spawning and dying exercises entity kill, id recycling, and tag/group cleanup — plus the full state stack: pause overlay via `pushState`/`popState`/`resume()`, and a game-over → restart flow |
-| **Menu-flow skeleton** | A minimal, non-game walkthrough of `GameStateMachine` patterns: title → options (pushed) → play (changed) → pause (pushed) → game over — the reference for wiring multi-state flows |
+| **Netchat** | Console demo — none | `NetServer`, `NetClient`, `NetMessageWriter` |
+| **Netrepl** | Console demo — none | `NetSnapshot`, `NetSnapshotDelta` |
+| **Checkers** | Hard-coded in the game state | `NetServer`, `NetClient`, `NetMessageWriter`, `RenderSystem` |
 
 ## Using the Tile Editor
 

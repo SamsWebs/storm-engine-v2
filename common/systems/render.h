@@ -14,7 +14,8 @@ public:
     RequireComponent<SpriteComponent>();
   }
 
-  void Update(SDL_Renderer *renderer, const AssetStore &assetStore) {
+  void Update(SDL_Renderer *renderer, const AssetStore &assetStore,
+              const SDL_Rect *camera = nullptr) {
 
     auto lambda = [](const Entity &entA, const Entity &entB) {
       const auto &spriteA = entA.GetComponent<SpriteComponent>();
@@ -31,9 +32,15 @@ public:
       // Set the source rectangle of our original sprite texture
       SDL_Rect srcRect = sprite.srcRect;
 
+      // Fixed sprites are in screen space and ignore the camera pan.
+      int camX = (camera && !sprite.isFixed) ? camera->x : 0;
+      int camY = (camera && !sprite.isFixed) ? camera->y : 0;
+
       // Set the destination rectangle with the x, y position to be rendered
-      SDL_Rect dstRect = {static_cast<int>(transform.position.x),
-                          static_cast<int>(transform.position.y),
+      SDL_Rect dstRect = {static_cast<int>(transform.position.x) +
+                              static_cast<int>(sprite.offset.x) - camX,
+                          static_cast<int>(transform.position.y) +
+                              static_cast<int>(sprite.offset.y) - camY,
                           static_cast<int>(sprite.width * transform.scale.x),
                           static_cast<int>(sprite.height * transform.scale.y)};
 

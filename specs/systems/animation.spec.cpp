@@ -4,64 +4,107 @@
 using namespace igloo;
 
 Describe(AnimationSystemSpec){
-    It(should_update_sprite_source_rect_based_on_animation){// Arrange
-                                                            Registry registry;
-AnimationSystem animationSystem;
+    It(should_step_through_looped_frames){// A large elapsed time that stays
+                                          // congruent modulo the frame count
+                                          // for any sub-second tick drift.
+                                          Registry registry;
+registry.AddSystem<AnimationSystem>();
 
 Entity entity = registry.CreateEntity();
-
-// Add SpriteComponent and AnimationComponent to the entity
 entity.AddComponent<SpriteComponent>();
-entity.AddComponent<AnimationComponent>();
+entity.AddComponent<AnimationComponent>(1000, 1, false, true);
+auto &animation = entity.GetComponent<AnimationComponent>();
+auto &sprite = entity.GetComponent<SpriteComponent>();
+animation.startTime = SDL_GetTicks() - 1000000; // 1000 frames elapsed
+sprite.width = 10;
+sprite.height = 20;
 
-// Set up the initial values for the AnimationComponent and SpriteComponent
-entity.GetComponent<AnimationComponent>().numFrames = 4;
-entity.GetComponent<AnimationComponent>().currentFrame = 0;
-entity.GetComponent<AnimationComponent>().frameSpeedRate = 1;
-entity.GetComponent<AnimationComponent>().isLooped = true;
-entity.GetComponent<AnimationComponent>().startTime = 0;
+registry.Update();
+registry.GetSystem<AnimationSystem>().Update();
 
-entity.GetComponent<SpriteComponent>().width = 100;
-entity.GetComponent<SpriteComponent>().height = 100;
-entity.GetComponent<SpriteComponent>().srcRect.x = 0;
-
-// Act
-animationSystem.Update();
-
-// Assert
-Assert::That(entity.GetComponent<AnimationComponent>().currentFrame, Equals(0));
-Assert::That(entity.GetComponent<SpriteComponent>().srcRect.x, Equals(0));
-
-// Advance the simulation time by 500 milliseconds
-entity.GetComponent<AnimationComponent>().startTime = 500;
-animationSystem.Update();
-
-// Assert
-// Assert::That(entity.GetComponent<AnimationComponent>().currentFrame,
-// Equals(2));
-// Assert::That(entity.GetComponent<SpriteComponent>().srcRect.x, Equals(200));
-
-// Advance the simulation time by 2000 milliseconds
-entity.GetComponent<AnimationComponent>().startTime = 2500;
-animationSystem.Update();
-
-// Assert
-Assert::That(entity.GetComponent<AnimationComponent>().currentFrame, Equals(0));
-Assert::That(entity.GetComponent<SpriteComponent>().srcRect.x, Equals(0));
+Assert::That(animation.currentFrame, Equals(0)); // 1000 % 1000
+Assert::That(sprite.srcRect.x, Equals(0));
 }
 
-It(should_not_update_when_no_entities_exist) {
-  // Arrange
+It(should_stop_on_the_last_frame_when_not_looped) {
   Registry registry;
-  AnimationSystem animationSystem;
+  registry.AddSystem<AnimationSystem>();
 
-  // Act
-  animationSystem.Update();
+  Entity entity = registry.CreateEntity();
+  entity.AddComponent<SpriteComponent>();
+  entity.AddComponent<AnimationComponent>(4, 1, false, false);
+  auto &animation = entity.GetComponent<AnimationComponent>();
+  auto &sprite = entity.GetComponent<SpriteComponent>();
+  animation.startTime = SDL_GetTicks() - 100000; // long past the end
+  sprite.width = 10;
+  sprite.height = 20;
 
-  // Assert
-  // Add your assertions here based on the expected behavior of the animation
-  // system For example, you can check if the AnimationComponent and
-  // SpriteComponent of existing entities were not modified
+  registry.Update();
+  registry.GetSystem<AnimationSystem>().Update();
+
+  Assert::That(animation.currentFrame, Equals(3)); // clamped, not wrapped
+  Assert::That(sprite.srcRect.x, Equals(30));
+}
+
+It(should_advance_the_sheet_vertically_when_vertical) {
+  Registry registry;
+  registry.AddSystem<AnimationSystem>();
+
+  Entity entity = registry.CreateEntity();
+  entity.AddComponent<SpriteComponent>();
+  entity.AddComponent<AnimationComponent>(4, 1, true, false); // vertical
+  auto &animation = entity.GetComponent<AnimationComponent>();
+  auto &sprite = entity.GetComponent<SpriteComponent>();
+  animation.startTime = SDL_GetTicks() - 100000;
+  sprite.width = 10;
+  sprite.height = 20;
+
+  registry.Update();
+  registry.GetSystem<AnimationSystem>().Update();
+
+  Assert::That(animation.currentFrame, Equals(3));
+  Assert::That(sprite.srcRect.y, Equals(60)); // y advances on vertical sheets
+  Assert::That(sprite.srcRect.x, Equals(0));
+}
+
+It(should_honor_the_frame_offset) {
+  Registry registry;
+  registry.AddSystem<AnimationSystem>();
+
+  Entity entity = registry.CreateEntity();
+  entity.AddComponent<SpriteComponent>();
+  entity.AddComponent<AnimationComponent>(2, 1, false, true);
+  auto &animation = entity.GetComponent<AnimationComponent>();
+  auto &sprite = entity.GetComponent<SpriteComponent>();
+  animation.frameOffset = 5;
+  animation.startTime = SDL_GetTicks(); // frame 0
+  sprite.width = 10;
+  sprite.height = 20;
+
+  registry.Update();
+  registry.GetSystem<AnimationSystem>().Update();
+
+  Assert::That(animation.currentFrame, Equals(0));
+  Assert::That(sprite.srcRect.x, Equals(50)); // (offset + frame) * width
+}
+
+It(should_skip_entities_without_frames) {
+  Registry registry;
+  registry.AddSystem<AnimationSystem>();
+
+  Entity entity = registry.CreateEntity();
+  entity.AddComponent<SpriteComponent>();
+  entity.AddComponent<AnimationComponent>(0, 1, false, true); // no frames
+  auto &animation = entity.GetComponent<AnimationComponent>();
+  auto &sprite = entity.GetComponent<SpriteComponent>();
+  animation.currentFrame = 3;
+  sprite.srcRect.x = 7;
+
+  registry.Update();
+  registry.GetSystem<AnimationSystem>().Update();
+
+  Assert::That(animation.currentFrame, Equals(3)); // untouched
+  Assert::That(sprite.srcRect.x, Equals(7));
 }
 }
 ;

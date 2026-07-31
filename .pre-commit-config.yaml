@@ -1,0 +1,17 @@
+# Pre-commit hooks for Center Ice Hockey.
+#
+# One-time setup (per clone):  pre-commit install
+# Then clang-format runs automatically on staged C/C++ files at every commit;
+# if it reformats anything the commit is stopped so you can review + re-stage.
+# Run on everything manually:  pre-commit run --all-files
+#
+# Uses the system clang-format against the repo's .clang-format (LLVM, 2-space).
+repos:
+  - repo: local
+    hooks:
+      - id: clang-format
+        name: clang-format
+        description: Format staged C/C++ sources with clang-format
+        entry: clang-format -i --style=file
+        language: system
+        files: ^(common|editor|examples|specs)/.*\.(c|cc|cpp|h|hpp)$

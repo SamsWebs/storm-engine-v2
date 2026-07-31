@@ -84,7 +84,7 @@ cd examples/platformer
 make && make run
 ```
 
-Swap `platformer` for `shooter`, `strategy`, `puzzle`, `jrpg`, or `sports` to try the others.
+Swap `platformer` for `shooter`, `strategy`, `puzzle`, `jrpg`, `sports`, or `checkers` to try the others. `checkers` is a graphical 2-player game: the host validates every move over the net module and the first two joiners are seated RED and BLACK (`host` starts it with `S`).
 
 Two examples are headless console demos of the networking module — no graphics, run from a terminal. `cd examples/netchat && make && ./bin/netchat host` opens a room; `./bin/netchat join 127.0.0.1 5000` joins it from another terminal. `examples/netrepl` is the same shape (`host` / `join`) and streams snapshot deltas. See each example's README for usage.
 
@@ -138,14 +138,7 @@ NPC interaction and Final Fantasy-style typewriter dialogue are handled via `Npc
 | **JRPG** | `.map` + custom colliders map | `TileMapLoader`, custom parser |
 | **Netchat** | Console demo — none | `NetServer`, `NetClient`, `NetMessageWriter` |
 | **Netrepl** | Console demo — none | `NetSnapshot`, `NetSnapshotDelta` |
-
-### Coming soon
-
-| Example | What it will demonstrate |
-|---|---|
-| **Arena survival** (Robotron-style) | Heavy ECS churn — waves of enemies spawning and dying exercises entity kill, id recycling, and tag/group cleanup — plus the full state stack: pause overlay via `pushState`/`popState`/`resume()`, and a game-over → restart flow |
-| **Menu-flow skeleton** | A minimal, non-game walkthrough of `GameStateMachine` patterns: title → options (pushed) → play (changed) → pause (pushed) → game over — the reference for wiring multi-state flows |
-| **Checkers (netplay)** | Authoritative turn-based play over the net module: the host validates every move, a full-state message syncs late joiners, and turns flow over reliable chunks is the cheapest way to learn networked game rules without prediction. Also this example will use audio: move/capture SFX and a win fanfare via SDL_mixer
+| **Checkers** | Hard-coded in the game state | `NetServer`, `NetClient`, `NetMessageWriter`, `RenderSystem` |
 
 ## Using the Tile Editor
 

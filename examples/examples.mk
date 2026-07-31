@@ -17,5 +17,4 @@ run:
 
 $(TARGET) : $(OBJS)
 	mkdir -p $(BIN_DIR)
-	$(CC) $^ $(LIB) -lstormenginev2 -o $@
-	/usr/bin/time -f "Compilation completed in : %E" $(TARGET)
+	/usr/bin/time -f "Compilation completed in : %E" $(CC) $^ $(LIB) -lstormenginev2 -o $@

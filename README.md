@@ -16,6 +16,7 @@ A lightweight, ECS-based 2D game engine built on SDL2 — made for game jams and
 - **Game state machine** for managing scenes
 - **Logger** utility
 - **Virtual gamepad** for touch devices — d-pad + action-button layout, pure and spec'd (`<stormengine2/input/virtualGamepad.h>`)
+- **UDP networking** — host/join LAN play: reliable + unreliable chunks, kick/ban/timeout, snapshot replication with per-client deltas and a prediction cache (`<stormengine2/net/net.h>`, see [docs/networking.md](docs/networking.md))
 - **Lua scripting** support
 - Built-in **tile map editor** with drag-to-paint, drag-to-erase, and layer support
 - Example games: platformer, shooter, strategy, puzzle, JRPG, sports, Android platformer
@@ -86,6 +87,8 @@ make && make run
 
 Swap `platformer` for `shooter`, `strategy`, `puzzle`, `jrpg`, or `sports` to try the others.
 
+Two examples are headless console demos of the networking module — no graphics, run from a terminal. `cd examples/netchat && make && ./bin/netchat host` opens a room; `./bin/netchat join 127.0.0.1 5000` joins it from another terminal. `examples/netrepl` is the same shape (`host` / `join`) and streams snapshot deltas. See each example's README for usage.
+
 ### How each example loads its world
 
 Each example demonstrates a different approach to managing game resources — pick whichever matches your project's needs:
@@ -134,6 +137,8 @@ NPC interaction and Final Fantasy-style typewriter dialogue are handled via `Npc
 | **Puzzle** | Hard-coded in the game state | — |
 | **Shooter** | XML file via tinyxml2 | `XmlLoader`, `LoadTexturesFromXml` |
 | **JRPG** | `.map` + custom colliders map | `TileMapLoader`, custom parser |
+| **Netchat** | Console demo — none | `NetServer`, `NetClient`, `NetMessageWriter` |
+| **Netrepl** | Console demo — none | `NetSnapshot`, `NetSnapshotDelta` |
 
 ### Coming soon
 

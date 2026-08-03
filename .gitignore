@@ -42,3 +42,7 @@ examples/android-platformer/app/build/
 examples/android-platformer/app/.cxx/
 local.properties
 .vscode/
+.claude/settings.local.json
+.agents/
+CLAUDE.md
+docs/TECH_DEBT.md

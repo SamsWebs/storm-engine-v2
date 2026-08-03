@@ -18,4 +18,5 @@ int NetVarIntPack(uint8_t *dst, int dstSize, int32_t value);
 // rejected even though it decodes, so every value has exactly one valid byte
 // string on the wire. NetVarIntPack only ever emits canonical encodings.
 // On success, consumed receives the byte count.
-bool NetVarIntUnpack(const uint8_t *src, int srcSize, int32_t &value, int &consumed);
+bool NetVarIntUnpack(const uint8_t *src, int srcSize, int32_t &value,
+                     int &consumed);

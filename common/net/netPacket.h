@@ -21,23 +21,22 @@
 // ── Chunk header ──
 
 struct NetChunkHeader {
-    int size = 0;
-    int sequence = 0;
-    int flags = 0; // NetChunkFlag
+  int size = 0;
+  int sequence = 0;
+  int flags = 0; // NetChunkFlag
 
-    bool Pack(uint8_t *dst) const;                              // 2 or 3 bytes
-    bool Unpack(const uint8_t *src, int srcSize, int &consumed); // bounded
-    static int PackedSize(int flags) {
-        return (flags & kNetChunkVital) ? 3 : 2;
-    }
+  bool Pack(uint8_t *dst) const;                               // 2 or 3 bytes
+  bool Unpack(const uint8_t *src, int srcSize, int &consumed); // bounded
+  static int PackedSize(int flags) { return (flags & kNetChunkVital) ? 3 : 2; }
 };
 
 // ── Connected packet header ──
 
-void NetPacketHeaderPack(uint8_t *dst, int flags, int ack, int numChunks, uint32_t token);
+void NetPacketHeaderPack(uint8_t *dst, int flags, int ack, int numChunks,
+                         uint32_t token);
 // Fails on truncated packets. token is a uint32 in network byte order.
-bool NetPacketHeaderUnpack(const uint8_t *src, int srcSize, int &flags, int &ack,
-                           int &numChunks, uint32_t &token);
+bool NetPacketHeaderUnpack(const uint8_t *src, int srcSize, int &flags,
+                           int &ack, int &numChunks, uint32_t &token);
 
 // ── Control datagrams (pre-connection) ──
 // First byte 0xCF marks a control datagram. A connected packet can never start
@@ -53,21 +52,21 @@ bool NetPacketHeaderUnpack(const uint8_t *src, int srcSize, int &flags, int &ack
 constexpr uint8_t kNetControlMagic = 0xCF;
 
 enum NetControlMessage {
-    kNetControlConnect = 1,
-    kNetControlConnectAccept = 2,
-    kNetControlConnectReady = 3,
-    kNetControlAccept = 4,
-    kNetControlClose = 5,
+  kNetControlConnect = 1,
+  kNetControlConnectAccept = 2,
+  kNetControlConnectReady = 3,
+  kNetControlAccept = 4,
+  kNetControlClose = 5,
 };
 
 struct NetControlPacket {
-    int message = 0;
-    uint8_t payload[kNetMaxPayload] = {};
-    int payloadSize = 0;
+  int message = 0;
+  uint8_t payload[kNetMaxPayload] = {};
+  int payloadSize = 0;
 
-    bool Pack(uint8_t *dst, int dstSize, int &outSize) const;
-    static bool IsControl(const uint8_t *data, int size);
-    bool Unpack(const uint8_t *data, int size);
+  bool Pack(uint8_t *dst, int dstSize, int &outSize) const;
+  static bool IsControl(const uint8_t *data, int size);
+  bool Unpack(const uint8_t *data, int size);
 };
 
 class NetSocket; // netSocket.h — only a reference is needed here
@@ -97,35 +96,35 @@ uint32_t NetNonce32();
 
 class NetMessageWriter {
 public:
-    static constexpr int kMaxSize = kNetMaxChunkSize;
+  static constexpr int kMaxSize = kNetMaxChunkSize;
 
-    bool WriteInt(int32_t value);
-    bool WriteString(const char *str);          // length + bytes incl. terminator
-    bool WriteRaw(const void *data, int size);
-    int Size() const { return size_; }
-    const uint8_t *Data() const { return data_; }
-    void Reset() { size_ = 0; }
+  bool WriteInt(int32_t value);
+  bool WriteString(const char *str); // length + bytes incl. terminator
+  bool WriteRaw(const void *data, int size);
+  int Size() const { return size_; }
+  const uint8_t *Data() const { return data_; }
+  void Reset() { size_ = 0; }
 
 private:
-    uint8_t data_[kMaxSize];
-    int size_ = 0;
+  uint8_t data_[kMaxSize];
+  int size_ = 0;
 };
 
 class NetMessageReader {
 public:
-    NetMessageReader(const uint8_t *data, int size) : data_(data), size_(size) {}
+  NetMessageReader(const uint8_t *data, int size) : data_(data), size_(size) {}
 
-    bool ReadInt(int32_t &value);
-    // Always null-terminates out. Fails (leaving out empty) if the wire string
-    // does not carry its own terminator, so a truncated or hostile packet can
-    // never make the caller read past what the sender actually sent.
-    bool ReadString(char *out, int outSize);
-    bool ReadRaw(void *out, int size);
-    bool Finished() const { return pos_ == size_; }
-    int Position() const { return pos_; }
+  bool ReadInt(int32_t &value);
+  // Always null-terminates out. Fails (leaving out empty) if the wire string
+  // does not carry its own terminator, so a truncated or hostile packet can
+  // never make the caller read past what the sender actually sent.
+  bool ReadString(char *out, int outSize);
+  bool ReadRaw(void *out, int size);
+  bool Finished() const { return pos_ == size_; }
+  int Position() const { return pos_; }
 
 private:
-    const uint8_t *data_;
-    int size_;
-    int pos_ = 0;
+  const uint8_t *data_;
+  int size_;
+  int pos_ = 0;
 };

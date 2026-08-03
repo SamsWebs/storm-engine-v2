@@ -234,5 +234,43 @@ Describe(EcsSpec) {
       Assert::That(b.GetId(), Equals(0));
       Assert::That(c.GetId(), Equals(1));
     };
+
+    It(should_initialize_registry_pointer_to_nullptr_on_bare_entity) {
+      Entity entity = Entity(5);
+      Assert::That(entity.registry, Equals((Registry *)nullptr));
+    };
+
+    It(should_not_crash_when_add_component_is_called_on_a_stale_entity) {
+      Registry registry;
+      Entity stale(150); // never created, registry pointer is nullptr
+      registry.AddComponent<SpecHealth>(stale, 42);
+      // Should not crash — bounds check rejects entity 150
+      Entity e = registry.CreateEntity();
+      registry.Update();
+      Assert::That(e.GetId(), Equals(0));
+    };
+
+    It(should_not_crash_when_remove_component_is_called_on_a_stale_entity) {
+      Registry registry;
+      Entity e = registry.CreateEntity();
+      registry.Update();
+      registry.AddComponent<SpecHealth>(e, 10);
+      Entity stale(150); // never created
+      registry.RemoveComponent<SpecHealth>(stale);
+      // The live entity's component should be untouched
+      Assert::That(registry.GetComponent<SpecHealth>(e).value, Equals(10));
+    };
+
+    It(should_find_entity_in_group_by_entity_not_by_id) {
+      Registry registry;
+      Entity e = registry.CreateEntity();
+      registry.Update();
+      registry.GroupEntity(e, "players");
+      Assert::That(registry.EntityBelongsToGroup(e, "players"), Equals(true));
+      Entity other = registry.CreateEntity();
+      registry.Update();
+      Assert::That(registry.EntityBelongsToGroup(other, "players"),
+                   Equals(false));
+    };
   };
 };

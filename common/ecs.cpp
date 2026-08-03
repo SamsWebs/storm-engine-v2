@@ -194,7 +194,7 @@ bool Registry::EntityBelongsToGroup(Entity entity,
 
   const auto &groupEntities = it->second; // by reference — don't copy the set
 
-  return groupEntities.find(entity.GetId()) != groupEntities.end();
+  return groupEntities.find(entity) != groupEntities.end();
 }
 
 std::vector<Entity>

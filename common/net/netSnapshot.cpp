@@ -23,9 +23,7 @@ bool NetSnapshot::AddItem(uint16_t type, uint16_t id, const int32_t *data,
   if (FindKey(key, index)) {
     // Replace in place; the count must match or the item would report a
     // stale trailing ints / corrupt the layout.
-    int existingCount = (index + 1 < numItems_)
-                            ? offsets_[index + 1] - offsets_[index]
-                            : dataCount_ - offsets_[index];
+    int existingCount = counts_[index];
     if (count != existingCount)
       return false;
     for (int i = 0; i < count; i++)
@@ -37,6 +35,7 @@ bool NetSnapshot::AddItem(uint16_t type, uint16_t id, const int32_t *data,
     return false;
   keys_[numItems_] = key;
   offsets_[numItems_] = dataCount_;
+  counts_[numItems_] = count;
   for (int i = 0; i < count; i++)
     data_[dataCount_ + i] = data[i];
   dataCount_ += count;
@@ -58,13 +57,16 @@ int NetSnapshot::Finish() {
 
   uint32_t sortedKeys_[kMaxItems];
   int sortedOffsets_[kMaxItems];
+  int sortedCounts_[kMaxItems];
   for (int i = 0; i < numItems_; i++) {
     sortedKeys_[i] = keys_[order_[i]];
     sortedOffsets_[i] = offsets_[order_[i]];
+    sortedCounts_[i] = counts_[order_[i]];
   }
   for (int i = 0; i < numItems_; i++) {
     keys_[i] = sortedKeys_[i];
     offsets_[i] = sortedOffsets_[i];
+    counts_[i] = sortedCounts_[i];
   }
   return dataCount_;
 }
@@ -93,8 +95,7 @@ bool NetSnapshot::FindItem(uint16_t type, uint16_t id, const int32_t *&data,
       hi = mid - 1;
     else {
       data = data_ + offsets_[mid];
-      count = (mid + 1 < numItems_) ? offsets_[mid + 1] - offsets_[mid]
-                                    : dataCount_ - offsets_[mid];
+      count = counts_[mid];
       return true;
     }
   }
@@ -108,8 +109,7 @@ bool NetSnapshot::GetItemByIndex(int index, uint16_t &type, uint16_t &id,
   type = (uint16_t)(keys_[index] >> 16);
   id = (uint16_t)(keys_[index] & 0xFFFF);
   data = data_ + offsets_[index];
-  count = (index + 1 < numItems_) ? offsets_[index + 1] - offsets_[index]
-                                  : dataCount_ - offsets_[index];
+  count = counts_[index];
   return true;
 }
 
@@ -117,9 +117,8 @@ uint32_t NetSnapshot::Crc() const {
   uint32_t crc = 0;
   for (int i = 0; i < numItems_; i++) {
     crc += keys_[i];
-    int end = (i + 1 < numItems_) ? offsets_[i + 1] : dataCount_;
-    for (int j = offsets_[i]; j < end; j++)
-      crc += (uint32_t)data_[j];
+    for (int j = 0; j < counts_[i]; j++)
+      crc += (uint32_t)data_[offsets_[i] + j];
   }
   return crc;
 }

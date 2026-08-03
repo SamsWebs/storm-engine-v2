@@ -34,6 +34,78 @@ Describe(NetSnapshotSpec) {
       Assert::That(type, Equals(1)); // skater id 1 sorts before id 5
       Assert::That(id, Equals(1));
     };
+    It(should_report_correct_counts_for_out_of_order_inserts) {
+      NetSnapshot snap;
+      int32_t skater[3] = {1, 2, 3};
+      int32_t puck[2] = {10, 20};
+      int32_t spek[4] = {5, 6, 7, 8};
+      Assert::That(snap.AddItem(1, 1, skater, 3), Equals(true));
+      Assert::That(snap.AddItem(2, 0, puck, 2), Equals(true));
+      Assert::That(snap.AddItem(1, 3, skater, 3), Equals(true));
+      Assert::That(snap.AddItem(3, 0, spek, 4), Equals(true));
+      snap.Finish();
+      Assert::That(snap.NumItems(), Equals(4));
+      uint16_t type = 0, id = 0;
+      const int32_t *data = nullptr;
+      int count = 0;
+      Assert::That(snap.GetItemByIndex(0, type, id, data, count), Equals(true));
+      Assert::That(count, Equals(3)); // skater(1,1) — never 5/-2
+      Assert::That(snap.GetItemByIndex(1, type, id, data, count), Equals(true));
+      Assert::That(type, Equals(1));
+      Assert::That(id, Equals(3));
+      Assert::That(count, Equals(3));
+      Assert::That(snap.GetItemByIndex(2, type, id, data, count), Equals(true));
+      Assert::That(type, Equals(2));
+      Assert::That(count, Equals(2));
+      Assert::That(snap.GetItemByIndex(3, type, id, data, count), Equals(true));
+      Assert::That(type, Equals(3));
+      Assert::That(count, Equals(4));
+      const int32_t *found = nullptr;
+      Assert::That(snap.FindItem(1, 1, found, count), Equals(true));
+      Assert::That(count, Equals(3));
+      Assert::That(snap.FindItem(2, 0, found, count), Equals(true));
+      Assert::That(count, Equals(2));
+      Assert::That(snap.FindItem(3, 0, found, count), Equals(true));
+      Assert::That(count, Equals(4));
+    };
+    It(should_keep_crc_stable_across_different_insertion_orders) {
+      int32_t skater[3] = {10, 20, 30};
+      int32_t puck[2] = {5, 6};
+      int32_t spek[1] = {99};
+      NetSnapshot a; // type 2 first, then 1, then 3
+      Assert::That(a.AddItem(2, 0, puck, 2), Equals(true));
+      Assert::That(a.AddItem(1, 7, skater, 3), Equals(true));
+      Assert::That(a.AddItem(3, 1, spek, 1), Equals(true));
+      a.Finish();
+      NetSnapshot b; // type 3 first, then 1, then 2
+      Assert::That(b.AddItem(3, 1, spek, 1), Equals(true));
+      Assert::That(b.AddItem(1, 7, skater, 3), Equals(true));
+      Assert::That(b.AddItem(2, 0, puck, 2), Equals(true));
+      b.Finish();
+      Assert::That(a.Crc(), Equals(b.Crc()));
+    };
+    It(should_round_trip_delta_snapshots_built_out_of_order) {
+      // The exact shape docs/networking.md recommends: puck added before the
+      // skaters, mixed counts — pre-fix the negative count killed replication.
+      NetSnapshot from;
+      from.Finish();
+      NetSnapshot to;
+      int32_t puck[2] = {7, 8};
+      int32_t skaterA[3] = {1, 2, 3};
+      int32_t skaterB[4] = {4, 5, 6, 7};
+      Assert::That(to.AddItem(2, 0, puck, 2), Equals(true));
+      Assert::That(to.AddItem(1, 1, skaterA, 3), Equals(true));
+      Assert::That(to.AddItem(1, 2, skaterB, 4), Equals(true));
+      to.Finish();
+      uint8_t delta[256];
+      int n = NetSnapshotDelta::Create(from, to, delta, sizeof(delta));
+      Assert::That(n, Is().GreaterThan(0));
+      NetSnapshot rebuilt;
+      Assert::That(NetSnapshotDelta::Apply(from, delta, n, rebuilt),
+                   Equals(true));
+      Assert::That(rebuilt.Crc(), Equals(to.Crc()));
+      Assert::That(rebuilt.NumItems(), Equals(3));
+    };
     It(should_find_items_after_finish) {
       NetSnapshot snap;
       AddSkater(snap, 9, 100, 200, 50);
@@ -273,6 +345,12 @@ Describe(NetSnapshotSpec) {
   };
 
   Describe(Cache) {
+    It(should_be_empty_when_freshly_constructed) {
+      NetSnapshotCache cache; // stack slot — used_/ticks_ must be zeroed
+      Assert::That(cache.GetLatestTick(), Equals(-1));
+      for (int t = -16; t <= 16; t++)
+        Assert::That(cache.Get(t), Equals((NetSnapshot *)nullptr));
+    };
     It(should_store_and_retrieve_by_tick) {
       NetSnapshotCache cache;
       NetSnapshot snap;

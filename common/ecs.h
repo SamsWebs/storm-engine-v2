@@ -70,7 +70,7 @@ public:
   template <typename TComponent> TComponent &GetComponent() const;
 
   // Hold a pointer to the entity's owner registry
-  class Registry *registry; // Be careful for cyclic dependencies
+  class Registry *registry = nullptr; // Be careful for cyclic dependencies
 };
 
 /*******************************************/
@@ -272,6 +272,12 @@ void Registry::AddComponent(Entity entity, Targs &&... args) {
   const auto componentId = Component<TComponent>::GetId();
   const auto entityId = entity.GetId();
 
+  if (entityId >= entityComponentSignatures.size()) {
+    logger.Err("AddComponent: entity " + std::to_string(entityId) +
+               " is out of range; ignoring");
+    return;
+  }
+
   if (componentId >= componentPools.size()) {
     componentPools.resize(componentId + 1, nullptr);
   }
@@ -304,6 +310,13 @@ void Registry::AddComponent(Entity entity, Targs &&... args) {
 template <typename TComponent> void Registry::RemoveComponent(Entity entity) {
   const auto componentId = Component<TComponent>::GetId();
   const auto entityId = entity.GetId();
+
+  if (entityId >= entityComponentSignatures.size()) {
+    logger.Err("RemoveComponent: entity " + std::to_string(entityId) +
+               " is out of range; ignoring");
+    return;
+  }
+
   entityComponentSignatures[entityId].set(componentId, false);
 
   logger.Log("Component id = " + std::to_string(componentId) +

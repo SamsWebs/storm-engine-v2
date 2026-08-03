@@ -42,8 +42,8 @@ public:
 
   // Feeds one received datagram. Returns 1 if accepted (chunks may be
   // pending), 0 if benign (keepalive/duplicate), -1 if rejected (bad token,
-  // malformed, offline). Chunk data from NextChunk stays valid until the
-  // next Feed.
+  // malformed, offline). packet must be at most kNetMaxPacketSize bytes.
+  // Chunk data from NextChunk stays valid until the next Feed.
   int Feed(const uint8_t *packet, int size);
   bool NextChunk(NetChunk &out);
 

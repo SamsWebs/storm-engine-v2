@@ -190,7 +190,7 @@ void NetConnection::ResendAll() {
 }
 
 int NetConnection::Feed(const uint8_t *packet, int size) {
-  if (state_ != kOnline)
+  if (state_ != kOnline || size < 0 || size > kNetMaxPacketSize)
     return -1;
 
   int flags = 0, ack = 0, numChunks = 0;

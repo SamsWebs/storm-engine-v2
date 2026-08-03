@@ -271,6 +271,27 @@ Describe(NetConnectionSpec) {
     };
   };
 
+  Describe(Malformed) {
+    It(should_accept_a_max_size_datagram) {
+      Pair p;
+      std::vector<uint8_t> big(kNetMaxPacketSize, 0);
+      NetPacketHeaderPack(big.data(), 0, 0, 0, kTokenB);
+      Assert::That(p.b.Feed(big.data(), (int)big.size()), Equals(0));
+    };
+    It(should_reject_datagrams_larger_than_kNetMaxPacketSize) {
+      Pair p;
+      std::vector<uint8_t> big(kNetMaxPacketSize + 1, 0);
+      NetPacketHeaderPack(big.data(), 0, 0, 0, kTokenB);
+      Assert::That(p.b.Feed(big.data(), (int)big.size()), Equals(-1));
+    };
+    It(should_reject_a_malformed_chunk_sequence) {
+      Pair p;
+      uint8_t pkt[8] = {};
+      NetPacketHeaderPack(pkt, 0, 0, 1, kTokenB); // claims 1 chunk
+      Assert::That(p.b.Feed(pkt, sizeof(pkt)), Equals(-1));
+    };
+  };
+
   Describe(Timeouts) {
     It(should_error_after_silence) {
       Pair p;

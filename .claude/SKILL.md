@@ -613,21 +613,77 @@ General 2D game dev principles, mapped to how Storm Engine v2 implements them.
 
 ### Genre Patterns
 
+The engine ships 7 example games covering distinct genres. Each demonstrates
+different engine capabilities and game-side patterns.
+
 #### Platformer
 
 - **Coyote time** (leniency after edge) — game-side timer in your state's `update()`
 - **Jump buffering** — game-side input queue
 - **Variable jump height** — game-side: track button hold time, modify `RigidBodyComponent.velocity.y`
+- **Tile collision** — `BoxColliderComponent` on tiles + entities; `CollisionSystem` kills on contact, so platformers typically need a custom collision system that resolves instead of killing
 
-The engine's `platformer` example demonstrates the basic pattern: `TransformComponent` + `RigidBodyComponent` + `SpriteComponent` + `AnimationComponent` + `BoxColliderComponent`.
+The engine's `platformer` example demonstrates the basic pattern: `TransformComponent` + `RigidBodyComponent` + `SpriteComponent` + `AnimationComponent` + `BoxColliderComponent`. The `nx-platformer` and `android-platformer` variants show the same game on Switch and Android.
 
-#### Top-down
+#### Shooter (Side-scrolling shoot-em-up)
 
-- **8-directional or free movement** — set `RigidBodyComponent.velocity` from input
-- **Aim-based or auto-aim** — game-side logic using `TransformComponent.rotation`
-- **Decide whether rotation matters** — `RenderSystem` passes `transform.rotation` to `SDL_RenderCopyEx`
+- **Bullet spawning** — create entities on input, add `RigidBodyComponent` with fixed velocity, `Kill()` when off-screen
+- **Periodic enemy waves** — spawn entities on a timer, use tags/groups to distinguish factions
+- **Scrolling background layers** — multiple `SpriteComponent` entities at different `zIndex` values, scroll at different rates for parallax (game-side)
+- **Collision as gameplay** — `CollisionSystem` kills on contact, which works for arcade-style "one hit = death" shooters
 
-The engine's `strategy` and `sports` examples use top-down movement.
+The engine's `shooter` example (Alien Attack) demonstrates this pattern.
+
+#### Puzzle (Grid-based / falling blocks)
+
+- **Grid logic is entirely game-side** — the engine has no grid abstraction; represent the board as a 2D array in your state
+- **Entity reuse** — the `puzzle` example reuses a pool of block entities rather than creating/destroying each frame, avoiding `registry.Update()` churn
+- **Custom components for game state** — e.g., `CellComponent` with grid coordinates, `ShapeComponent` for tetromino identity
+- **SDL_ttf for text** — score, level, next-piece preview. The `puzzle` example demonstrates SDL_ttf integration
+- **No physics needed** — blocks snap to grid; `RigidBodyComponent` and `CollisionSystem` are typically unused
+
+The engine's `puzzle` example (Storm Tetris) demonstrates custom ECS components, entity reuse, and SDL_ttf rendering.
+
+#### JRPG (Tile-based RPG)
+
+- **Tile-based world** — `TileMapLoader` with small tile size (the `jrpg` example uses 8px to preserve exact editor coordinates)
+- **NPC interaction** — game-side proximity check against tagged entities, trigger dialogue state
+- **Typewriter dialogue** — game-side text rendering with SDL_ttf, character-by-character reveal
+- **State transitions** — push a `DialogueState` over the `PlayState` for conversations; pop when done
+- **No real-time physics** — movement is grid-based or tile-based, not velocity-driven
+
+The engine's `jrpg` example demonstrates tile-based world loading, NPC interaction, and typewriter dialogue.
+
+#### Sports (Top-down action)
+
+- **Custom AI components** — player decision-making, positioning tables, reaction logic (e.g., the `sports` example's hockey AI)
+- **Puck/ball physics** — custom component for the game object with velocity, friction, bounce — the engine's `RigidBodyComponent` + `MovementSystem` handle basic velocity, but sports games need custom collision resolution (not kill-on-contact)
+- **Team management** — use groups to partition teams (`registry.GroupEntity`), query with `GetEntitiesByGroup`
+- **Camera follows the play** — center on the ball or midpoint of key entities
+- **Set pieces** — kickoff, throw-in, etc. are game states or sub-states within the match state
+
+The engine's `sports` example (Storm Hockey) demonstrates custom ECS components, AI behavior, and puck physics.
+
+#### Strategy (Top-down tactical)
+
+- **Tilemap-driven terrain** — `TileMapLoader` for the map, tiles with colliders for obstacles
+- **Multiple animated entities** — units with `SpriteComponent` + `AnimationComponent` at various `zIndex` values for layered rendering
+- **Box collider detection** — `BoxColliderComponent` for unit selection, movement validation
+- **Layered z-index rendering** — background tiles at low `zIndex`, units at mid, UI at high or `isFixed`
+- **Turn-based or real-time** — the engine doesn't enforce either; game-side logic controls the tick
+
+The engine's `strategy` example (Jungle Patrol) demonstrates tilemap loading, multiple animated entities, and layered z-index rendering.
+
+#### Netplay Board Game (Turn-based multiplayer)
+
+- **Authoritative host** — `NetServer` validates every move; clients send input, host sends result
+- **Full-state broadcast** — simpler than delta snapshots for turn-based games; `NetSnapshot` with one item per board piece
+- **Late joiner sync** — full-state message brings new clients up to date immediately
+- **Turn flow over reliable chunks** — `NetMessageWriter`/`NetMessageReader` for move encoding; vital chunks guarantee delivery
+- **No prediction or rollback** — turn-based games don't need it; the cheapest correct networking approach
+- **ECS for board representation** — each piece is an entity with position and type components
+
+The engine's `netplay-checkers` example demonstrates graphical, authoritative-netplay checkers with full-state sync.
 
 ---
 

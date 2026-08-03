@@ -1,5 +1,64 @@
 # Changelog
 
+## [Unreleased]
+
+Memory-safety and correctness pass over the networking layer and the ECS, plus a Windows cross-build. No breaking changes — every addition is additive.
+
+### Added
+
+- `Registry::TryGetComponent<T>()` / `Entity::TryGetComponent<T>()` — return `nullptr` when the component is absent. This is the correct accessor whenever a miss is possible; `GetComponent` must return a reference and therefore cannot report one.
+- `Registry::IsAlive(Entity)` and `Registry::DoesTagExist(const std::string &)` — guards for the accessors that cannot fail safely on their own.
+- Windows cross-build via MinGW-w64: `Makefile.win`, `cmake/toolchain-mingw64.cmake`, `examples/examples.win.mk`. Builds `libstormenginev2.dll` and the spec suite. Not covered by CI, which builds `Dockerfile.debian` only.
+- `KNOWN_ISSUES.md` — defects that cannot be fixed within the frozen 1.x API, each with a workaround and the reason. Candidates for a future v3.
+- README section documenting the 32 component-type limit: it is per binary rather than per `Registry`, and it counts types rather than instances.
+
+### Fixed
+
+- **`NetControlPacket::Unpack` overran its payload buffer.** `payloadSize` was assigned before an unbounded `memcpy`, so a full-MTU control datagram overwrote it with attacker-chosen bytes — up to a 64 KB out-of-bounds read on the client, which then copied it into a `std::string` and logged it. Unauthenticated: one UDP datagram.
+- **`NetServer::SendControl` smashed the stack** on a `DisconnectClient` reason longer than the payload buffer.
+- **`BufferVital`'s ring wrap** left a tail gap the consumers did not know about, so retransmits carried the wrong bytes after roughly 16 KB of vital traffic.
+- **`NetMessageReader::ReadString` leaked the caller's buffer.** An unterminated wire string left stale bytes in `out` and reported success, so a truncated or hostile packet made the caller read what the peer never sent. It now fails closed and null-terminates on every exit path.
+- **Handshake nonces were predictable.** `NetRandom32` was a raw xorshift64, and six observed nonces recovered its state — voiding the cookie handshake's anti-spoofing guarantee. A slot's server nonce is also rotated on any CONNECT other than a genuine mid-handshake retry: the nonce is the connection token, travels in cleartext in every packet header, and equality against it is the only authentication on an inbound connected packet.
+- **`Registry::GetComponent` returned a shared mutable static on a miss**, so a write through one miss surfaced in every later miss, including across `Registry` instances.
+- **`std::bitset` could throw out of `ecs.h`.** Component ids are now range-checked and the accesses use `operator[]`, which removes `__throw_out_of_range_fmt` from the header entirely — it aborted rather than threw under the Switch build's `-fno-exceptions`.
+- **`Registry::GetEntitiesByGroup` aborted on an unknown group** (`.at()` on a missing key). Returns an empty vector now.
+- **`KillEntity` rejects an already-dead entity in O(1)**, replacing a linear scan on a per-frame path.
+- **Networking never compiled on Android.** `app/jni/CMakeLists.txt` globbed `common/*.cpp` non-recursively, silently dropping all seven `common/net/` translation units, and the manifest lacked `android.permission.INTERNET` — which fails at runtime, not at build time. Verified: 490 `Net*` symbols now present in `libmain.so`, both ABIs.
+- Non-canonical varints and trailing bytes in `NetSnapshotDelta::Apply` are rejected; snapshot keys with item type ≥ `0x8000` no longer encode as negative varints (receiver-side only, no wire-format change).
+- `editor/include/stormengine2/components/sprite.h` was a byte-identical copy shadowing the installed header, where it could only ever hide upstream fixes.
+
+### Changed
+
+- The logger no longer flushes on every line — only on errors. ECS miss diagnostics are throttled, so a game missing every frame no longer does 60 flushed writes a second.
+- Removed the dead root `Makefile.nx` (it recursed into a root `Makefile` that does not exist; the working Switch path is `examples/nx-platformer/`), a stray 0-byte `kNetMaxPacketSize` file, and the tracked `editor/imgui.ini` runtime state.
+- `.dockerignore` no longer lets host-built object files into the Debian image, where they could be linked stale.
+
+### Notes
+
+- Suite: 210 → 273 specs. The new coverage is adversarial — truncated and oversize packets, malformed deltas, component-id overflow, recycled-id handles.
+- Two ECS defects are deliberately left open because they cannot be fixed without breaking the 1.x ABI: a stale `Entity` handle whose id has been recycled kills the new entity, and a system that overflows the component cap matches every entity instead of none. Both are documented in `KNOWN_ISSUES.md`, and two specs pin the current wrong behaviour so a future fix has to update them.
+
+## [1.2.1] — 2026-07-31
+
+UDP networking, ported from Teeworlds 0.7.5 (zlib). Released as an automatic patch bump; this entry is retroactive.
+
+### Added
+
+- `common/net/` and the umbrella header `<stormengine2/net/net.h>` — client/server LAN play over raw non-blocking UDP sockets, with no SDL_net or enet dependency.
+  - `NetServer` / `NetClient` — cookie handshake, per-IP connection caps, bans, kick and timeout handling.
+  - `NetConnection` — reliability layer: vital chunks with acks and resends, non-vital chunks that may be dropped or reordered. Owns no socket; the caller supplies a send callback.
+  - `NetSnapshot` / `NetSnapshotDelta` / `NetSnapshotCache` — tick state replication with per-client deltas and a 16-tick prediction cache.
+  - `NetMessageWriter` / `NetMessageReader` — message packing for game-defined message ids.
+  - `NetSocket` — the only OS-touching piece (BSD sockets, winsock behind `_WIN32`).
+- Examples: `netchat` (console host/join with reliable echo), `netrepl` (60 Hz authoritative host demonstrating snapshot deltas), `netplay-checkers` (graphical, ECS, full-state broadcast).
+- `docs/networking.md` — wire format and integration recipes.
+
+### Notes
+
+- Suite: 137 → 210 specs.
+- The module is SDL-free and has no coupling to the ECS or the engine tick; games marshal their own components into snapshots.
+- Not included in the Switch or Android builds at this release — both globbed engine sources non-recursively. Fixed for Android in the next release; the Switch path remains homebrew-only via devkitPro.
+
 ## [1.2.0] — 2026-07-10
 
 Virtual gamepad promoted from the Android platformer into the engine core.

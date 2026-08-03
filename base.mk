@@ -1,5 +1,16 @@
 ROOT_DIR = $(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
 
+# Linux desktop toolchain, and only that. Three build entry points include this
+# file — Makefile.debian, examples/examples.mk and editor/Makefile — and none
+# of them cross-compiles for Windows: the MinGW build lives in the standalone
+# Makefile.win (engine + specs) and examples/examples.win.mk (examples).
+#
+# A Windows branch was added here and removed again. It could not work from any
+# of the three includers: Makefile.debian names its output .so and its run-test
+# target executes the test binary natively, neither of which translates to a
+# cross-built .exe. Keeping one here would mean a second copy of the flags in
+# Makefile.win to keep in sync, for a path with no caller. Change Windows
+# flags in Makefile.win and examples/examples.win.mk instead.
 CC = g++
 LIB = -L/usr/local/lib -Wl,-rpath=/usr/local/lib -lSDL2 -lSDL2_image -lSDL2_ttf -lSDL2_mixer \
 	-lz -ltinyxml2 -llua -ldl -lnfd $(shell pkg-config --libs gtk+-3.0)

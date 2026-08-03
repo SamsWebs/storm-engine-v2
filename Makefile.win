@@ -1,85 +1,84 @@
 # ── Windows build (MinGW-w64 cross-compile from Linux) ──────────────────────
 #
-# Produces build/win/tf.exe plus the DLLs it needs, ready to zip.
+# Produces build/win/libstormenginev2.dll and build/win/tests.exe.
 #
-# There is no Windows machine in this project's loop, so the build has to be
-# reproducible from Linux and verifiable in CI. SDL2 and friends are compiled
-# from the SAME pinned sources the Android build uses
-# (external/storm-engine-v2/vendor/android/ — upstream libsdl-org at
-# release-2.30.11, only under that directory by name). Nothing is downloaded,
-# and Windows cannot drift to a different SDL than Android.
+# SDL2 and satellites are cross-built from the SAME vendored sources the
+# Android build uses (vendor/android/ — upstream libsdl-org at release-2.30.11).
+# Nothing is downloaded; Windows cannot drift to a different SDL than Android.
 #
 # Prerequisites:
 #   sudo apt install mingw-w64 cmake
-#   git submodule update --init --recursive external/storm-engine-v2
 #
 # Targets:
-#   make -f Makefile.win           deps (once) + tf.exe + staged DLLs
+#   make -f Makefile.win           deps (once) + lib + tests
 #   make -f Makefile.win deps      just build the vendored libraries
-#   make -f Makefile.win run       run it under Wine
-#   make -f Makefile.win dist      zip build/win into build/tf2kxx-win64.zip
-#   make -f Makefile.win clean     drop the game objects (keeps deps)
+#   make -f Makefile.win test      run the spec suite under Wine
+#   make -f Makefile.win clean     drop objects (keeps deps)
 #   make -f Makefile.win distclean drop everything including deps
 
-TARGET  := tf.exe
-BUILD   := build/win
-# Objects live in their own subtree. They used to sit directly under $(BUILD),
-# where build/win/assets/ (objects for src/assets/) collided with the game's own
-# assets/ directory when it was staged beside the exe to run it — deleting one
-# silently wiped the other.
-OBJDIR  := $(BUILD)/obj
-SRCDIR  := src
-ENGINE_DIR := external/storm-engine-v2/common
-VENDOR  := external/storm-engine-v2/vendor/android
-
-CROSS   := x86_64-w64-mingw32
-CXX     := $(CROSS)-g++
-DEPS    := $(CURDIR)/$(BUILD)/deps
+BUILD     := build/win
+OBJDIR    := $(BUILD)/obj
+DEPS      := $(CURDIR)/$(BUILD)/deps
 TOOLCHAIN := $(CURDIR)/cmake/toolchain-mingw64.cmake
+VENDOR    := vendor/android
 
-# glm comes from the engine's pinned vendor tree, the same copy the Android
-# build uses — the engine's collider headers need it and there is no glm in the
-# mingw sysroot.
-CXXFLAGS := -std=c++17 -Wall -Wextra -O2 \
-            -Iinclude -I$(SRCDIR) -I$(VENDOR)/glm \
+CROSS := x86_64-w64-mingw32
+# The -posix variant, not the bare one: specs/net/netLoopback.spec.cpp uses
+# <thread>, which the win32-threads gcc does not implement. cmake/toolchain-
+# mingw64.cmake must name the matching -posix compilers — mixing the two
+# threading models across the deps/engine link boundary is an ABI hazard, not
+# just a link error waiting to happen.
+CXX   := $(CROSS)-g++-posix
+
+# glm from the vendored tree — engine collider headers need it and there is
+# no glm in the mingw sysroot. Deliberately no host include path here: this is
+# a cross-compile, and /usr/local/include holds native x86-64 Linux SDL2 and
+# glm that would be substituted silently the moment a header went missing from
+# the paths above. See SPEC_CXXFLAGS for the one place it is still needed.
+CXXFLAGS := -std=c++17 -Wall -Wextra -O2 -fPIC \
+            -D_WIN32_WINNT=0x0600 \
+            -Icommon -I$(VENDOR)/glm \
             -I$(DEPS)/include -I$(DEPS)/include/SDL2 \
             -MMD -MP
 
-# -mconsole, not -mwindows: keeps the Logger's stdout visible, which is the
-# only way to diagnose this build without a Windows machine to attach to.
-# Switch to -mwindows when it ships to players.
+# igloo is header-only, is not vendored, and exists only under /usr/local, so
+# the spec suite cannot compile without the host path. Scoped to specs/ alone:
+# it is the test harness, it is not linked into the shipped DLL, and none of
+# the 13 engine translation units can pick a native Linux header from it.
+# -isystem rather than -I so it stays last in the search order.
+SPEC_CXXFLAGS := $(CXXFLAGS) -isystem /usr/local/include
+
+# -mconsole keeps stdout visible (Logger), which is the only diagnostic on a
+# headless Windows box. Switch to -mwindows when shipping.
 LDFLAGS := -L$(DEPS)/lib -mconsole -static-libgcc -static-libstdc++
 LIBS    := -lmingw32 -lSDL2main -lSDL2 -lSDL2_image -lSDL2_ttf -lSDL2_mixer \
-           -ltinyxml2
+           -ltinyxml2 -lws2_32
 
-# src/data/leagueSave.cpp is the only sqlite3 consumer and there is no sqlite3
-# here, exactly as on Switch and Android. common/net/ is skipped for the same
-# reason as those two: nothing in the game references it yet.
-SRCS    := $(filter-out $(SRCDIR)/data/leagueSave.cpp,$(shell find $(SRCDIR) -name '*.cpp'))
-OBJS    := $(patsubst $(SRCDIR)/%.cpp, $(OBJDIR)/%.o, $(SRCS))
+# Engine sources — recursive, same as Makefile.debian
+LIBSRCS := $(shell find common -name '*.cpp')
+LIBOBJS := $(patsubst common/%.cpp, $(OBJDIR)/engine/%.o, $(LIBSRCS))
 
-ENGINE_SRCS := $(wildcard $(ENGINE_DIR)/*.cpp)
-ENGINE_OBJS := $(patsubst $(ENGINE_DIR)/%.cpp, $(OBJDIR)/engine/%.o, $(ENGINE_SRCS))
+# Spec sources + engine sources (specs link the engine statically)
+TESTSRCS := $(shell find specs -name '*.cpp')
+TESTOBJS := $(patsubst specs/%.cpp, $(OBJDIR)/specs/%.o, $(TESTSRCS))
 
-# Deferred (=), not immediate (:=) — same trap Makefile.linux documents: OBJS
-# and ENGINE_OBJS are defined above here, but keep the habit.
-DEPFILES = $(patsubst %.o,%.d,$(OBJS) $(ENGINE_OBJS))
+DEPFILES = $(patsubst %.o,%.d,$(LIBOBJS) $(TESTOBJS))
 
-# Marker file proving the deps stage finished, so it runs once rather than on
-# every build.
 DEPS_STAMP := $(DEPS)/.stamp
 
-.PHONY: all deps run dist clean distclean
+TARGET      := $(BUILD)/libstormenginev2.dll
+TEST_TARGET := $(BUILD)/tests.exe
 
-all: $(BUILD)/$(TARGET)
+.PHONY: all deps test stage-dlls clean distclean
+
+all: $(TARGET) $(TEST_TARGET)
 
 # ── Vendored dependencies ───────────────────────────────────────────────────
-# SDL2 must be installed before the satellites configure, since they look for
-# it via CMAKE_PREFIX_PATH.
 deps: $(DEPS_STAMP)
 
 $(DEPS_STAMP):
 	@echo "Cross-building SDL2 + satellites for Windows (first run only)…"
+	@mkdir -p $(BUILD)/dep-build
 	@for lib in SDL2 SDL_image2 SDL_ttf2 SDL_mixer2 tinyxml2; do \
 	  echo "  → $$lib"; \
 	  shared=ON; \
@@ -93,7 +92,7 @@ $(DEPS_STAMP):
 	    -DBUILD_SHARED_LIBS=$$shared \
 	    -DSDL_TEST=OFF -DSDL2IMAGE_SAMPLES=OFF -DSDL2TTF_SAMPLES=OFF \
 	    -DSDL2MIXER_SAMPLES=OFF \
-	    -DSDL2IMAGE_VENDORED=ON -DSDL2TTF_VENDORED=ON -DSDL2MIXER_VENDORED=ON \
+	    -DSDL2IMAGE_VENDORED=OFF -DSDL2TTF_VENDORED=ON -DSDL2MIXER_VENDORED=OFF \
 	    -DSDL2TTF_HARFBUZZ=OFF \
 	    -DSDL2MIXER_FLAC=OFF -DSDL2MIXER_MOD=OFF -DSDL2MIXER_MIDI=OFF \
 	    -DSDL2MIXER_OPUS=OFF -DSDL2MIXER_WAVPACK=OFF \
@@ -106,63 +105,84 @@ $(DEPS_STAMP):
 	done
 	@touch $@
 
-# ── Game ────────────────────────────────────────────────────────────────────
-$(BUILD)/$(TARGET): $(DEPS_STAMP) $(OBJS) $(ENGINE_OBJS)
+# ── Shared library ─────────────────────────────────────────────────────────
+$(TARGET): $(DEPS_STAMP) $(LIBOBJS)
 	@mkdir -p $(BUILD)
-	$(CXX) $(CXXFLAGS) -o $@ $(OBJS) $(ENGINE_OBJS) $(LDFLAGS) $(LIBS)
+	$(CXX) -shared -o $@ $(LIBOBJS) $(LDFLAGS) $(LIBS)
 	@$(MAKE) --no-print-directory -f Makefile.win stage-dlls
 
-# The .exe will not start without its DLLs beside it, and Windows says nothing
-# useful when one is missing — under Wine it was a bare "exit 53" with no
-# output at all. So rather than hardcode a list (the first attempt shipped
-# libwinpthread but not libstdc++, which a vendored DLL pulled in), resolve the
-# import graph and copy whatever is still unresolved out of the mingw runtime.
-.PHONY: stage-dlls
+# ── Spec suite ──────────────────────────────────────────────────────────────
+$(TEST_TARGET): $(DEPS_STAMP) $(TESTOBJS) $(LIBOBJS)
+	@mkdir -p $(BUILD)
+	$(CXX) -o $@ $(TESTOBJS) $(LIBOBJS) $(LDFLAGS) $(LIBS)
+	@$(MAKE) --no-print-directory -f Makefile.win stage-dlls
+
+test: $(TEST_TARGET)
+	wine64 $(TEST_TARGET)
+
+# Neither tests.exe nor libstormenginev2.dll starts without its DLLs beside it,
+# and Windows says nothing useful when one is missing — under Wine it was a
+# bare "exit 53" with no output at all. Hardcoding the list is exactly what
+# produced that: the first attempt shipped libwinpthread-1.dll but not
+# libstdc++-6.dll, which a vendored DLL pulled in. So resolve the import graph
+# instead and copy whatever is still unresolved out of the mingw runtime. This
+# is not decorative — the deps stage does not carry the exe's -static-libgcc
+# -static-libstdc++ (see LDFLAGS), so re-enabling an SDL_mixer/SDL_image codec
+# or flipping a VENDORED flag can add a C++ runtime import to a vendored DLL
+# with nothing else to catch it.
+#
+# Three passes because a DLL staged in one pass brings imports of its own; the
+# loop stops early once a pass stages nothing. The final loop warns about
+# anything still unresolved that the mingw runtime could have supplied — the
+# case that would otherwise surface as a silent non-zero exit under Wine.
+#
+# Resolution goes through $(CXX) -print-file-name first, which returns the
+# runtime belonging to the compiler actually in use. That matters here:
+# /usr/lib/gcc/$(CROSS) carries both a 9.3-posix and a 9.3-win32
+# libstdc++-6.dll, and staging the win32 one beside a -posix build reintroduces
+# the very ABI mismatch the toolchain file was fixed to avoid.
 stage-dlls:
+	@mkdir -p $(BUILD)
 	@cp -u $(DEPS)/bin/*.dll $(BUILD)/ 2>/dev/null || true
-	@cd $(BUILD) && for pass in 1 2 3; do \
-	  missing=$$(for f in $(TARGET) *.dll; do \
-	      $(CROSS)-objdump -p $$f 2>/dev/null | awk '/DLL Name/ {print $$3}'; \
-	    done | sort -u | while read n; do \
-	      [ -f "$$n" ] || echo "$$n"; \
-	    done); \
+	@cd $(BUILD) && \
+	imports() { \
+	  for f in $(notdir $(TARGET)) $(notdir $(TEST_TARGET)) *.dll; do \
+	    [ -f "$$f" ] || continue; \
+	    $(CROSS)-objdump -p "$$f" 2>/dev/null | awk '/DLL Name/ {print $$3}'; \
+	  done | sort -u; \
+	}; \
+	runtime() { \
+	  p=$$($(CXX) -print-file-name="$$1" 2>/dev/null); \
+	  if [ -f "$$p" ]; then echo "$$p"; return 0; fi; \
+	  find /usr/lib/gcc/$(CROSS) /usr/$(CROSS) -name "$$1" 2>/dev/null | head -1; \
+	}; \
+	for pass in 1 2 3; do \
 	  found=0; \
-	  for n in $$missing; do \
-	    src=$$(find /usr/lib/gcc/$(CROSS) /usr/$(CROSS) -name "$$n" 2>/dev/null | head -1); \
+	  for n in $$(imports); do \
+	    [ -f "$$n" ] && continue; \
+	    src=$$(runtime "$$n"); \
 	    if [ -n "$$src" ]; then cp -u "$$src" .; found=1; fi; \
 	  done; \
 	  [ $$found -eq 0 ] && break; \
-	done; true
-	@cd $(BUILD) && for f in $(TARGET) *.dll; do \
-	    $(CROSS)-objdump -p $$f 2>/dev/null | awk '/DLL Name/ {print $$3}'; \
-	  done | sort -u | while read n; do \
-	    if [ ! -f "$$n" ] && find /usr/lib/gcc/$(CROSS) /usr/$(CROSS) -name "$$n" 2>/dev/null | grep -q .; then \
-	      echo "WARNING: $$n is a mingw runtime DLL and was not staged"; \
-	    fi; \
-	  done
+	done; \
+	for n in $$(imports); do \
+	  if [ ! -f "$$n" ] && [ -n "$$(runtime "$$n")" ]; then \
+	    echo "WARNING: $$n is a mingw runtime DLL and was not staged"; \
+	  fi; \
+	done; \
+	true
 
-$(OBJDIR)/%.o: $(SRCDIR)/%.cpp | $(DEPS_STAMP)
+# ── Compile rules ───────────────────────────────────────────────────────────
+$(OBJDIR)/engine/%.o: common/%.cpp | $(DEPS_STAMP)
 	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-$(OBJDIR)/engine/%.o: $(ENGINE_DIR)/%.cpp | $(DEPS_STAMP)
+$(OBJDIR)/specs/%.o: specs/%.cpp | $(DEPS_STAMP)
 	@mkdir -p $(dir $@)
-	$(CXX) $(CXXFLAGS) -c $< -o $@
-
-run: all
-	cd $(BUILD) && wine ./$(TARGET)
-
-dist: all
-	@rm -rf $(BUILD)/dist && mkdir -p $(BUILD)/dist
-	@cp $(BUILD)/$(TARGET) $(BUILD)/*.dll $(BUILD)/dist/
-	@cp -r assets $(BUILD)/dist/
-	@mkdir -p $(BUILD)/dist/data && cp -r data/teams data/tct $(BUILD)/dist/data/
-	@rm -f $(BUILD)/dist/data/teams/*.bak
-	@cd $(BUILD)/dist && zip -qr ../../tf2kxx-win64.zip . && \
-	  echo "wrote build/tf2kxx-win64.zip"
+	$(CXX) $(SPEC_CXXFLAGS) -c $< -o $@
 
 clean:
-	rm -rf $(OBJDIR) $(BUILD)/$(TARGET) $(BUILD)/dist
+	rm -rf $(OBJDIR) $(TARGET) $(TEST_TARGET)
 
 distclean:
 	rm -rf $(BUILD)

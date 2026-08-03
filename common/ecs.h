@@ -183,7 +183,7 @@ private:
   // List of free entity ids that were previously removed
   std::deque<int> freeIds;
 
-  Logger logger;
+  mutable Logger logger;
   static std::unique_ptr<Registry> instance;
 
 public:
@@ -322,8 +322,33 @@ template <typename TComponent>
 TComponent &Registry::GetComponent(Entity entity) const {
   const auto componentId = Component<TComponent>::GetId();
   const auto entityId = entity.GetId();
+
+  static TComponent fallback;
+
+  if (componentId >= componentPools.size() || !componentPools[componentId]) {
+    logger.Err("GetComponent: no pool for component id " +
+               std::to_string(componentId) + " (entity " +
+               std::to_string(entityId) + "); returning default component");
+    return fallback;
+  }
+
   auto componentPool =
       std::static_pointer_cast<Pool<TComponent>>(componentPools[componentId]);
+
+  if (entityId >= entityComponentSignatures.size() ||
+      entityId >= componentPool->GetSize()) {
+    logger.Err("GetComponent: entity " + std::to_string(entityId) +
+               " is out of range for component id " +
+               std::to_string(componentId) + "; returning default component");
+    return fallback;
+  }
+
+  if (!entityComponentSignatures[entityId].test(componentId)) {
+    logger.Err("GetComponent: entity " + std::to_string(entityId) +
+               " has no component id " + std::to_string(componentId) +
+               "; returning default component");
+    return fallback;
+  }
 
   return componentPool->Get(entityId);
 }

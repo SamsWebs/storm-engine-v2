@@ -65,7 +65,30 @@ Entity Registry::CreateEntity() {
   return entity;
 }
 
-void Registry::KillEntity(Entity entity) { entitiesToBeKilled.insert(entity); }
+void Registry::KillEntity(Entity entity) {
+  const auto entityId = entity.GetId();
+
+  if (entityId >= numEntities) {
+    logger.Err("KillEntity: entity " + std::to_string(entityId) +
+               " was never created; ignoring");
+    return;
+  }
+
+  if (std::find(freeIds.begin(), freeIds.end(), static_cast<int>(entityId)) !=
+      freeIds.end()) {
+    logger.Err("KillEntity: entity " + std::to_string(entityId) +
+               " is already dead; ignoring");
+    return;
+  }
+
+  if (entitiesToBeKilled.count(entity) > 0) {
+    logger.Err("KillEntity: entity " + std::to_string(entityId) +
+               " is already pending kill this frame; ignoring");
+    return;
+  }
+
+  entitiesToBeKilled.insert(entity);
+}
 
 void Registry::AddEntityToSystems(Entity entity) {
   const auto entityId = entity.GetId();

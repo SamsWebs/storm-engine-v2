@@ -4,6 +4,15 @@
 
 using namespace igloo;
 
+struct SpecHealth {
+  SpecHealth(int v = 0) : value(v) {}
+  int value;
+};
+
+struct SpecArmor {
+  int value = 0;
+};
+
 Describe(EcsSpec) {
   Describe(EntitySpec) {
     It(should_get_identifier_of_entity) {
@@ -145,6 +154,85 @@ Describe(EcsSpec) {
       Registry registry;
       Entity entity = registry.CreateEntity();
       Assert::That(entity.GetId(), Equals(0));
+    };
+
+    It(should_get_component_an_entity_has) {
+      Registry registry;
+      Entity entity = registry.CreateEntity();
+      registry.Update();
+      registry.AddComponent<SpecHealth>(entity, 42);
+      Assert::That(registry.GetComponent<SpecHealth>(entity).value, Equals(42));
+    };
+
+    It(should_return_default_component_when_entity_lacks_the_component) {
+      Registry registry;
+      Entity entity = registry.CreateEntity();
+      registry.Update();
+      registry.AddComponent<SpecHealth>(entity, 42);
+      SpecArmor &got = registry.GetComponent<SpecArmor>(entity);
+      Assert::That(got.value, Equals(0));
+    };
+
+    It(should_return_default_component_for_never_added_component_type) {
+      Registry registry;
+      Entity entity = registry.CreateEntity();
+      registry.Update();
+      SpecHealth &got = registry.GetComponent<SpecHealth>(entity);
+      Assert::That(got.value, Equals(0));
+    };
+
+    It(should_not_read_out_of_bounds_for_a_stale_entity_id) {
+      Registry registry;
+      Entity entity = registry.CreateEntity();
+      registry.Update();
+      registry.AddComponent<SpecHealth>(entity, 7);
+      Entity stale(150); // never created
+      SpecHealth &got = registry.GetComponent<SpecHealth>(stale);
+      Assert::That(got.value, Equals(0));
+    };
+
+    It(should_not_recycle_an_id_twice_when_entity_is_killed_twice) {
+      Registry registry;
+      Entity a = registry.CreateEntity();
+      Entity b = registry.CreateEntity();
+      registry.Update();
+      Assert::That(a.GetId(), Equals(0));
+      Assert::That(b.GetId(), Equals(1));
+
+      registry.KillEntity(a);
+      registry.Update();
+      registry.KillEntity(a); // stale handle — double kill
+      registry.Update();
+
+      Entity c = registry.CreateEntity();
+      Entity d = registry.CreateEntity();
+      registry.Update();
+      Assert::That(c.GetId(), Equals(0));
+      Assert::That(d.GetId(), Equals(2)); // not aliased to c
+      Assert::That(c.GetId(), Is().Not().EqualTo(d.GetId()));
+    };
+
+    It(should_ignore_kill_of_a_never_created_entity) {
+      Registry registry;
+      registry.KillEntity(Entity(7));
+      registry.Update();
+      Entity e = registry.CreateEntity();
+      registry.Update();
+      Assert::That(e.GetId(), Equals(0)); // 7 was never recycled
+    };
+
+    It(should_ignore_repeated_kill_in_the_same_frame) {
+      Registry registry;
+      Entity a = registry.CreateEntity();
+      registry.Update();
+      registry.KillEntity(a);
+      registry.KillEntity(a);
+      registry.Update();
+      Entity b = registry.CreateEntity();
+      Entity c = registry.CreateEntity();
+      registry.Update();
+      Assert::That(b.GetId(), Equals(0));
+      Assert::That(c.GetId(), Equals(1));
     };
   };
 };

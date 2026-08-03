@@ -169,7 +169,8 @@ Describe(RegistrySpec) {
       registry.TagEntity(b, "player"); // last write wins
       Assert::That(registry.EntityHasTag(b, "player"), Equals(true));
       Assert::That(registry.EntityHasTag(a, "player"), Equals(false));
-      Assert::That(registry.GetEntityByTag("player").GetId(), Equals(b.GetId()));
+      Assert::That(registry.GetEntityByTag("player").GetId(),
+                   Equals(b.GetId()));
     };
   };
 
@@ -259,7 +260,7 @@ Describe(RegistrySpec) {
       Entity a = registry.CreateEntity(); // id 0
       registry.Update();
       registry.KillEntity(a);
-      registry.Update(); // frees id 0
+      registry.Update();                  // frees id 0
       Entity b = registry.CreateEntity(); // should reuse id 0
       Assert::That(b.GetId(), Equals(0u));
     };
@@ -306,6 +307,103 @@ Describe(RegistrySpec) {
       registry.Update();                  // id 0 freed — tag must go with it
       Entity b = registry.CreateEntity(); // reuses id 0
       Assert::That(registry.EntityHasTag(b, "player"), Equals(false));
+    };
+
+    It(should_not_recycle_an_id_twice_when_a_stale_handle_is_killed_again) {
+      Registry registry;
+      Entity a = registry.CreateEntity(); // id 0
+      Entity b = registry.CreateEntity(); // id 1
+      registry.Update();
+
+      registry.KillEntity(a);
+      registry.Update();
+      registry.KillEntity(a); // stale handle, id 0 is on the free list
+      registry.Update();
+
+      Entity c = registry.CreateEntity(); // reuses id 0
+      Entity d = registry.CreateEntity(); // must be a fresh id, not 0 again
+      registry.Update();
+
+      Assert::That(c.GetId(), Equals(0u));
+      Assert::That(d.GetId(), Equals(2u));
+      Assert::That(b.GetId(), Equals(1u));
+    };
+
+    It(should_still_kill_the_new_entity_through_a_recycled_stale_handle) {
+      // KNOWN GAP, pinned deliberately. The three KillEntity guards all pass
+      // for a stale handle whose id has already been recycled, so the kill
+      // lands on the new, live entity. Closing it needs a generation counter
+      // inside Entity, which changes sizeof(Entity) — an ABI break, tracked
+      // as P5 in docs/TECH_DEBT.md. This case fails once P5 is closed; that
+      // is the signal to flip the assertions.
+      Registry registry;
+      registry.AddSystem<PositionSystem>();
+
+      Entity doomed = registry.CreateEntity(); // id 0
+      registry.Update();
+      registry.KillEntity(doomed);
+      registry.Update(); // id 0 freed
+
+      Entity recycled = registry.CreateEntity(); // takes id 0 back
+      registry.AddComponent<PositionComponent>(recycled, 1.f, 2.f);
+      registry.Update();
+      Assert::That(recycled.GetId(), Equals(doomed.GetId()));
+      Assert::That(
+          registry.GetSystem<PositionSystem>().GetSystemEntities().size(),
+          Equals(1u));
+
+      registry.KillEntity(doomed); // stale, but indistinguishable from
+                                   // `recycled`
+      registry.Update();
+
+      Assert::That(
+          registry.GetSystem<PositionSystem>().GetSystemEntities().size(),
+          Equals(0u));
+      Assert::That(registry.IsAlive(recycled), Equals(false));
+    };
+
+    It(should_ignore_a_kill_of_an_entity_that_was_never_created) {
+      Registry registry;
+      registry.KillEntity(Entity(7));
+      registry.Update();
+
+      Entity e = registry.CreateEntity();
+      Assert::That(e.GetId(), Equals(0u)); // 7 was never put on the free list
+    };
+  };
+
+  // P20 — GetEntitiesByGroup used .at(), which terminates the process under
+  // -fno-exceptions when the group has never been created.
+  Describe(MissingLookups) {
+    It(should_return_an_empty_list_for_an_unknown_group) {
+      Registry registry;
+      Assert::That(registry.DoesGroupExist("colliders"), Equals(false));
+      Assert::That(registry.GetEntitiesByGroup("colliders").size(), Equals(0u));
+    };
+
+    It(should_still_return_members_of_a_known_group) {
+      Registry registry;
+      Entity e = registry.CreateEntity();
+      registry.GroupEntity(e, "colliders");
+      registry.Update();
+      Assert::That(registry.GetEntitiesByGroup("colliders").size(), Equals(1u));
+    };
+
+    It(should_report_whether_a_tag_exists) {
+      // GetEntityByTag cannot report a miss through its return type (Entity
+      // has no "none" value), so DoesTagExist is the guard callers need.
+      Registry registry;
+      Assert::That(registry.DoesTagExist("player"), Equals(false));
+
+      Entity e = registry.CreateEntity();
+      registry.TagEntity(e, "player");
+      Assert::That(registry.DoesTagExist("player"), Equals(true));
+      Assert::That(registry.GetEntityByTag("player").GetId(),
+                   Equals(e.GetId()));
+
+      registry.KillEntity(e);
+      registry.Update();
+      Assert::That(registry.DoesTagExist("player"), Equals(false));
     };
   };
 };

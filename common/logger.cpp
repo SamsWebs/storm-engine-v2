@@ -53,7 +53,13 @@ void Logger::logHelper(const std::string &message, LogType logType) {
   logEntry.message =
       logDesc + " [ " + CurrentDateTimeToString() + "]: " + message;
 
-  std::cout << color << logEntry.message << RESET << std::endl;
+  // '\n' rather than std::endl: the engine logs on every entity and component
+  // operation, and std::endl flushes on every line. Errors still flush, so a
+  // diagnostic that precedes a crash is not lost in the buffer.
+  std::cout << color << logEntry.message << RESET << '\n';
+  if (logType == LogType::LOG_ERROR) {
+    std::cout.flush();
+  }
 
   // Keep the in-memory history bounded — the engine logs on every entity /
   // component operation, so an uncapped vector grows for the whole session.

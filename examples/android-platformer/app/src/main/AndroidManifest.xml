@@ -1,6 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- Required by common/net/. Android denies every socket call without it,
+         and the failure surfaces as a connect/bind error at runtime rather
+         than anything at build time. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
     <application android:label="Storm Platformer"
                  android:allowBackup="true"
                  android:hardwareAccelerated="true">

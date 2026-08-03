@@ -47,7 +47,10 @@ file(COPY "${REPO_ROOT}/vendor/android/SDL_mixer2/include/SDL_mixer.h"
      DESTINATION "${CMAKE_CURRENT_BINARY_DIR}/compat/SDL2")
 
 # ── Engine core + game sources into the single JNI library ──────────────────
-file(GLOB ENGINE_SRC "${REPO_ROOT}/common/*.cpp")
+# Recursive: a plain common/*.cpp glob picks up 6 of the 13 translation units
+# and silently drops all of common/net/, so anything touching Net* fails to
+# link. Networking also needs the INTERNET permission in AndroidManifest.xml.
+file(GLOB_RECURSE ENGINE_SRC "${REPO_ROOT}/common/*.cpp")
 file(GLOB GAME_SRC   "${EXAMPLE_DIR}/src/*.cpp" "${EXAMPLE_DIR}/src/states/*.cpp")
 
 add_library(main SHARED ${ENGINE_SRC} ${GAME_SRC})

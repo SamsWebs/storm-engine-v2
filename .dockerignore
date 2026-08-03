@@ -1,3 +1,6 @@
+**/*.d
+**/*.o
+**/*.obj
 **/build
 Dockerfile.*
 .dockerignore

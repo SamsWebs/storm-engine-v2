@@ -456,8 +456,9 @@ Build `target` first.
 - **No header dependency tracking on desktop.** No `-MMD`/`-MP`. Editing a
   header does not rebuild dependents; you get silently stale objects. This is
   why every `all` starts with `clean`.
-- **`Makefile.nx` at the repo root is dead code.** The working Switch path is
-  `examples/nx-platformer/`.
+- **The Switch build lives in `examples/nx-platformer/`.** A dead `Makefile.nx`
+  at the repo root used to shadow it; it was deleted (P42) because it recursed
+  into a root `Makefile` that does not exist.
 - **`cd editor && make` launches the editor** — the link rule executes the
   binary. Examples do *not* auto-launch.
 - **GTK3 and Lua are linked unconditionally**, even for headless networking

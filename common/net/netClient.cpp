@@ -20,7 +20,7 @@ bool NetClient::Connect(const std::string &host, uint16_t port) {
     logger_.Err("NetClient: failed to open socket");
     return false;
   }
-  TokenToNonce(NetRandom32(), clientNonce_);
+  TokenToNonce(NetNonce32(), clientNonce_);
   step_ = 1;
   online_ = false;
   notified_ = false;
@@ -118,19 +118,7 @@ bool NetClient::Send(const void *data, int size, bool vital) {
 
 void NetClient::SendControl(int message, const uint8_t *payload,
                             int payloadSize) {
-  if (payloadSize < 0)
-    return;
-  if (payloadSize > kNetMaxPayload)
-    payloadSize = kNetMaxPayload; // truncate: never overflow the frame
-  NetControlPacket ctrl;
-  ctrl.message = message;
-  if (payload && payloadSize > 0)
-    std::memcpy(ctrl.payload, payload, payloadSize);
-  ctrl.payloadSize = payloadSize;
-  uint8_t buf[kNetMaxPacketSize];
-  int size = 0;
-  if (ctrl.Pack(buf, sizeof(buf), size))
-    sock_.Send(serverAddr_, buf, size);
+  NetSendControl(sock_, serverAddr_, message, payload, payloadSize);
 }
 
 void NetClient::ProcessControl(const NetControlPacket &ctrl) {

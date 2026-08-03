@@ -54,6 +54,8 @@ public:
   // snapshot and a delta produced by Create() against that same base.
   static int Create(const NetSnapshot &from, const NetSnapshot &to,
                     uint8_t *dst, int dstSize);
+  // deltaSize must be exactly the byte count Create() returned. Trailing bytes
+  // are rejected, so passing sizeof(buf) for an over-allocated buffer fails.
   static bool Apply(const NetSnapshot &from, const uint8_t *delta,
                     int deltaSize, NetSnapshot &to);
   // Upper bound on the encoded size of a delta between these snapshots.

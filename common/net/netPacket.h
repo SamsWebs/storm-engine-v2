@@ -70,6 +70,27 @@ struct NetControlPacket {
     bool Unpack(const uint8_t *data, int size);
 };
 
+class NetSocket; // netSocket.h — only a reference is needed here
+
+// Packs one control datagram and sends it. payloadSize is clamped to
+// kNetMaxPayload so an over-long reason string can never overflow the frame.
+// Both NetServer::SendControl and NetClient::SendControl forward here so the
+// bound lives in exactly one place. Returns false if nothing was sent.
+bool NetSendControl(NetSocket &sock, const NetAddress &to, int message,
+                    const void *payload, int payloadSize);
+
+// ── Handshake nonces ──
+// The cookie handshake's whole guarantee is that a joining peer cannot guess
+// the nonce it has to echo back, and the token derived from it is the only
+// check on an inbound connected packet. NetRandom32 (netSocket.h) is a raw
+// xorshift64: every output bit is a linear function of the state, so a handful
+// of observed nonces recover it and every future nonce with it. This draws
+// from a ChaCha20 keystream keyed once from std::random_device (the OS entropy
+// source on every platform the engine targets, mixed with the clock and the
+// process's own layout), so the output is not invertible even if the seed is
+// weaker than advertised. Use it for anything a peer gets to see.
+uint32_t NetNonce32();
+
 // ── Message packing ──
 // A tiny varint-based writer/reader for game-defined messages. Games give each
 // message type a number, write it first, then its fields.
@@ -95,7 +116,10 @@ public:
     NetMessageReader(const uint8_t *data, int size) : data_(data), size_(size) {}
 
     bool ReadInt(int32_t &value);
-    bool ReadString(char *out, int outSize); // null-terminated, truncated safely
+    // Always null-terminates out. Fails (leaving out empty) if the wire string
+    // does not carry its own terminator, so a truncated or hostile packet can
+    // never make the caller read past what the sender actually sent.
+    bool ReadString(char *out, int outSize);
     bool ReadRaw(void *out, int size);
     bool Finished() const { return pos_ == size_; }
     int Position() const { return pos_; }

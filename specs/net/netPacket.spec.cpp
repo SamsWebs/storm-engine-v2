@@ -1,4 +1,6 @@
 #include <cstring>
+#include <set>
+#include <string>
 
 #include <igloo/igloo_alt.h>
 
@@ -203,6 +205,95 @@ Describe(NetPacketSpec) {
       char str[8] = "xxxx";
       Assert::That(r.ReadString(str, sizeof(str)), Equals(true));
       Assert::That(std::string(str), Equals(""));
+    };
+    It(should_reject_a_wire_string_with_no_terminator) {
+      // Hand-built: a length of 5 followed by five bytes and no NUL. The old
+      // reader terminated at out[outSize - 1] instead, so the caller got its
+      // own stale buffer bytes back as if the peer had sent them.
+      NetMessageWriter w;
+      Assert::That(w.WriteInt(5), Equals(true));
+      Assert::That(w.WriteRaw("ABCDE", 5), Equals(true));
+
+      NetMessageReader r(w.Data(), w.Size());
+      char out[16];
+      std::memset(out, 'Z', sizeof(out));
+      Assert::That(r.ReadString(out, sizeof(out)), Equals(false));
+      Assert::That(std::strlen(out), Equals((size_t)0));
+    };
+    It(should_reject_an_unterminated_string_that_fills_the_buffer) {
+      NetMessageWriter w;
+      Assert::That(w.WriteInt(4), Equals(true));
+      Assert::That(w.WriteRaw("ABCD", 4), Equals(true));
+
+      NetMessageReader r(w.Data(), w.Size());
+      char out[4] = {'W', 'X', 'Y', 'Z'};
+      Assert::That(r.ReadString(out, 4), Equals(false));
+      Assert::That(out[0], Equals('\0'));
+    };
+    It(should_accept_a_terminated_string_that_exactly_fills_the_buffer) {
+      NetMessageWriter w;
+      Assert::That(w.WriteString("abc"), Equals(true)); // 3 chars + NUL
+      NetMessageReader r(w.Data(), w.Size());
+      char out[4] = {};
+      Assert::That(r.ReadString(out, 4), Equals(true));
+      Assert::That(std::string(out), Equals("abc"));
+    };
+    It(should_reject_a_string_whose_length_runs_past_the_payload) {
+      NetMessageWriter w;
+      Assert::That(w.WriteInt(9), Equals(true)); // claims nine bytes
+      Assert::That(w.WriteRaw("ab", 2), Equals(true));
+      NetMessageReader r(w.Data(), w.Size());
+      char out[16] = {};
+      Assert::That(r.ReadString(out, sizeof(out)), Equals(false));
+    };
+    It(should_reject_non_positive_string_lengths) {
+      NetMessageWriter zero;
+      Assert::That(zero.WriteInt(0), Equals(true));
+      NetMessageReader rz(zero.Data(), zero.Size());
+      char out[8] = {};
+      Assert::That(rz.ReadString(out, sizeof(out)), Equals(false));
+
+      NetMessageWriter negative;
+      Assert::That(negative.WriteInt(-3), Equals(true));
+      NetMessageReader rn(negative.Data(), negative.Size());
+      Assert::That(rn.ReadString(out, sizeof(out)), Equals(false));
+    };
+  };
+
+  // The handshake nonce is the only thing standing between a spoofed source
+  // address and a live connection, so it must not be recoverable from the
+  // nonces a peer has already seen. Unpredictability itself is a property of
+  // the construction (ChaCha20 keyed from the OS entropy source, see
+  // NetNonce32) rather than something a unit spec can assert; what is pinned
+  // here is the observable contract the old xorshift also had to meet.
+  Describe(Nonces) {
+    It(should_not_repeat_across_a_large_sample) {
+      const int kSamples = 4096;
+      std::set<uint32_t> seen;
+      for (int i = 0; i < kSamples; i++)
+        seen.insert(NetNonce32());
+      Assert::That((int)seen.size(), Equals(kSamples));
+    };
+    It(should_set_every_bit_position_about_half_the_time) {
+      const int kSamples = 4096;
+      int ones[32] = {};
+      for (int i = 0; i < kSamples; i++) {
+        uint32_t n = NetNonce32();
+        for (int b = 0; b < 32; b++)
+          if (n & (1u << b))
+            ones[b]++;
+      }
+      for (int b = 0; b < 32; b++) {
+        Assert::That(ones[b], Is().GreaterThan(kSamples * 2 / 5));
+        Assert::That(ones[b], Is().LessThan(kSamples * 3 / 5));
+      }
+    };
+    It(should_never_return_a_constant) {
+      uint32_t first = NetNonce32();
+      bool differs = false;
+      for (int i = 0; i < 32 && !differs; i++)
+        differs = NetNonce32() != first;
+      Assert::That(differs, Equals(true));
     };
   };
 };

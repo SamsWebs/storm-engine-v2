@@ -229,11 +229,14 @@ bool NetSnapshotDelta::Apply(const NetSnapshot &from, const uint8_t *delta,
   if (!getVarInt(numDeleted) || numDeleted < 0 || numDeleted > from.NumItems())
     return false;
 
-  // Read the deleted keys once.
+  // Read the deleted keys once. A key is (type << 16) | id and types run the
+  // full uint16 range, so any type >= 0x8000 rides the wire as a negative
+  // varint. NetVarIntPack/Unpack round-trip those exactly — the bytes are the
+  // same either way — so the key is simply reinterpreted, never sign-checked.
   uint32_t deletedKeys[NetSnapshot::kMaxItems];
   for (int k = 0; k < numDeleted; k++) {
     int32_t delKey = 0;
-    if (!getVarInt(delKey) || delKey < 0)
+    if (!getVarInt(delKey))
       return false;
     deletedKeys[k] = (uint32_t)delKey;
   }
@@ -249,15 +252,13 @@ bool NetSnapshotDelta::Apply(const NetSnapshot &from, const uint8_t *delta,
   // An item that grows or shrinks cannot replace the base copy in place, so
   // the base copy below skips everything the update list (re)applies.
   uint32_t updateKeys[NetSnapshot::kMaxItems];
-  int updateCounts[NetSnapshot::kMaxItems];
   for (int u = 0; u < numUpdated; u++) {
     int32_t key = 0, count = 0;
-    if (!getVarInt(key) || key < 0)
+    if (!getVarInt(key))
       return false;
     if (!getVarInt(count) || count < 0 || count > NetSnapshot::kMaxDataInts)
       return false;
     updateKeys[u] = (uint32_t)key;
-    updateCounts[u] = count;
     for (int j = 0; j < count; j++) {
       int32_t v = 0;
       if (!getVarInt(v))
@@ -293,19 +294,20 @@ bool NetSnapshotDelta::Apply(const NetSnapshot &from, const uint8_t *delta,
   // equal-count items, absolutes for new or count-changed ones. The key,
   // count, and values are re-read contiguously from the update list.
   pos = updatesStart; // re-read the update list from the wire
+  int32_t values[NetSnapshot::kMaxDataInts];
   for (int u = 0; u < numUpdated; u++) {
     int32_t key = 0, count = 0;
-    if (!getVarInt(key) || key < 0)
+    if (!getVarInt(key))
       return false;
     if (!getVarInt(count) || count < 0 || count > NetSnapshot::kMaxDataInts)
       return false;
-    uint16_t t = (uint16_t)(key >> 16);
-    uint16_t id = (uint16_t)(key & 0xFFFF);
+    uint32_t ukey = (uint32_t)key;
+    uint16_t t = (uint16_t)(ukey >> 16);
+    uint16_t id = (uint16_t)(ukey & 0xFFFF);
     const int32_t *fd;
     int fc;
     bool inFrom = from.FindItem(t, id, fd, fc);
     bool diff = inFrom && fc == count;
-    int32_t values[NetSnapshot::kMaxDataInts];
     for (int j = 0; j < count; j++) {
       int32_t v = 0;
       if (!getVarInt(v))
@@ -315,6 +317,12 @@ bool NetSnapshotDelta::Apply(const NetSnapshot &from, const uint8_t *delta,
     if (!to.AddItem(t, id, values, count))
       return false;
   }
+
+  // Every byte must belong to the delta. Trailing bytes mean the sender and
+  // the receiver disagree about the encoding, so the snapshot they think they
+  // share is not the one that was built here.
+  if (pos != deltaSize)
+    return false;
 
   to.Finish();
   return true;

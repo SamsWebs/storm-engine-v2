@@ -342,6 +342,135 @@ Describe(NetSnapshotSpec) {
       int n = NetSnapshotDelta::Create(from, to, delta, sizeof(delta));
       Assert::That(n, Is().GreaterThanOrEqualTo(0));
     };
+    It(should_reject_a_delta_with_trailing_bytes) {
+      NetSnapshot from;
+      AddSkater(from, 1, 10, 20, 100);
+      from.Finish();
+      NetSnapshot to;
+      AddSkater(to, 1, 10, 21, 100);
+      to.Finish();
+      uint8_t delta[128] = {};
+      int n = NetSnapshotDelta::Create(from, to, delta, sizeof(delta));
+      Assert::That(n, Is().GreaterThan(0));
+
+      NetSnapshot rebuilt;
+      Assert::That(NetSnapshotDelta::Apply(from, delta, n, rebuilt),
+                   Equals(true));
+      // Two spare bytes on the end: sender and receiver disagree about the
+      // encoding, so the delta cannot be trusted even though it parses.
+      delta[n] = 0x00;
+      delta[n + 1] = 0x01;
+      NetSnapshot padded;
+      Assert::That(NetSnapshotDelta::Apply(from, delta, n + 2, padded),
+                   Equals(false));
+    };
+    It(should_reject_a_delta_truncated_mid_item) {
+      NetSnapshot from;
+      AddSkater(from, 1, 10, 20, 100);
+      from.Finish();
+      NetSnapshot to;
+      AddSkater(to, 1, 11, 21, 101);
+      AddSkater(to, 2, 1, 2, 3);
+      to.Finish();
+      uint8_t delta[128] = {};
+      int n = NetSnapshotDelta::Create(from, to, delta, sizeof(delta));
+      Assert::That(n, Is().GreaterThan(2));
+      for (int cut = 1; cut < n; cut++) {
+        NetSnapshot rebuilt;
+        Assert::That(NetSnapshotDelta::Apply(from, delta, cut, rebuilt),
+                     Equals(false));
+      }
+    };
+  };
+
+  // Keys are (type << 16) | id and AddItem takes a uint16 type, so any type
+  // from 0x8000 up rides the wire as a negative varint. Create always emitted
+  // those correctly; Apply used to reject them outright, so a game whose type
+  // ids came from a hash or a grown enum saw every delta silently fail.
+  Describe(HighItemTypes) {
+    It(should_round_trip_a_type_with_the_top_bit_set) {
+      NetSnapshot from;
+      from.Finish();
+      NetSnapshot to;
+      int32_t data[3] = {7, -8, 9};
+      Assert::That(to.AddItem(0x8001, 7, data, 3), Equals(true));
+      to.Finish();
+
+      uint8_t delta[128];
+      int n = NetSnapshotDelta::Create(from, to, delta, sizeof(delta));
+      Assert::That(n, Is().GreaterThan(0));
+      NetSnapshot rebuilt;
+      Assert::That(NetSnapshotDelta::Apply(from, delta, n, rebuilt),
+                   Equals(true));
+      Assert::That(rebuilt.Crc(), Equals(to.Crc()));
+      const int32_t *out = nullptr;
+      int count = 0;
+      Assert::That(rebuilt.FindItem(0x8001, 7, out, count), Equals(true));
+      Assert::That(count, Equals(3));
+      Assert::That(out[1], Equals(-8));
+    };
+    It(should_round_trip_the_largest_possible_key) {
+      NetSnapshot from;
+      from.Finish();
+      NetSnapshot to;
+      int32_t data[1] = {42};
+      Assert::That(to.AddItem(0xFFFF, 0xFFFF, data, 1), Equals(true));
+      to.Finish();
+
+      uint8_t delta[64];
+      int n = NetSnapshotDelta::Create(from, to, delta, sizeof(delta));
+      NetSnapshot rebuilt;
+      Assert::That(NetSnapshotDelta::Apply(from, delta, n, rebuilt),
+                   Equals(true));
+      const int32_t *out = nullptr;
+      int count = 0;
+      Assert::That(rebuilt.FindItem(0xFFFF, 0xFFFF, out, count), Equals(true));
+      Assert::That(out[0], Equals(42));
+    };
+    It(should_diff_and_delete_high_typed_items) {
+      NetSnapshot from;
+      int32_t base[2] = {10, 20};
+      Assert::That(from.AddItem(0xC000, 3, base, 2), Equals(true));
+      Assert::That(from.AddItem(0x8000, 0, base, 2), Equals(true));
+      from.Finish();
+
+      NetSnapshot to; // one changed, one gone
+      int32_t moved[2] = {11, 20};
+      Assert::That(to.AddItem(0xC000, 3, moved, 2), Equals(true));
+      to.Finish();
+
+      uint8_t delta[128];
+      int n = NetSnapshotDelta::Create(from, to, delta, sizeof(delta));
+      Assert::That(n, Is().GreaterThan(0));
+      NetSnapshot rebuilt;
+      Assert::That(NetSnapshotDelta::Apply(from, delta, n, rebuilt),
+                   Equals(true));
+      Assert::That(rebuilt.NumItems(), Equals(1));
+      Assert::That(rebuilt.Crc(), Equals(to.Crc()));
+      const int32_t *out = nullptr;
+      int count = 0;
+      Assert::That(rebuilt.FindItem(0x8000, 0, out, count), Equals(false));
+      Assert::That(rebuilt.FindItem(0xC000, 3, out, count), Equals(true));
+      Assert::That(out[0], Equals(11));
+    };
+    It(should_keep_high_and_low_typed_items_in_one_delta) {
+      NetSnapshot from;
+      AddSkater(from, 1, 10, 20, 100);
+      from.Finish();
+      NetSnapshot to;
+      AddSkater(to, 1, 10, 21, 100);
+      int32_t data[2] = {-1, -2};
+      Assert::That(to.AddItem(0xABCD, 0x1234, data, 2), Equals(true));
+      to.Finish();
+
+      uint8_t delta[256];
+      int n = NetSnapshotDelta::Create(from, to, delta, sizeof(delta));
+      NetSnapshot rebuilt;
+      Assert::That(NetSnapshotDelta::Apply(from, delta, n, rebuilt),
+                   Equals(true));
+      Assert::That(rebuilt.NumItems(), Equals(2));
+      Assert::That(rebuilt.Crc(), Equals(to.Crc()));
+    };
   };
 
   Describe(Cache) {

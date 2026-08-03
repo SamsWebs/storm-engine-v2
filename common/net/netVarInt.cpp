@@ -44,6 +44,18 @@ bool NetVarIntUnpack(const uint8_t *src, int srcSize, int32_t &value, int &consu
         result |= (src[n] & (n < 4 ? 0x7F : 0x0F)) << (6 + 7 * (n - 1));
     }
 
+    // Canonical encodings only. NetVarIntPack never emits a trailing zero byte
+    // (the loop stops as soon as the value is exhausted) and never sets the
+    // 5th byte's top bits, so anything that does is either an overlong encoding
+    // of a shorter value or an int32 overflow. Accepting either would make the
+    // wire malleable: several byte strings would decode to the same snapshot,
+    // which defeats Crc()-based tamper detection and lets a peer pad every
+    // varint out to five bytes.
+    if (n > 0 && src[n] == 0)
+        return false; // overlong: the value fits in n bytes
+    if (n == 4 && (src[4] & 0x70) != 0)
+        return false; // overflow: bits past the int32 payload
+
     value = result ^ -sign; // two's complement back if negative
     consumed = n + 1;
     return true;

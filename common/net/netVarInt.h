@@ -13,6 +13,9 @@ constexpr int kNetVarIntMaxBytes = 5;
 // Packs value into dst. Returns bytes written, or 0 if the buffer is too small.
 int NetVarIntPack(uint8_t *dst, int dstSize, int32_t value);
 
-// Unpacks one varint from src. Returns false on truncation or overflow.
+// Unpacks one varint from src. Returns false on truncation, on int32 overflow,
+// and on any non-canonical encoding — a value padded out with extend bits is
+// rejected even though it decodes, so every value has exactly one valid byte
+// string on the wire. NetVarIntPack only ever emits canonical encodings.
 // On success, consumed receives the byte count.
 bool NetVarIntUnpack(const uint8_t *src, int srcSize, int32_t &value, int &consumed);

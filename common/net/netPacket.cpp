@@ -1,6 +1,8 @@
 #include <cstring>
+#include <random>
 
 #include "netPacket.h"
+#include "netSocket.h"
 
 bool NetChunkHeader::Pack(uint8_t *dst) const {
   if (size < 0 || size > 0x0FFF)
@@ -85,6 +87,103 @@ bool NetControlPacket::Unpack(const uint8_t *data, int size) {
   return true;
 }
 
+bool NetSendControl(NetSocket &sock, const NetAddress &to, int message,
+                    const void *payload, int payloadSize) {
+  if (payloadSize < 0)
+    return false;
+  if (payloadSize > kNetMaxPayload)
+    payloadSize = kNetMaxPayload; // truncate: never overflow the frame
+  NetControlPacket ctrl;
+  ctrl.message = message;
+  if (payload && payloadSize > 0)
+    std::memcpy(ctrl.payload, payload, payloadSize);
+  ctrl.payloadSize = payloadSize;
+  uint8_t buf[kNetMaxPacketSize];
+  int size = 0;
+  if (!ctrl.Pack(buf, sizeof(buf), size))
+    return false;
+  return sock.Send(to, buf, size);
+}
+
+namespace {
+
+inline uint32_t Rotl32(uint32_t v, int n) { return (v << n) | (v >> (32 - n)); }
+
+inline void ChaChaQuarter(uint32_t &a, uint32_t &b, uint32_t &c, uint32_t &d) {
+  a += b;
+  d = Rotl32(d ^ a, 16);
+  c += d;
+  b = Rotl32(b ^ c, 12);
+  a += b;
+  d = Rotl32(d ^ a, 8);
+  c += d;
+  b = Rotl32(b ^ c, 7);
+}
+
+// ChaCha20 block function: ten double rounds over a 16-word state, added back
+// to the input. Nothing here is reversible from the output, which is the whole
+// point — see NetNonce32 in netPacket.h.
+void ChaChaBlock(const uint32_t in[16], uint32_t out[16]) {
+  for (int i = 0; i < 16; i++)
+    out[i] = in[i];
+  for (int round = 0; round < 10; round++) {
+    ChaChaQuarter(out[0], out[4], out[8], out[12]);
+    ChaChaQuarter(out[1], out[5], out[9], out[13]);
+    ChaChaQuarter(out[2], out[6], out[10], out[14]);
+    ChaChaQuarter(out[3], out[7], out[11], out[15]);
+    ChaChaQuarter(out[0], out[5], out[10], out[15]);
+    ChaChaQuarter(out[1], out[6], out[11], out[12]);
+    ChaChaQuarter(out[2], out[7], out[8], out[13]);
+    ChaChaQuarter(out[3], out[4], out[9], out[14]);
+  }
+  for (int i = 0; i < 16; i++)
+    out[i] += in[i];
+}
+
+// One keystream block at a time, 16 words each. A handshake draws one word per
+// join, and the 64-bit block counter is good for 2^64 blocks, so the stream is
+// never exhausted and never rekeyed.
+struct NonceStream {
+  uint32_t state[16] = {};
+  uint32_t block[16] = {};
+  int next = 16; // >= 16 forces a fresh block on first use
+
+  NonceStream() {
+    state[0] = 0x61707865; // "expand 32-byte k"
+    state[1] = 0x3320646e;
+    state[2] = 0x79622d32;
+    state[3] = 0x6b206574;
+    // 256-bit key. std::random_device is the OS CSPRNG on Linux and Windows;
+    // NetRandom32 is xor'd in for its /dev/urandom read, so the key is at
+    // least as strong as the better of the two sources.
+    std::random_device rd;
+    for (int i = 4; i < 12; i++)
+      state[i] = (uint32_t)rd() ^ NetRandom32();
+    state[12] = 0; // 64-bit block counter
+    state[13] = 0;
+    // Stream position: distinct per process even if every key word collided.
+    state[14] = NetNowMs();
+    state[15] = (uint32_t)(uintptr_t)this;
+  }
+
+  uint32_t Next() {
+    if (next >= 16) {
+      ChaChaBlock(state, block);
+      if (++state[12] == 0)
+        ++state[13];
+      next = 0;
+    }
+    return block[next++];
+  }
+};
+
+} // namespace
+
+uint32_t NetNonce32() {
+  static NonceStream stream;
+  return stream.Next();
+}
+
 bool NetMessageWriter::WriteInt(int32_t value) {
   int n = NetVarIntPack(data_ + size_, kMaxSize - size_, value);
   if (n == 0)
@@ -118,6 +217,12 @@ bool NetMessageReader::ReadInt(int32_t &value) {
 }
 
 bool NetMessageReader::ReadString(char *out, int outSize) {
+  // Terminate up front so the documented postcondition holds on EVERY exit,
+  // including the early failures below. docs/networking.md shows the return
+  // value being discarded, so a caller that ignores it must still never read
+  // uninitialised stack as if the peer had sent it.
+  if (outSize > 0)
+    out[0] = '\0';
   int32_t len = 0;
   if (!ReadInt(len))
     return false;
@@ -125,8 +230,13 @@ bool NetMessageReader::ReadString(char *out, int outSize) {
     return false;
   if (!ReadRaw(out, len))
     return false;
-  if (out[len - 1] != '\0') // enforce the terminator
-    out[outSize - 1] = '\0';
+  if (out[len - 1] != '\0') {
+    // Unterminated on the wire. Terminating at outSize - 1 instead would hand
+    // the caller everything left in its own buffer past len as if the peer had
+    // sent it, so refuse the read outright and leave out empty.
+    out[0] = '\0';
+    return false;
+  }
   return true;
 }
 

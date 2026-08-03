@@ -209,19 +209,7 @@ void NetServer::FreeSlot(Slot *slot, const std::string &reason) {
 
 void NetServer::SendControl(const NetAddress &addr, int message,
                             const void *payload, int payloadSize) {
-  if (payloadSize < 0)
-    return;
-  if (payloadSize > kNetMaxPayload)
-    payloadSize = kNetMaxPayload; // truncate: never overflow the frame
-  NetControlPacket ctrl;
-  ctrl.message = message;
-  if (payload && payloadSize > 0)
-    std::memcpy(ctrl.payload, payload, payloadSize);
-  ctrl.payloadSize = payloadSize;
-  uint8_t buf[kNetMaxPacketSize];
-  int size = 0;
-  if (ctrl.Pack(buf, sizeof(buf), size))
-    sock_.Send(addr, buf, size);
+  NetSendControl(sock_, addr, message, payload, payloadSize);
 }
 
 void NetServer::HandleConnect(const NetAddress &from,
@@ -232,9 +220,20 @@ void NetServer::HandleConnect(const NetAddress &from,
     return;
   }
   if (Slot *existing = FindSlot(from)) {
-    // The client restarted mid-handshake: refresh nonces and answer.
+    // A genuine mid-handshake retry (step 1, not yet online) answers with the
+    // nonce this slot was already issued: the client re-sends CONNECT every
+    // retry until CONNECT_ACCEPT lands, and minting a fresh one each time
+    // handed out an unlimited supply of generator samples (P9).
+    //
+    // Anything else — in particular a CONNECT for a slot that is already
+    // online — must rotate. The server nonce IS the connection token, it
+    // travels in cleartext in every connected packet header, and equality
+    // against it is the only authentication on an inbound connected packet.
+    // Reusing it here would let anyone who captured one datagram replay the
+    // token through a spoofed CONNECT/CONNECT_READY and seize the slot.
+    if (existing->online || existing->step != 1)
+      TokenToNonce(NetNonce32(), existing->serverNonce);
     std::memcpy(existing->clientNonce, clientNonce, 4);
-    TokenToNonce(NetRandom32(), existing->serverNonce);
     existing->step = 1;
     existing->lastRecvMs = now;
     existing->lastSendMs = now;
@@ -265,7 +264,7 @@ void NetServer::HandleConnect(const NetAddress &from,
   slot->lastRecvMs = now;
   slot->lastSendMs = now;
   std::memcpy(slot->clientNonce, clientNonce, 4);
-  TokenToNonce(NetRandom32(), slot->serverNonce);
+  TokenToNonce(NetNonce32(), slot->serverNonce);
   SendControl(from, kNetControlConnectAccept, slot->serverNonce, 4);
 }
 

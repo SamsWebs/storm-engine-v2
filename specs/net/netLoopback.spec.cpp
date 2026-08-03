@@ -1,12 +1,14 @@
 #include <chrono>
 #include <cstring>
 #include <functional>
+#include <set>
 #include <string>
 #include <thread>
 
 #include <igloo/igloo_alt.h>
 
 #include "../../common/net/netClient.h"
+#include "../../common/net/netPacket.h"
 #include "../../common/net/netServer.h"
 
 using namespace igloo;
@@ -62,6 +64,45 @@ struct Rendezvous {
   bool Connect() {
     return PumpUntil(server, client, kPumpDeadlineMs,
                      [this]() { return serverConnected && clientConnected; });
+  }
+};
+
+// A hand-driven peer: a bare socket that speaks control datagrams at a real
+// NetServer. PumpUntil above drives two engine peers against each other; this
+// drives the server against traffic a NetClient would never send, which is
+// what the handshake has to survive.
+struct RawPeer {
+  NetSocket sock;
+  NetAddress serverAddr;
+  uint8_t clientNonce[4] = {0xDE, 0xAD, 0xBE, 0xEF};
+
+  RawPeer(NetServer &server, uint8_t tag) {
+    Assert::That(sock.Open(0), Equals(true));
+    serverAddr = NetAddressFromParts(0x7F000001u, server.GetPort());
+    clientNonce[3] = tag;
+  }
+
+  bool Send(int message, const void *payload, int payloadSize) {
+    return NetSendControl(sock, serverAddr, message, payload, payloadSize);
+  }
+
+  // Pumps the server and waits for one control datagram of the given kind,
+  // skipping keepalives and retransmissions of earlier steps.
+  bool Await(NetServer &server, int message, NetControlPacket &out) {
+    uint32_t start = NetNowMs();
+    while (NetNowMs() - start < (uint32_t)kPumpDeadlineMs) {
+      server.Update();
+      server.Poll();
+      NetAddress from;
+      uint8_t buf[kNetMaxPacketSize];
+      int n = sock.Recv(from, buf, sizeof(buf));
+      if (n > 0 && NetControlPacket::IsControl(buf, n) && out.Unpack(buf, n) &&
+          out.message == message)
+        return true;
+      if (n < 0)
+        std::this_thread::sleep_for(std::chrono::milliseconds(kPumpStepMs));
+    }
+    return false;
   }
 };
 } // namespace
@@ -213,5 +254,101 @@ Describe(NetLoopbackSpec) {
                  Equals(true));
     Assert::That(second.IsConnected(), Equals(false));
     Assert::That(server.GetClientCount(), Equals(1));
+  };
+
+  It(should_reuse_a_slots_nonce_when_connect_is_repeated) {
+    // Re-sending CONNECT is normal (the client does it every retry until
+    // CONNECT_ACCEPT lands). Minting a fresh nonce each time handed anyone
+    // an unlimited supply of samples from the server's generator (P9), so
+    // the slot must answer with the nonce it already issued.
+    NetServer server;
+    Assert::That(server.Start(0, 4), Equals(true));
+    RawPeer peer(server, 0x11);
+
+    NetControlPacket first;
+    Assert::That(peer.Send(kNetControlConnect, peer.clientNonce, 4),
+                 Equals(true));
+    Assert::That(peer.Await(server, kNetControlConnectAccept, first),
+                 Equals(true));
+    Assert::That(first.payloadSize, Equals(4));
+    uint8_t issued[4];
+    std::memcpy(issued, first.payload, 4);
+
+    for (int i = 0; i < 5; i++) {
+      NetControlPacket repeat;
+      Assert::That(peer.Send(kNetControlConnect, peer.clientNonce, 4),
+                   Equals(true));
+      Assert::That(peer.Await(server, kNetControlConnectAccept, repeat),
+                   Equals(true));
+      Assert::That(std::memcmp(repeat.payload, issued, 4), Equals(0));
+    }
+
+    // And the handshake still completes against that one nonce.
+    uint8_t ready[8];
+    std::memcpy(ready, peer.clientNonce, 4);
+    std::memcpy(ready + 4, issued, 4);
+    Assert::That(peer.Send(kNetControlConnectReady, ready, 8), Equals(true));
+    NetControlPacket accept;
+    Assert::That(peer.Await(server, kNetControlAccept, accept), Equals(true));
+    Assert::That(std::memcmp(accept.payload, issued, 4), Equals(0));
+    Assert::That(server.GetClientCount(), Equals(1));
+  };
+
+  It(should_issue_a_different_nonce_to_every_peer) {
+    NetServer server;
+    Assert::That(server.Start(0, 4), Equals(true));
+
+    std::set<uint32_t> nonces;
+    for (uint8_t tag = 1; tag <= 4; tag++) {
+      RawPeer peer(server, tag);
+      NetControlPacket accepted;
+      Assert::That(peer.Send(kNetControlConnect, peer.clientNonce, 4),
+                   Equals(true));
+      Assert::That(peer.Await(server, kNetControlConnectAccept, accepted),
+                   Equals(true));
+      nonces.insert(NonceToToken(accepted.payload));
+    }
+    Assert::That((int)nonces.size(), Equals(4));
+  };
+
+  It(should_clamp_an_over_long_control_payload_on_the_wire) {
+    // The shared NetSendControl is the single place the payload bound lives
+    // now that NetServer and NetClient both forward to it (P38); an unclamped
+    // memcpy here is what smashed the stack in P3.
+    NetSocket receiver;
+    Assert::That(receiver.Open(0), Equals(true));
+    NetSocket sender;
+    Assert::That(sender.Open(0), Equals(true));
+    NetAddress to = NetAddressFromParts(0x7F000001u, receiver.GetBoundPort());
+
+    std::string huge(kNetMaxPayload + 5000, 'x');
+    Assert::That(NetSendControl(sender, to, kNetControlClose, huge.data(),
+                                (int)huge.size()),
+                 Equals(true));
+
+    uint8_t buf[kNetMaxPacketSize];
+    NetAddress from;
+    int n = -1;
+    uint32_t start = NetNowMs();
+    while (n < 0 && NetNowMs() - start < (uint32_t)kPumpDeadlineMs) {
+      n = receiver.Recv(from, buf, sizeof(buf));
+      if (n < 0)
+        std::this_thread::sleep_for(std::chrono::milliseconds(kPumpStepMs));
+    }
+    Assert::That(n, Equals(kNetMaxPayload + 2));
+    NetControlPacket ctrl;
+    Assert::That(ctrl.Unpack(buf, n), Equals(true));
+    Assert::That(ctrl.message, Equals((int)kNetControlClose));
+    Assert::That(ctrl.payloadSize, Equals(kNetMaxPayload));
+    Assert::That(ctrl.payload[kNetMaxPayload - 1], Equals((uint8_t)'x'));
+  };
+
+  It(should_refuse_a_negative_control_payload_size) {
+    NetSocket sender;
+    Assert::That(sender.Open(0), Equals(true));
+    NetAddress to = NetAddressFromParts(0x7F000001u, 1);
+    uint8_t payload[4] = {};
+    Assert::That(NetSendControl(sender, to, kNetControlConnect, payload, -1),
+                 Equals(false));
   };
 };

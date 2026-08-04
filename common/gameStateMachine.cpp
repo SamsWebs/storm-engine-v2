@@ -14,10 +14,16 @@ void GameStateMachine::sweepDefunct() {
 }
 
 void GameStateMachine::clean() {
-  // The machine owns every state on the stack — exit the active one, then
-  // delete them all (not just the top; a pushed stack would otherwise leak).
-  if (!m_gameStates.empty()) {
-    m_gameStates.back()->onExit();
+  // The machine owns every state on the stack, so every state gets onExit()
+  // before it is deleted -- not just the active one. A pushed-under state was
+  // entered, so it may hold a texture, socket or file handle acquired in
+  // onEnter(); deleting it without the matching onExit() leaks that.
+  //
+  // Top-down, unwinding in the reverse of push order. onExit() is required to
+  // be idempotent (the destructor may run it again), so a state that was
+  // already exited by popState is unharmed.
+  for (auto it = m_gameStates.rbegin(); it != m_gameStates.rend(); ++it) {
+    (*it)->onExit();
   }
   for (GameState *state : m_gameStates) {
     delete state;

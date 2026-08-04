@@ -1,6 +1,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <memory>
 #include <string>
 #include <sys/select.h>
 #include <unistd.h>
@@ -52,7 +53,11 @@ bool ParseChat(const NetChunk &chunk, char name[kMaxNameLen],
 }
 
 int RunHost(uint16_t port) {
-  NetServer server;
+  // NetServer is ~369 KB (16 connection slots inline), so it does not belong
+  // on the stack. A desktop main() has 8 MB and hides this, but SDL runs the
+  // game on its own thread on Android, where the stack is far smaller.
+  auto serverOwner = std::make_unique<NetServer>();
+  NetServer &server = *serverOwner;
   server.SetOnClientConnect(
       [&](int clientId) { printf("== client %d joined ==\n", clientId); });
   server.SetOnClientDisconnect([&](int clientId, const std::string &reason) {
@@ -96,7 +101,9 @@ int RunHost(uint16_t port) {
 }
 
 int RunClient(const std::string &ip, uint16_t port, const std::string &name) {
-  NetClient client;
+  // ~200 KB — off the stack, same reasoning as RunHost above.
+  auto clientOwner = std::make_unique<NetClient>();
+  NetClient &client = *clientOwner;
   bool connected = false;
   bool sessionOver = false;
   client.SetOnConnect([&]() {

@@ -17,11 +17,24 @@ void Logger::Err(const std::string &message) {
 std::string CurrentDateTimeToString() {
   std::time_t now =
       std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+
+  // localtime returns null if the value cannot be represented as local time.
+  // Feeding that to strftime is undefined, and this runs on every log line.
+  const std::tm *local = std::localtime(&now);
+  if (local == nullptr) {
+    return "(unknown time)";
+  }
+
   std::string output(30, '\0');
-  std::strftime(&output[0], output.size(), "%d-%b-%Y %H:%M:%S",
-                std::localtime(&now));
+  const std::size_t written =
+      std::strftime(&output[0], output.size(), "%d-%b-%Y %H:%M:%S", local);
+
+  // strftime reports the characters written, excluding the terminator, and
+  // returns 0 if the buffer was too small. Without this resize the string
+  // keeps its NUL padding and every log line carries ten trailing NUL bytes.
+  output.resize(written);
   return output;
-};
+}
 
 void Logger::SetLogCallback(const LogCallback &callback) {
   log_callback_ = callback;

@@ -452,6 +452,43 @@ Describe(EcsSpec) {
 
       SpecComponentIdCounter::Set(saved);
     };
+
+    // KNOWN_ISSUES.md §4 — PINS A KNOWN LIMITATION, NOT DESIRED BEHAVIOUR.
+    // When RequireComponent<T>() overflows the cap the requirement is dropped
+    // and the system's signature stays empty; membership is
+    // (entitySignature & systemSignature) == systemSignature, which every
+    // entity satisfies against an empty signature. So a system that should
+    // have matched nothing runs on the whole world instead. The clean fix is
+    // a disabled_ latch on System, which changes sizeof(System) — an ABI
+    // break, frozen out of 1.x. A v3 that fixes it must update this case.
+    It(should_match_every_entity_when_a_systems_requirement_overflowed) {
+      // Order-independent: force SpecOverflowComponent's cached id to
+      // MAX_COMPONENTS whether or not the case above has run yet.
+      const std::size_t saved = SpecComponentIdCounter::Get();
+      SpecComponentIdCounter::Set(MAX_COMPONENTS);
+      Assert::That(Component<SpecOverflowComponent>::GetId(),
+                   Equals(static_cast<std::size_t>(MAX_COMPONENTS)));
+      SpecComponentIdCounter::Set(saved);
+
+      Registry registry;
+      registry.AddSystem<SpecOverflowSystem>();
+
+      // Carries no component at all, and still matches.
+      Entity unrelated = registry.CreateEntity();
+      registry.Update();
+
+      Assert::That(registry.GetSystem<SpecOverflowSystem>()
+                       .GetComponentSignature()
+                       .none(),
+                   Equals(true));
+      Assert::That(
+          registry.GetSystem<SpecOverflowSystem>().GetSystemEntities().size(),
+          Equals(1u));
+      Assert::That(registry.GetSystem<SpecOverflowSystem>()
+                       .GetSystemEntities()[0]
+                       .GetId(),
+                   Equals(unrelated.GetId()));
+    };
   };
 
   // P11 — a bare Entity has a null registry pointer; every forwarder used to

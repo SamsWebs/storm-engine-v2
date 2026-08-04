@@ -69,133 +69,164 @@ jobs:
 
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 
-  # ── amd64 (Debian / Ubuntu / Linux Mint) ────────────────────────────────────
-  build-amd64-linux:
+  # ── Linux packages ──────────────────────────────────────────────────────────
+  # amd64 (Debian / Ubuntu / Linux Mint) and arm64 (Raspberry Pi 4/5 on a
+  # 64-bit OS) were two copy-pasted jobs that differed only in platform,
+  # Architecture and one Description line. They had already drifted apart once,
+  # which is how the Depends: field went stale in both at the same time — a
+  # matrix makes that failure mode structurally impossible.
+  build-linux:
     runs-on: ubuntu-latest
     needs: version
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-
-      - name: Build Docker image
-        run: |
-          docker build -t stormenginev2:linux-amd64 \
-            --platform=linux/amd64 \
-            --no-cache \
-            . -f Dockerfile.debian
-
-      - name: Run tests
-        run: docker run --rm stormenginev2:linux-amd64
-
-      - name: Build library and create .deb
-        env:
-          VERSION: ${{ needs.version.outputs.version }}
-        run: |
-          docker run --name build_amd64 stormenginev2:linux-amd64 make target
-          docker cp build_amd64:/opt/library/bin/libstormenginev2.so ./libstormenginev2.so
-          docker cp build_amd64:/opt/library/common ./common
-          docker rm build_amd64
-
-          mkdir -p deb/DEBIAN
-          mkdir -p deb/usr/local/lib
-          mkdir -p deb/usr/local/include/stormengine2
-
-          cp libstormenginev2.so deb/usr/local/lib/
-          cp -r common/* deb/usr/local/include/stormengine2/
-          find deb/usr/local/include/stormengine2 -name "*.o" -delete
-          find deb/usr/local/include/stormengine2 -name "*.cpp" -delete
-
-          printf '#!/bin/sh\nset -e\nldconfig\n' > deb/DEBIAN/postinst
-          chmod 0755 deb/DEBIAN/postinst
-
-          printf "Package: libstormenginev2\nVersion: ${VERSION}\nSection: libs\nPriority: optional\nArchitecture: amd64\nDepends: libsdl2-2.0-0, libsdl2-image-2.0-0, libsdl2-ttf-2.0-0, libsdl2-mixer-2.0-0\nMaintainer: Will Sams <will@samswebs.com>\nHomepage: https://github.com/WillSams/storm-engine-v2\nDescription: Storm Engine v2 - C++ 2-D game-engine library\n A lightweight ECS-based 2-D game engine built on SDL2.\n Provides entity/component/system management, asset loading,\n tilemap support, and game-state machine.\n" > deb/DEBIAN/control
-
-          dpkg-deb --build deb "libstormenginev2_${VERSION}_amd64.deb"
-
-      - name: Upload amd64 .deb
-        uses: actions/upload-artifact@v7
-        with:
-          name: deb-amd64
-          path: libstormenginev2_${{ needs.version.outputs.version }}_amd64.deb
-
-  # ── arm64 (Raspberry Pi 4/5 with 64-bit OS) ─────────────────────────────────
-  build-arm64-linux:
-    runs-on: ubuntu-latest
-    needs: version
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            platform: linux/amd64
+            qemu: false
+          - arch: arm64
+            platform: linux/arm64
+            qemu: true
 
     steps:
       - name: Checkout
         uses: actions/checkout@v7
 
       - name: Set up QEMU
+        if: matrix.qemu
         uses: docker/setup-qemu-action@v4
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
-      - name: Build Docker image (arm64)
+      - name: Build Docker image
         run: |
-          docker build -t stormenginev2:linux-arm64 \
-            --platform=linux/arm64 \
+          docker build -t stormenginev2:linux-${{ matrix.arch }} \
+            --platform=${{ matrix.platform }} \
             --no-cache \
             . -f Dockerfile.debian
 
-      - name: Run tests (arm64)
-        run: docker run --rm --platform=linux/arm64 stormenginev2:linux-arm64
+      - name: Run tests
+        run: |
+          docker run --rm --platform=${{ matrix.platform }} \
+            stormenginev2:linux-${{ matrix.arch }}
 
-      - name: Build library and create .deb
+      # Three things happen in the container, all of which used to happen on the
+      # runner or not at all:
+      #
+      #  * PROFILE=release swaps base.mk's unconditional -g for -O2 and strip
+      #    drops the symbol table. The shipped .deb was an unoptimized,
+      #    unstripped -O0 build while the Switch path was already -O2.
+      #  * `make install DESTDIR=...` replaces a hand-rolled `cp -r common/*`.
+      #    The staged tree and the tree `sudo make install` produces are now
+      #    the same code path, and it wipes the include dir first so
+      #    directories deleted from common/ stop accumulating there.
+      #  * dpkg-shlibdeps derives Depends: from the binary instead of a
+      #    hand-maintained list. The old list claimed SDL2_ttf and SDL2_mixer
+      #    (never linked — --as-needed drops them) and omitted tinyxml2, which
+      #    IS linked: the package installed cleanly on a fresh machine and then
+      #    failed to load. It has to run inside the container because it maps
+      #    sonames to packages through the local dpkg database — the answer is
+      #    both architecture- and distro-specific (libtinyxml2.so.6 is shipped
+      #    by `libtinyxml2-6a`, not by `libtinyxml2-6`).
+      - name: Build library, stage the package tree and derive Depends
+        run: |
+          docker run --name build_${{ matrix.arch }} \
+            --platform=${{ matrix.platform }} \
+            stormenginev2:linux-${{ matrix.arch }} \
+            sh -c 'set -e
+              make PROFILE=release target
+              strip --strip-unneeded bin/libstormenginev2.so
+              make install DESTDIR=/opt/library/pkg
+              readelf -d bin/libstormenginev2.so | grep NEEDED
+              mkdir -p debian
+              printf "Source: libstormenginev2\n\nPackage: libstormenginev2\nArchitecture: any\n" > debian/control
+              dpkg-shlibdeps -O --ignore-missing-info pkg/usr/local/lib/libstormenginev2.so \
+                | sed -n "s/^shlibs:Depends=//p" > pkg/DEPENDS'
+
+          mkdir -p deb
+          docker cp build_${{ matrix.arch }}:/opt/library/pkg/usr ./deb/
+          docker cp build_${{ matrix.arch }}:/opt/library/pkg/DEPENDS ./DEPENDS
+          docker rm build_${{ matrix.arch }}
+
+          ls -l deb/usr/local/lib/libstormenginev2.so
+
+      - name: Check the derived dependencies
+        id: deps
+        run: |
+          DEPENDS=$(cat DEPENDS)
+          echo "Depends: ${DEPENDS}"
+
+          if [ -z "${DEPENDS}" ]; then
+            echo "::error::dpkg-shlibdeps produced no dependencies"
+            exit 1
+          fi
+
+          # The specific regression this guards: tinyxml2 is linked by
+          # common/xmlLoader.cpp and was missing from the shipped Depends: for
+          # every release up to v1.2.1.
+          case "${DEPENDS}" in
+            *tinyxml2*) ;;
+            *)
+              echo "::error::tinyxml2 is not in the derived Depends:"
+              exit 1
+              ;;
+          esac
+
+          echo "depends=${DEPENDS}" >> "$GITHUB_OUTPUT"
+
+      - name: Build the .deb
         env:
           VERSION: ${{ needs.version.outputs.version }}
+          ARCH: ${{ matrix.arch }}
+          DEPENDS: ${{ steps.deps.outputs.depends }}
         run: |
-          docker run --name build_arm64 --platform=linux/arm64 \
-            stormenginev2:linux-arm64 make target
-          docker cp build_arm64:/opt/library/bin/libstormenginev2.so ./libstormenginev2.so
-          docker cp build_arm64:/opt/library/common ./common
-          docker rm build_arm64
-
           mkdir -p deb/DEBIAN
-          mkdir -p deb/usr/local/lib
-          mkdir -p deb/usr/local/include/stormengine2
-
-          cp libstormenginev2.so deb/usr/local/lib/
-          cp -r common/* deb/usr/local/include/stormengine2/
-          find deb/usr/local/include/stormengine2 -name "*.o" -delete
-          find deb/usr/local/include/stormengine2 -name "*.cpp" -delete
-
           printf '#!/bin/sh\nset -e\nldconfig\n' > deb/DEBIAN/postinst
           chmod 0755 deb/DEBIAN/postinst
 
-          printf "Package: libstormenginev2\nVersion: ${VERSION}\nSection: libs\nPriority: optional\nArchitecture: arm64\nDepends: libsdl2-2.0-0, libsdl2-image-2.0-0, libsdl2-ttf-2.0-0, libsdl2-mixer-2.0-0\nMaintainer: Will Sams <will@samswebs.com>\nHomepage: https://github.com/WillSams/storm-engine-v2\nDescription: Storm Engine v2 - C++ 2-D game-engine library\n A lightweight ECS-based 2-D game engine built on SDL2.\n Provides entity/component/system management, asset loading,\n tilemap support, and game-state machine.\n .\n This build targets arm64 / AArch64 (Raspberry Pi 4/5 with 64-bit OS).\n" > deb/DEBIAN/control
+          {
+            echo "Package: libstormenginev2"
+            echo "Version: ${VERSION}"
+            echo "Section: libs"
+            echo "Priority: optional"
+            echo "Architecture: ${ARCH}"
+            echo "Depends: ${DEPENDS}"
+            echo "Maintainer: Will Sams <will@samswebs.com>"
+            echo "Homepage: https://github.com/WillSams/storm-engine-v2"
+            echo "Description: Storm Engine v2 - C++ 2-D game-engine library"
+            echo " A lightweight ECS-based 2-D game engine built on SDL2."
+            echo " Provides entity/component/system management, asset loading,"
+            echo " tilemap support, and game-state machine."
+            if [ "${ARCH}" = "arm64" ]; then
+              echo " ."
+              echo " This build targets arm64 / AArch64 (Raspberry Pi 4/5 with 64-bit OS)."
+            fi
+          } > deb/DEBIAN/control
 
-          dpkg-deb --build deb "libstormenginev2_${VERSION}_arm64.deb"
+          cat deb/DEBIAN/control
+          dpkg-deb --build deb "libstormenginev2_${VERSION}_${ARCH}.deb"
 
-      - name: Upload arm64 .deb
+      - name: Upload .deb
         uses: actions/upload-artifact@v7
         with:
-          name: deb-arm64
-          path: libstormenginev2_${{ needs.version.outputs.version }}_arm64.deb
+          name: deb-${{ matrix.arch }}
+          path: libstormenginev2_${{ needs.version.outputs.version }}_${{ matrix.arch }}.deb
 
   # ── GitHub Release ───────────────────────────────────────────────────────────
   release:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-    needs: [version, build-amd64-linux, build-arm64-linux]
+    needs: [version, build-linux]
 
     steps:
-      - name: Download amd64 artifact
+      - name: Download .deb artifacts
         uses: actions/download-artifact@v8
         with:
-          name: deb-amd64
-
-      - name: Download arm64 artifact
-        uses: actions/download-artifact@v8
-        with:
-          name: deb-arm64
+          pattern: deb-*
+          merge-multiple: true
 
       - name: Create release
         uses: softprops/action-gh-release@v3

@@ -1,6 +1,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <memory>
 #include <string>
 #include <unistd.h>
 
@@ -61,7 +62,11 @@ int RunHost(uint16_t port) {
     players[i].vy = ((i / 2) % 2 ? 1 : -1) * (1 + i % 2);
   }
 
-  NetServer server;
+  // NetServer is ~369 KB (16 connection slots inline), so it does not belong
+  // on the stack. A desktop main() has 8 MB and hides this, but SDL runs the
+  // game on its own thread on Android, where the stack is far smaller.
+  auto serverOwner = std::make_unique<NetServer>();
+  NetServer &server = *serverOwner;
   server.SetOnClientConnect(
       [&](int clientId) { printf("== client %d joined ==\n", clientId); });
   server.SetOnClientDisconnect([&](int clientId, const std::string &reason) {
@@ -95,14 +100,22 @@ int RunHost(uint16_t port) {
       if (!server.IsClientConnected(i))
         continue;
       NetSnapshot &base = bases[i];
-      uint8_t delta[NetSnapshotDelta::EstimateSize(base, snap)];
+      // Fixed bound, not a VLA sized by EstimateSize: VLAs are a GCC extension
+      // MSVC rejects, and the estimate bounds the delta rather than what a
+      // NetMessageWriter can actually carry (kMaxSize == kNetMaxChunkSize).
+      uint8_t delta[kNetMaxChunkSize];
       int n = NetSnapshotDelta::Create(base, snap, delta, sizeof(delta));
       if (n > 0) { // 0 = nothing changed, send nothing
         NetMessageWriter msg;
         msg.WriteInt(kMsgDelta);
         msg.WriteInt(tick);
-        msg.WriteRaw(delta, n);
-        server.Send(i, msg.Data(), msg.Size(), true);
+        // Advance the base only once the delta has actually gone out. WriteRaw
+        // fails when the message would exceed kMaxSize; advancing anyway would
+        // leave the client's base behind the host's for good, and every later
+        // delta would decode against the wrong world with nothing reporting it.
+        if (!msg.WriteRaw(delta, n) ||
+            !server.Send(i, msg.Data(), msg.Size(), true))
+          continue;
         base = snap; // the client now has this as its base
       }
     }
@@ -139,7 +152,9 @@ void RenderField(const NetSnapshot &snap, int tick) {
 }
 
 int RunClient(const std::string &ip, uint16_t port) {
-  NetClient client;
+  // ~200 KB — off the stack, same reasoning as the host path above.
+  auto clientOwner = std::make_unique<NetClient>();
+  NetClient &client = *clientOwner;
   client.SetOnConnect([&]() {
     printf("== connected to %s:%u — replicating ==\n", ip.c_str(), port);
   });

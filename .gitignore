@@ -2,6 +2,9 @@
 *.o
 *.obj
 
+# Header dependency files written next to every object by base.mk's -MMD -MP.
+*.d
+
 # Build results
 [Dd]ebug/
 [Rr]elease/
@@ -49,3 +52,6 @@ docs/TECH_DEBT.md
 
 # Editor runtime state (ImGui rewrites ./imgui.ini in the CWD on every run)
 editor/imgui.ini
+
+# Build-flag stamp (base.mk) — invalidates objects when PROFILE/OPT change
+.build-flags

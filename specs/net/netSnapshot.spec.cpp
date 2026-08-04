@@ -338,9 +338,17 @@ Describe(NetSnapshotSpec) {
       AddSkater(to, 1, 10, 21, 100);
       AddSkater(to, 2, 50, 60, 70);
       to.Finish();
-      uint8_t delta[NetSnapshotDelta::EstimateSize(from, to)];
+      // A fixed buffer, not uint8_t delta[EstimateSize(from, to)]: that is a
+      // C99 VLA, a GCC extension MSVC rejects, and docs/networking.md used to
+      // teach it. kNetMaxChunkSize is the real ceiling anyway — a delta larger
+      // than one chunk cannot be sent (P36).
+      uint8_t delta[kNetMaxChunkSize];
+      Assert::That(NetSnapshotDelta::EstimateSize(from, to),
+                   Is().LessThanOrEqualTo((int)sizeof(delta)));
       int n = NetSnapshotDelta::Create(from, to, delta, sizeof(delta));
       Assert::That(n, Is().GreaterThanOrEqualTo(0));
+      Assert::That(
+          n, Is().LessThanOrEqualTo(NetSnapshotDelta::EstimateSize(from, to)));
     };
     It(should_reject_a_delta_with_trailing_bytes) {
       NetSnapshot from;

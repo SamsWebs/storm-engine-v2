@@ -268,11 +268,20 @@ Describe(NetPacketSpec) {
   // here is the observable contract the old xorshift also had to meet.
   Describe(Nonces) {
     It(should_not_repeat_across_a_large_sample) {
+      // Near-zero repeats, not provably zero. 4096 draws from a uniform 32-bit
+      // generator collide about 0.2% of the time by the birthday bound
+      // (1 - exp(-4096*4095/2^33)), measured at 36 collisions in 20,000 trials.
+      // Asserting Equals(kSamples) was safe only against the old xorshift64,
+      // whose full-period state made 4096 consecutive outputs deterministically
+      // distinct; against a real CSPRNG it is a coin flip that reds roughly one
+      // CI run in 550, and each failure reads like a security regression.
+      // The margin below still fails instantly on a short period or a stuck
+      // bit.
       const int kSamples = 4096;
       std::set<uint32_t> seen;
       for (int i = 0; i < kSamples; i++)
         seen.insert(NetNonce32());
-      Assert::That((int)seen.size(), Equals(kSamples));
+      Assert::That((int)seen.size(), Is().GreaterThan(kSamples - 4));
     };
     It(should_set_every_bit_position_about_half_the_time) {
       const int kSamples = 4096;

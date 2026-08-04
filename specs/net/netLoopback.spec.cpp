@@ -4,6 +4,7 @@
 #include <set>
 #include <string>
 #include <thread>
+#include <vector>
 
 #include <igloo/igloo_alt.h>
 
@@ -29,6 +30,25 @@ bool PumpUntil(NetServer &server, NetClient &client, int timeoutMs,
     server.Poll();
     client.Update();
     client.Poll();
+    if (done())
+      return true;
+    std::this_thread::sleep_for(std::chrono::milliseconds(kPumpStepMs));
+  }
+  return false;
+}
+
+// Two clients against one server: the slot table only shows its holes with
+// more than one client on it.
+bool PumpUntil2(NetServer &server, NetClient &a, NetClient &b, int timeoutMs,
+                std::function<bool()> done) {
+  uint32_t start = NetNowMs();
+  while (NetNowMs() - start < (uint32_t)timeoutMs) {
+    server.Update();
+    server.Poll();
+    a.Update();
+    a.Poll();
+    b.Update();
+    b.Poll();
     if (done())
       return true;
     std::this_thread::sleep_for(std::chrono::milliseconds(kPumpStepMs));
@@ -341,6 +361,135 @@ Describe(NetLoopbackSpec) {
     Assert::That(ctrl.message, Equals((int)kNetControlClose));
     Assert::That(ctrl.payloadSize, Equals(kNetMaxPayload));
     Assert::That(ctrl.payload[kNetMaxPayload - 1], Equals((uint8_t)'x'));
+  };
+
+  It(should_keep_reaching_the_high_id_client_after_a_low_id_disconnects) {
+    // P36. Client ids are slot indices, not a dense 0..count-1 range:
+    // FreeSlot clears the slot in place and the table is never compacted.
+    // docs/networking.md taught `for (i = 0; i < GetClientCount(); i++)`,
+    // which after one disconnect sends to a freed id and skips the survivor.
+    NetServer server;
+    Assert::That(server.Start(0, 4), Equals(true));
+
+    NetClient low, high;
+    bool lowUp = false, highUp = false;
+    low.SetOnConnect([&]() { lowUp = true; });
+    high.SetOnConnect([&]() { highUp = true; });
+
+    // Join sequentially so the slots are deterministic: FindFreeSlot always
+    // returns the lowest free index, so low takes 0 and high takes 1.
+    Assert::That(low.Connect("127.0.0.1", server.GetPort()), Equals(true));
+    Assert::That(
+        PumpUntil2(server, low, high, kPumpDeadlineMs, [&]() { return lowUp; }),
+        Equals(true));
+    Assert::That(high.Connect("127.0.0.1", server.GetPort()), Equals(true));
+    Assert::That(PumpUntil2(server, low, high, kPumpDeadlineMs,
+                            [&]() { return highUp; }),
+                 Equals(true));
+    Assert::That(server.GetClientCount(), Equals(2));
+    Assert::That(server.IsClientConnected(0), Equals(true));
+    Assert::That(server.IsClientConnected(1), Equals(true));
+
+    std::string lowReason;
+    low.SetOnDisconnect([&](const std::string &why) { lowReason = why; });
+    server.DisconnectClient(0, "bye");
+    Assert::That(PumpUntil2(server, low, high, kPumpDeadlineMs,
+                            [&]() { return !lowReason.empty(); }),
+                 Equals(true));
+
+    // The hole stays: the count drops but the surviving id does not move.
+    Assert::That(server.GetClientCount(), Equals(1));
+    Assert::That(server.IsClientConnected(0), Equals(false));
+    Assert::That(server.IsClientConnected(1), Equals(true));
+
+    int32_t payload = 4242;
+    // The old documented loop would only ever touch id 0, which is now free.
+    Assert::That(server.Send(0, &payload, sizeof(payload), true),
+                 Equals(false));
+
+    int32_t highSeen = 0;
+    high.SetOnChunk([&](const NetChunk &chunk) { highSeen = RecvInt(chunk); });
+
+    // The documented replacement walks the slot table and skips the holes.
+    int sent = 0;
+    for (int id = 0; id < NetServer::kMaxClients; id++) {
+      if (!server.IsClientConnected(id))
+        continue;
+      if (server.Send(id, &payload, sizeof(payload), true))
+        sent++;
+    }
+    Assert::That(sent, Equals(1));
+    Assert::That(PumpUntil2(server, low, high, kPumpDeadlineMs,
+                            [&]() { return highSeen == 4242; }),
+                 Equals(true));
+
+    // Broadcast — the other documented pattern — reaches the same survivor.
+    highSeen = 0;
+    int32_t second = 777;
+    Assert::That(server.Broadcast(&second, sizeof(second), true), Equals(true));
+    Assert::That(PumpUntil2(server, low, high, kPumpDeadlineMs,
+                            [&]() { return highSeen == 777; }),
+                 Equals(true));
+  };
+
+  It(should_reuse_a_freed_slot_id_for_the_next_joiner) {
+    // The other half of the id contract docs/networking.md now states: a freed
+    // id is handed out again, so per-client game state keyed by id must be
+    // cleared in the disconnect callback.
+    NetServer server;
+    Assert::That(server.Start(0, 4), Equals(true));
+
+    NetClient low, high;
+    bool lowUp = false, highUp = false;
+    low.SetOnConnect([&]() { lowUp = true; });
+    high.SetOnConnect([&]() { highUp = true; });
+    Assert::That(low.Connect("127.0.0.1", server.GetPort()), Equals(true));
+    Assert::That(
+        PumpUntil2(server, low, high, kPumpDeadlineMs, [&]() { return lowUp; }),
+        Equals(true));
+    Assert::That(high.Connect("127.0.0.1", server.GetPort()), Equals(true));
+    Assert::That(PumpUntil2(server, low, high, kPumpDeadlineMs,
+                            [&]() { return highUp; }),
+                 Equals(true));
+
+    std::string lowReason;
+    low.SetOnDisconnect([&](const std::string &why) { lowReason = why; });
+    server.DisconnectClient(0, "bye");
+    Assert::That(PumpUntil2(server, low, high, kPumpDeadlineMs,
+                            [&]() { return !lowReason.empty(); }),
+                 Equals(true));
+
+    int rejoinedId = -1;
+    server.SetOnClientConnect([&](int id) { rejoinedId = id; });
+    NetClient rejoin;
+    bool rejoinUp = false;
+    rejoin.SetOnConnect([&]() { rejoinUp = true; });
+    Assert::That(rejoin.Connect("127.0.0.1", server.GetPort()), Equals(true));
+    Assert::That(PumpUntil2(server, rejoin, high, kPumpDeadlineMs,
+                            [&]() { return rejoinUp; }),
+                 Equals(true));
+
+    Assert::That(rejoinedId, Equals(0)); // the hole, not id 2
+    Assert::That(server.GetClientCount(), Equals(2));
+    Assert::That(server.IsClientConnected(1), Equals(true));
+  };
+
+  It(should_refuse_a_chunk_larger_than_the_chunk_ceiling) {
+    // docs/networking.md's replication recipe sizes its delta buffer at
+    // kNetMaxChunkSize because that is the real send ceiling — anything
+    // bigger is refused outright rather than fragmented.
+    Rendezvous r(0);
+    Assert::That(r.Connect(), Equals(true));
+
+    std::vector<uint8_t> big(kNetMaxChunkSize + 1, 0xAB);
+    Assert::That(r.server.Send(r.clientId, big.data(), (int)big.size(), true),
+                 Equals(false));
+    Assert::That(r.server.Broadcast(big.data(), (int)big.size(), true),
+                 Equals(false));
+    // The refusal is clean: the connection is untouched and still usable.
+    Assert::That(r.server.Send(r.clientId, big.data(), kNetMaxChunkSize, true),
+                 Equals(true));
+    Assert::That(r.server.GetClientCount(), Equals(1));
   };
 
   It(should_refuse_a_negative_control_payload_size) {

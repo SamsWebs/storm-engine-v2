@@ -12,22 +12,59 @@ class TrackedState : public GameState {
 public:
   TrackedState(std::string id, int *enters = nullptr, int *exits = nullptr,
                int *resumes = nullptr, int *dtors = nullptr)
-      : id_(std::move(id)), enters_(enters), exits_(exits),
-        resumes_(resumes), dtors_(dtors) {}
+      : id_(std::move(id)), enters_(enters), exits_(exits), resumes_(resumes),
+        dtors_(dtors) {}
 
-  ~TrackedState() override { if (dtors_) (*dtors_)++; }
+  ~TrackedState() override {
+    if (dtors_)
+      (*dtors_)++;
+  }
 
   void processInput() override {}
   void update() override {}
   void render() override {}
-  bool onEnter() override { if (enters_) (*enters_)++; return true; }
-  bool onExit() override  { if (exits_)  (*exits_)++;  return true; }
-  void resume() override  { if (resumes_) (*resumes_)++; }
+  bool onEnter() override {
+    if (enters_)
+      (*enters_)++;
+    return true;
+  }
+  bool onExit() override {
+    if (exits_)
+      (*exits_)++;
+    return true;
+  }
+  void resume() override {
+    if (resumes_)
+      (*resumes_)++;
+  }
   std::string getStateID() const override { return id_; }
 
 private:
   std::string id_;
   int *enters_, *exits_, *resumes_, *dtors_;
+};
+
+// Records the order onExit() is called in, which a per-state counter cannot
+// show. clean() unwinds top-down, so the log reads back in reverse push order.
+class ExitOrderState : public GameState {
+public:
+  ExitOrderState(std::string id, std::vector<std::string> *log)
+      : id_(std::move(id)), log_(log) {}
+
+  void processInput() override {}
+  void update() override {}
+  void render() override {}
+  bool onEnter() override { return true; }
+  bool onExit() override {
+    if (log_)
+      log_->push_back(id_);
+    return true;
+  }
+  std::string getStateID() const override { return id_; }
+
+private:
+  std::string id_;
+  std::vector<std::string> *log_;
 };
 
 Describe(GameStateMachineSpec) {
@@ -82,7 +119,8 @@ Describe(GameStateMachineChangeStateSpec) {
     auto *a = new TrackedState("SAME", nullptr, &exitsA);
     sm.changeState(a);
     sm.changeState(new TrackedState("SAME", &entersB));
-    // The original state stays on top; new one is neither entered nor swapped in.
+    // The original state stays on top; new one is neither entered nor swapped
+    // in.
     Assert::That(exitsA, Equals(0));
     Assert::That(entersB, Equals(0));
     Assert::That(sm.getGameStates()[0], Equals(a));
@@ -137,7 +175,7 @@ Describe(GameStateMachineOwnershipSpec) {
     sm.pushState(new TrackedState("B", nullptr, nullptr, nullptr, &dtors));
     sm.popState();
     Assert::That(dtors, Equals(0)); // deferred
-    sm.processInput(); // either tick entry sweeps
+    sm.processInput();              // either tick entry sweeps
     Assert::That(dtors, Equals(1));
     sm.clean();
   };
@@ -156,7 +194,8 @@ Describe(GameStateMachineOwnershipSpec) {
     GameStateMachine sm;
     int dtors = 0;
     sm.changeState(new TrackedState("A", nullptr, nullptr, nullptr, &dtors));
-    sm.changeState(new TrackedState("B", nullptr, nullptr, nullptr, &dtors)); // A defunct
+    sm.changeState(
+        new TrackedState("B", nullptr, nullptr, nullptr, &dtors)); // A defunct
     sm.pushState(new TrackedState("C", nullptr, nullptr, nullptr, &dtors));
     sm.clean(); // deletes the stack (B, C) and sweeps the defunct list (A)
     Assert::That(dtors, Equals(3));
@@ -172,6 +211,45 @@ Describe(GameStateMachineCleanSpec) {
     sm.clean();
     Assert::That(exits, Equals(1));
     Assert::That(sm.getGameStates().size(), Equals(0));
+  };
+
+  // A one-deep stack passes the case above whether or not clean() walks the
+  // whole stack — the top state is the only state. These two exercise the
+  // part that was unverified: every pushed-under state was entered, so every
+  // one of them owes an onExit() before it is deleted.
+  It(should_exit_every_state_on_clean_not_just_the_top) {
+    GameStateMachine sm;
+    int bottomExits = 0;
+    int middleExits = 0;
+    int topExits = 0;
+    sm.pushState(new TrackedState("A", nullptr, &bottomExits));
+    sm.pushState(new TrackedState("B", nullptr, &middleExits));
+    sm.pushState(new TrackedState("C", nullptr, &topExits));
+
+    // Pushing does not exit the state underneath.
+    Assert::That(bottomExits, Equals(0));
+
+    sm.clean();
+
+    Assert::That(topExits, Equals(1));
+    Assert::That(middleExits, Equals(1));
+    Assert::That(bottomExits, Equals(1));
+    Assert::That(sm.getGameStates().size(), Equals(0));
+  };
+
+  It(should_unwind_the_stack_in_reverse_push_order_on_clean) {
+    GameStateMachine sm;
+    std::vector<std::string> exited;
+    sm.pushState(new ExitOrderState("A", &exited));
+    sm.pushState(new ExitOrderState("B", &exited));
+    sm.pushState(new ExitOrderState("C", &exited));
+
+    sm.clean();
+
+    Assert::That(exited.size(), Equals(3u));
+    Assert::That(exited[0], Equals("C"));
+    Assert::That(exited[1], Equals("B"));
+    Assert::That(exited[2], Equals("A"));
   };
 };
 

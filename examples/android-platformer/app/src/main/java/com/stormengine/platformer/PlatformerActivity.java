@@ -1,7 +1,9 @@
 package com.stormengine.platformer;
 
+import android.content.pm.ActivityInfo;
 import android.content.res.AssetManager;
 import android.os.Bundle;
+import android.util.Log;
 
 import org.libsdl.app.SDLActivity;
 
@@ -31,6 +33,37 @@ public class PlatformerActivity extends SDLActivity {
     @Override
     protected String[] getLibraries() {
         return new String[] { "SDL2", "SDL2_image", "SDL2_ttf", "SDL2_mixer", "main" };
+    }
+
+    /**
+     * Follow the sensor in all four orientations, whatever the phone's
+     * auto-rotate toggle says.
+     *
+     * SDL calls this from native code as the window is created and it
+     * overwrites android:screenOrientation from the manifest, so the manifest
+     * alone cannot decide this. For a resizable window with no
+     * SDL_HINT_ORIENTATIONS set, SDLActivity picks SCREEN_ORIENTATION_FULL_USER,
+     * which honours the system auto-rotate lock — on a device with auto-rotate
+     * off the app is then pinned to the user's preferred orientation and never
+     * turns. FULL_SENSOR ignores that lock.
+     *
+     * Setting the hint instead would not help: SDLActivity still resolves a
+     * resizable window allowing both orientations to FULL_USER.
+     *
+     * Orientation is a per-game decision — a game that should stay landscape
+     * simply does not override this and sets screenOrientation in its own
+     * manifest.
+     */
+    @Override
+    public void setOrientationBis(int w, int h, boolean resizable, String hint) {
+        // Mirrors the line SDLActivity logs here, so `adb logcat | grep
+        // setOrientation` still shows what was requested and why.
+        Log.v("SDL", "setOrientation() overridden by PlatformerActivity:"
+                + " requestedOrientation=" + ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR
+                + " (FULL_SENSOR, ignores the auto-rotate lock)"
+                + " width=" + w + " height=" + h
+                + " resizable=" + resizable + " hint=" + hint);
+        setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR);
     }
 
     private void copyAssetDir(String srcPath, File dst) {

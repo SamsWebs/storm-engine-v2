@@ -15,7 +15,7 @@ A lightweight, ECS-based 2D game engine built on SDL2 — made for game jams and
 - **Asset store** for textures
 - **Game state machine** for managing scenes
 - **Logger** utility
-- **Virtual gamepad** for touch devices — d-pad + action-button layout, pure and spec'd (`<stormengine2/input/virtualGamepad.h>`)
+- **Virtual gamepad** for touch devices — d-pad + action-button layout, pure and spec'd (`<stormengine2/input/virtualGamepad.h>`), driven by `examples/android-platformer`
 - **UDP networking** — host/join LAN play: reliable + unreliable chunks, kick/ban/timeout, snapshot replication with per-client deltas and a prediction cache (`<stormengine2/net/net.h>`, see [docs/networking.md](docs/networking.md))
 - Built-in **tile map editor** with drag-to-paint, drag-to-erase, and layer support
 - Example games: platformer, shooter, strategy, puzzle, JRPG, sports, Android platformer
@@ -242,11 +242,16 @@ cd examples/android-platformer
 adb shell am start -n com.stormengine.platformer/.PlatformerActivity
 ```
 
-The example adds on-screen touch pads (pure, spec'd zone logic) on top of the
-desktop platformer, letterboxes a fixed logical resolution onto any screen, and
-extracts APK assets to internal storage at first launch so the engine's
-plain-file I/O works unchanged. See the example README for the build gotchas
-(shared vs. static SDL, the `SDL2/SDL_image.h` include shim, adb multi-device).
+The example drives the engine's virtual gamepad (`<stormengine2/input/virtualGamepad.h>`
+— circular d-pad plus action diamond, pure and spec'd) on top of the desktop
+platformer, letterboxes a fixed logical resolution onto any screen, and extracts
+APK assets to internal storage at first launch so the engine's plain-file I/O
+works unchanged. It follows the phone through all four orientations even when
+the system auto-rotate toggle is off; orientation is a per-game decision made
+in the game's own Activity, not by the engine. See the example README for the
+controls, the orientation mechanics (SDL overrides the manifest at window
+creation), and the build gotchas (shared vs. static SDL, the
+`SDL2/SDL_image.h` include shim, adb multi-device).
 
 ### Using Storm Engine in your own Android project
 

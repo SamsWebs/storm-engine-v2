@@ -18,9 +18,18 @@ The binary is written to `bin/netplay-checkers`.
 Start the host, then join from other machines or terminals:
 
 ```bash
-./bin/netplay-checkers host 51235          # on the host machine
-./bin/netplay-checkers 192.168.1.10 51235  # on a client machine
+./bin/netplay-checkers host 51235                    # on the host machine
+./bin/netplay-checkers <host-ip|localhost> 51235     # on a client machine
 ```
+
+`<host-ip>` is **the host machine's own LAN address** — substitute it, do not
+type it literally. Find it on the host with `hostname -I` (or `ip -4 addr`).
+Both processes on the same machine? Use `localhost`.
+
+There is no error for pointing a client at an address nothing is listening on:
+the client retries the handshake, the server never sees a packet, and after
+about ten seconds the client times out and shuts down. If a client never
+reaches the lobby, check the address first.
 
 The first two connected players are seated RED and BLACK; everyone else watches as a spectator. The host starts the game with `S`.
 

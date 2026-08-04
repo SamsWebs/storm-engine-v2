@@ -2,6 +2,7 @@
 
 #include <SDL2/SDL.h>
 #include <algorithm>
+#include <cmath>
 
 const std::string PlayState::s_playID = "PLAY";
 
@@ -17,8 +18,8 @@ PlayState::PlayState(SDL_Renderer *renderer, int windowWidth, int windowHeight,
   registry_.AddSystem<RenderColliderSystem>();
 
   solidGrid_.assign(LEVEL_ROWS, std::vector<bool>(LEVEL_COLS, false));
-  zones_ = MakeDefaultZones(static_cast<float>(windowWidth_),
-                            static_cast<float>(windowHeight_));
+  vpad_ = MakeVPadLayout(static_cast<float>(windowWidth_),
+                         static_cast<float>(windowHeight_));
 
   LoadAssets();
   SpawnTiles();
@@ -61,8 +62,7 @@ void PlayState::SpawnTiles() {
     e.AddComponent<TransformComponent>(glm::vec2(worldX, worldY),
                                        glm::vec2(TILE_SCALE, TILE_SCALE), 0.0);
     e.AddComponent<SpriteComponent>(tile.assetId, TILE_SIZE, TILE_SIZE,
-                                    tile.zIndex, false,
-                                    tile.pixelSrcPosition.x,
+                                    tile.zIndex, false, tile.pixelSrcPosition.x,
                                     tile.pixelSrcPosition.y);
     e.Group("solid");
     e.AddComponent<BoxColliderComponent>(TILE_PX, TILE_PX);
@@ -96,26 +96,45 @@ void PlayState::PollTouches() {
   TouchPoint points[10];
   int count = 0;
 
+  // finger->x/y are normalised over the whole drawable, letterbox bars
+  // included. The logical size is a fixed 800x480 (5:3) letterboxed onto a
+  // display that is usually wider, so scaling by windowWidth_ directly would
+  // squash every touch toward the centre and the controls would respond
+  // somewhere other than where they are drawn. Go through the renderer, which
+  // knows the viewport offset and scale.
+  int outW = 0, outH = 0;
+  SDL_GetRendererOutputSize(renderer_, &outW, &outH);
+
   int devices = SDL_GetNumTouchDevices();
   for (int d = 0; d < devices && count < 10; ++d) {
     SDL_TouchID id = SDL_GetTouchDevice(d);
     int fingers = SDL_GetNumTouchFingers(id);
     for (int f = 0; f < fingers && count < 10; ++f) {
       SDL_Finger *finger = SDL_GetTouchFinger(id, f);
-      if (!finger) continue;
-      // Normalized [0..1] → logical window pixels (logical size letterboxes,
-      // so this matches the render coordinate space).
-      points[count].x = finger->x * windowWidth_;
-      points[count].y = finger->y * windowHeight_;
+      if (!finger)
+        continue;
+      float lx = 0.0f, ly = 0.0f;
+      SDL_RenderWindowToLogical(renderer_, static_cast<int>(finger->x * outW),
+                                static_cast<int>(finger->y * outH), &lx, &ly);
+      points[count].x = lx;
+      points[count].y = ly;
       ++count;
     }
   }
 
-  TouchInput in = EvalTouches(zones_, points, count);
-  moveLeft_  = moveLeft_  || in.left;
-  moveRight_ = moveRight_ || in.right;
-  if (in.jump && !prevTouchJump_) jumpPress_ = true; // edge, like a key press
-  prevTouchJump_ = in.jump;
+  vpadState_ = EvalVPad(vpad_, points, count);
+
+  // Assign, never accumulate. Lifting a finger produces no event -- it simply
+  // stops appearing in the touch list -- so `moveRight_ |= ...` would latch on
+  // at the first touch and never clear on a device with no keyboard.
+  moveLeft_ = keyLeft_ || vpadState_.left;
+  moveRight_ = keyRight_ || vpadState_.right;
+
+  // A jumps, and so does d-pad up — the keyboard already maps UP/W to jump.
+  bool jump = vpadState_.a || vpadState_.up;
+  if (jump && !prevJump_)
+    jumpPress_ = true; // edge, like a key press
+  prevJump_ = jump;
 }
 
 void PlayState::processInput() {
@@ -131,17 +150,35 @@ void PlayState::processInput() {
       case SDLK_AC_BACK: // Android back button
         isRunning_ = false;
         return;
-      case SDLK_LEFT:  case SDLK_a: moveLeft_  = true; break;
-      case SDLK_RIGHT: case SDLK_d: moveRight_ = true; break;
-      case SDLK_SPACE: case SDLK_UP: case SDLK_w: jumpPress_ = true; break;
-      default: break;
+      case SDLK_LEFT:
+      case SDLK_a:
+        keyLeft_ = true;
+        break;
+      case SDLK_RIGHT:
+      case SDLK_d:
+        keyRight_ = true;
+        break;
+      case SDLK_SPACE:
+      case SDLK_UP:
+      case SDLK_w:
+        jumpPress_ = true;
+        break;
+      default:
+        break;
       }
       break;
     case SDL_KEYUP:
       switch (event.key.keysym.sym) {
-      case SDLK_LEFT:  case SDLK_a: moveLeft_  = false; break;
-      case SDLK_RIGHT: case SDLK_d: moveRight_ = false; break;
-      default: break;
+      case SDLK_LEFT:
+      case SDLK_a:
+        keyLeft_ = false;
+        break;
+      case SDLK_RIGHT:
+      case SDLK_d:
+        keyRight_ = false;
+        break;
+      default:
+        break;
       }
       break;
     default:
@@ -161,8 +198,14 @@ void PlayState::ResolvePlayer(float dt) {
   int ph = static_cast<int>(PLAYER_H * PLAYER_SCALE);
 
   float vx = 0.0f;
-  if (moveLeft_)  { vx = -pc.moveSpeed; pc.facingRight = false; }
-  if (moveRight_) { vx =  pc.moveSpeed; pc.facingRight = true;  }
+  if (moveLeft_) {
+    vx = -pc.moveSpeed;
+    pc.facingRight = false;
+  }
+  if (moveRight_) {
+    vx = pc.moveSpeed;
+    pc.facingRight = true;
+  }
 
   if (jumpPress_ && pc.isOnGround) {
     pc.velocity.y = pc.jumpSpeed;
@@ -241,13 +284,15 @@ void PlayState::update() {
   Entity player = registry_.GetEntityByTag("player");
   auto &transform = registry_.GetComponent<TransformComponent>(player);
 
-  float levelWidth  = LEVEL_COLS * TILE_PX;
+  float levelWidth = LEVEL_COLS * TILE_PX;
   float levelHeight = LEVEL_ROWS * TILE_PX;
 
-  float targetX = transform.position.x - windowWidth_  / 2.0f + (PLAYER_W * PLAYER_SCALE) / 2.0f;
-  float targetY = transform.position.y - windowHeight_ / 2.0f + (PLAYER_H * PLAYER_SCALE) / 2.0f;
+  float targetX = transform.position.x - windowWidth_ / 2.0f +
+                  (PLAYER_W * PLAYER_SCALE) / 2.0f;
+  float targetY = transform.position.y - windowHeight_ / 2.0f +
+                  (PLAYER_H * PLAYER_SCALE) / 2.0f;
 
-  camera_.x = std::max(0.0f, std::min(targetX, levelWidth  - windowWidth_));
+  camera_.x = std::max(0.0f, std::min(targetX, levelWidth - windowWidth_));
   camera_.y = std::max(0.0f, std::min(targetY, levelHeight - windowHeight_));
 
   registry_.Update();
@@ -256,18 +301,53 @@ void PlayState::update() {
 void PlayState::RenderTouchOverlay() {
   SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
 
-  auto drawZone = [&](const TouchZone &z, bool held) {
+  // `bound` dims the controls this game does not read, so the overlay never
+  // implies an input that does nothing.
+  auto drawZone = [&](const TouchZone &z, bool held, bool bound) {
     SDL_Rect r = {static_cast<int>(z.x), static_cast<int>(z.y),
                   static_cast<int>(z.w), static_cast<int>(z.h)};
-    SDL_SetRenderDrawColor(renderer_, 255, 255, 255, held ? 90 : 40);
+    SDL_SetRenderDrawColor(renderer_, 255, 255, 255,
+                           held ? 90 : (bound ? 40 : 15));
     SDL_RenderFillRect(renderer_, &r);
-    SDL_SetRenderDrawColor(renderer_, 255, 255, 255, 140);
+    SDL_SetRenderDrawColor(renderer_, 255, 255, 255, bound ? 140 : 60);
     SDL_RenderDrawRect(renderer_, &r);
   };
 
-  drawZone(zones_.left,  moveLeft_);
-  drawZone(zones_.right, moveRight_);
-  drawZone(zones_.jump,  prevTouchJump_);
+  // SDL2 has no circle primitive, so the d-pad ring is a 32-segment polyline.
+  auto drawRing = [&](float cx, float cy, float r, Uint8 alpha) {
+    constexpr int kSegments = 32;
+    SDL_Point pts[kSegments + 1];
+    for (int i = 0; i <= kSegments; ++i) {
+      float t = (static_cast<float>(i) / kSegments) * 6.28318530718f;
+      pts[i].x = static_cast<int>(cx + std::cos(t) * r);
+      pts[i].y = static_cast<int>(cy + std::sin(t) * r);
+    }
+    SDL_SetRenderDrawColor(renderer_, 255, 255, 255, alpha);
+    SDL_RenderDrawLines(renderer_, pts, kSegments + 1);
+  };
+
+  // D-pad: outer ring, deadzone ring, and a pip per direction that lights when
+  // that direction is held.
+  drawRing(vpad_.dpadCx, vpad_.dpadCy, vpad_.dpadRadius, 140);
+  drawRing(vpad_.dpadCx, vpad_.dpadCy, vpad_.dpadDead, 70);
+
+  float pip = vpad_.dpadRadius * 0.26f;
+  float off = vpad_.dpadRadius * 0.60f;
+  auto dirPip = [&](float dx, float dy, bool held, bool bound) {
+    TouchZone z = {vpad_.dpadCx + dx * off - pip / 2.f,
+                   vpad_.dpadCy + dy * off - pip / 2.f, pip, pip};
+    drawZone(z, held, bound);
+  };
+  dirPip(-1.f, 0.f, vpadState_.left, true);
+  dirPip(1.f, 0.f, vpadState_.right, true);
+  dirPip(0.f, -1.f, vpadState_.up, true);   // also jumps
+  dirPip(0.f, 1.f, vpadState_.down, false); // unbound in this game
+
+  // Action diamond: A jumps, the rest are drawn dim and unbound.
+  drawZone(vpad_.btnA, vpadState_.a, true);
+  drawZone(vpad_.btnB, vpadState_.b, false);
+  drawZone(vpad_.btnX, vpadState_.x, false);
+  drawZone(vpad_.btnY, vpadState_.y, false);
 }
 
 void PlayState::render() {
@@ -291,8 +371,10 @@ void PlayState::render() {
     int dstW = static_cast<int>(sprite.width * transform.scale.x);
     int dstH = static_cast<int>(sprite.height * transform.scale.y);
 
-    if (dstX + dstW < 0 || dstX > windowWidth_)  continue;
-    if (dstY + dstH < 0 || dstY > windowHeight_) continue;
+    if (dstX + dstW < 0 || dstX > windowWidth_)
+      continue;
+    if (dstY + dstH < 0 || dstY > windowHeight_)
+      continue;
 
     SDL_Rect srcRect = sprite.srcRect;
     SDL_Rect dstRect = {dstX, dstY, dstW, dstH};

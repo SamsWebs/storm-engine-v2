@@ -399,10 +399,15 @@ TouchInput input = EvalTouches(zones, touchPoints, fingerCount);
 ### Virtual Gamepad (d-pad + action diamond)
 
 ```cpp
-VPadLayout layout = MakeVPadLayout(windowW, windowH);
+VPadLayout layout = MakeVPadLayout(windowW, windowH);            // Xbox lettering
+VPadLayout snes  = MakeVPadLayout(windowW, windowH, VPadStyle::Snes);
 VPadState state = EvalVPad(layout, touchPoints, fingerCount);
 // state.up/down/left/right, state.a/b/x/y
 ```
+
+Xbox lettering (the default) is Y top, X left, B right, A bottom; SNES is
+X top, Y left, A right, B bottom. Both put the four touch targets in the same
+places — only which letter sits where changes.
 
 D-pad uses 8-way angle sectors (diagonals set two flags). Action buttons are
 a XBOX-style diamond: Y top, X left, B right, A bottom.
@@ -486,9 +491,11 @@ Games typically have their own Makefile that compiles `common/*.cpp` from the
 submodule alongside their game source. See `examples/platformer/Makefile` and
 `base.mk` / `examples.mk` for the pattern.
 
-**Both `nx-platformer` and `android-platformer` compile only `common/*.cpp`
-(non-recursive globs)** — `common/net/` is silently absent from Switch and
-Android builds.
+**`nx-platformer` compiles only `common/*.cpp` (a non-recursive glob)** — so
+`common/net/` is silently absent from the Switch build. Watch for the same
+pattern in any game Makefile that globs engine sources by hand.
+`android-platformer` had the identical defect and now uses `GLOB_RECURSE`, so
+networking builds there.
 
 ### Dependencies
 

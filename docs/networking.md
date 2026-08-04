@@ -122,7 +122,11 @@ client->SetOnChunk([&](const NetChunk &chunk) {
     // NetMessageReader over chunk.data / chunk.size
 });
 
-if (!client->Connect("192.168.1.20", 4321))
+// The host's own LAN address, or "127.0.0.1" for two processes on one machine.
+// Connect() only fails here on a bad address or a socket it cannot open — it
+// does not wait for the server. Pointing at an address nothing is listening on
+// succeeds, then times out through SetOnDisconnect about ten seconds later.
+if (!client->Connect(hostAddress, 4321))
     return;
 
 while (running) {

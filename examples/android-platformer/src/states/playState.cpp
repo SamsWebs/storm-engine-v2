@@ -16,6 +16,8 @@ PlayState::PlayState(SDL_Renderer *renderer, int windowWidth, int windowHeight,
 
   registry_.AddSystem<RenderSystem>();
   registry_.AddSystem<RenderColliderSystem>();
+  // Before any entity exists: Registry::Update() fixes system membership once.
+  registry_.AddSystem<AnimationSystem>();
 
   solidGrid_.assign(LEVEL_ROWS, std::vector<bool>(LEVEL_COLS, false));
   vpad_ = MakeVPadLayout(static_cast<float>(windowWidth_),
@@ -41,7 +43,7 @@ bool PlayState::onExit() { return true; }
 void PlayState::LoadAssets() {
   assetStore_->AddTexture(renderer_, "16x16-platformer",
                           "./assets/tilemaps/16x16-platformer.png");
-  assetStore_->AddTexture(renderer_, "player", "./assets/gfx/player.png");
+  assetStore_->AddTexture(renderer_, "rabbit", "./assets/gfx/rabbit.png");
 }
 
 void PlayState::SpawnTiles() {
@@ -77,7 +79,10 @@ void PlayState::SpawnPlayer() {
   player.Tag("player");
   player.AddComponent<TransformComponent>(
       glm::vec2(startX, startY), glm::vec2(PLAYER_SCALE, PLAYER_SCALE), 0.0);
-  player.AddComponent<SpriteComponent>("player", PLAYER_W, PLAYER_H, 1, 0, 0);
+  player.AddComponent<SpriteComponent>("rabbit", PLAYER_W, PLAYER_H, 1, 0, 0);
+  player.AddComponent<AnimationComponent>(ANIM_IDLE_FRAMES, ANIM_IDLE_FPS,
+                                          /*vertical=*/true, /*isLooped=*/true,
+                                          ANIM_IDLE_OFFSET);
   player.AddComponent<BoxColliderComponent>(
       static_cast<int>(PLAYER_W * PLAYER_SCALE),
       static_cast<int>(PLAYER_H * PLAYER_SCALE));
@@ -189,6 +194,23 @@ void PlayState::processInput() {
   PollTouches();
 }
 
+// The idle and walk runs share one strip, so switching is a change of
+// frameOffset/numFrames. The animWalking_ guard keeps startTime from being
+// reset every frame, which would pin the animation on frame 0.
+void PlayState::SetPlayerAnimation(bool walking) {
+  if (walking == animWalking_)
+    return;
+  animWalking_ = walking;
+
+  Entity player = registry_.GetEntityByTag("player");
+  auto &anim = registry_.GetComponent<AnimationComponent>(player);
+  anim.frameOffset = walking ? ANIM_WALK_OFFSET : ANIM_IDLE_OFFSET;
+  anim.numFrames = walking ? ANIM_WALK_FRAMES : ANIM_IDLE_FRAMES;
+  anim.frameSpeedRate = walking ? ANIM_WALK_FPS : ANIM_IDLE_FPS;
+  anim.currentFrame = 0;
+  anim.startTime = SDL_GetTicks();
+}
+
 void PlayState::ResolvePlayer(float dt) {
   Entity player = registry_.GetEntityByTag("player");
   auto &transform = registry_.GetComponent<TransformComponent>(player);
@@ -207,11 +229,17 @@ void PlayState::ResolvePlayer(float dt) {
     pc.facingRight = true;
   }
 
-  if (jumpPress_ && pc.isOnGround) {
+  // Jump buffer: remember a press briefly instead of discarding it on the
+  // frame it arrives, so pressing just before landing still jumps.
+  if (jumpPress_) {
+    jumpBufferedAt_ = SDL_GetTicks();
+    jumpPress_ = false;
+  }
+  if (pc.isOnGround && SDL_GetTicks() - jumpBufferedAt_ <= JUMP_BUFFER_MS) {
     pc.velocity.y = pc.jumpSpeed;
     pc.isOnGround = false;
+    jumpBufferedAt_ = 0; // consumed
   }
-  jumpPress_ = false;
 
   if (!pc.isOnGround)
     pc.velocity.y += pc.gravity * dt;
@@ -261,6 +289,20 @@ void PlayState::ResolvePlayer(float dt) {
     }
   }
 
+  // Ground probe, separate from the overlap resolve. Resting snaps the feet to
+  // exactly bot*TILE_PX, so the body's last pixel sits in the empty row above
+  // the floor and the overlap test reads "airborne" -- isOnGround oscillated
+  // to true on about one frame in four, refusing most jumps. Probe the row
+  // immediately below the feet.
+  {
+    int left = static_cast<int>(transform.position.x) / TILE_PX;
+    int right = static_cast<int>(transform.position.x + pw - 1) / TILE_PX;
+    int below = static_cast<int>(transform.position.y + ph) / TILE_PX;
+    if (pc.velocity.y >= 0.0f &&
+        (IsSolid(left, below) || IsSolid(right, below)))
+      pc.isOnGround = true;
+  }
+
   if (transform.position.y > LEVEL_ROWS * TILE_PX + 100) {
     transform.position = {2.0f * TILE_PX, 10.0f * TILE_PX};
     pc.velocity = {0.0f, 0.0f};
@@ -280,6 +322,15 @@ void PlayState::update() {
   millisecondsPreviousFrame_ = SDL_GetTicks();
 
   ResolvePlayer(dt);
+
+  {
+    Entity p = registry_.GetEntityByTag("player");
+    const auto &pc = registry_.GetComponent<PlayerComponent>(p);
+    auto &sprite = registry_.GetComponent<SpriteComponent>(p);
+    SetPlayerAnimation(moveLeft_ || moveRight_);
+    sprite.flip = pc.facingRight ? SDL_FLIP_HORIZONTAL : SDL_FLIP_NONE;
+  }
+  registry_.GetSystem<AnimationSystem>().Update();
 
   Entity player = registry_.GetEntityByTag("player");
   auto &transform = registry_.GetComponent<TransformComponent>(player);

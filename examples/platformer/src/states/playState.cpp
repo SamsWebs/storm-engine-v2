@@ -14,8 +14,12 @@ PlayState::PlayState(SDL_Renderer *renderer, int windowWidth, int windowHeight,
       assetStore_(std::move(assetStore)), isRunning_(isRunning) {
   logger_.Log("PlayState constructor");
 
+  // Registered before any entity is created: Registry::Update() decides system
+  // membership once, when it flushes, so a system added afterwards would never
+  // pick up entities that already exist.
   registry_.AddSystem<RenderSystem>();
   registry_.AddSystem<RenderColliderSystem>();
+  registry_.AddSystem<AnimationSystem>();
 
   // Initialise solid grid to all false
   solidGrid_.assign(LEVEL_ROWS, std::vector<bool>(LEVEL_COLS, false));
@@ -23,7 +27,6 @@ PlayState::PlayState(SDL_Renderer *renderer, int windowWidth, int windowHeight,
   LoadAssets();
   SpawnTiles();
   SpawnPlayer();
-
 
   registry_.Update();
 
@@ -43,7 +46,7 @@ void PlayState::LoadAssets() {
   // The asset ID stored in the map file is "16x16-platformer"
   assetStore_->AddTexture(renderer_, "16x16-platformer",
                           "./assets/tilemaps/16x16-platformer.png");
-  assetStore_->AddTexture(renderer_, "player", "./assets/gfx/player.png");
+  assetStore_->AddTexture(renderer_, "rabbit", "./assets/gfx/rabbit.png");
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -56,8 +59,11 @@ void PlayState::SpawnTiles() {
     int col = tile.relativePosition.x;
     int row = tile.relativePosition.y;
 
-    // All tiles painted in the editor are treated as solid ground
-    if (col >= 0 && col < LEVEL_COLS && row >= 0 && row < LEVEL_ROWS)
+    // Only tiles the map marks with a collider are solid. Treating every
+    // painted tile as ground made clouds, bushes and rocks into walls, which
+    // is why the level could carry no decoration.
+    if (tile.hasCollider && col >= 0 && col < LEVEL_COLS && row >= 0 &&
+        row < LEVEL_ROWS)
       solidGrid_[row][col] = true;
 
     float worldX = static_cast<float>(col * TILE_PX);
@@ -68,11 +74,12 @@ void PlayState::SpawnTiles() {
     e.AddComponent<TransformComponent>(glm::vec2(worldX, worldY),
                                        glm::vec2(TILE_SCALE, TILE_SCALE), 0.0);
     e.AddComponent<SpriteComponent>(tile.assetId, TILE_SIZE, TILE_SIZE,
-                                    tile.zIndex, false,
-                                    tile.pixelSrcPosition.x,
+                                    tile.zIndex, false, tile.pixelSrcPosition.x,
                                     tile.pixelSrcPosition.y);
-    e.Group("solid");
-    e.AddComponent<BoxColliderComponent>(TILE_PX, TILE_PX);
+    if (tile.hasCollider) {
+      e.Group("solid");
+      e.AddComponent<BoxColliderComponent>(TILE_PX, TILE_PX);
+    }
   }
 }
 
@@ -86,7 +93,11 @@ void PlayState::SpawnPlayer() {
   player.Tag("player");
   player.AddComponent<TransformComponent>(
       glm::vec2(startX, startY), glm::vec2(PLAYER_SCALE, PLAYER_SCALE), 0.0);
-  player.AddComponent<SpriteComponent>("player", PLAYER_W, PLAYER_H, 1, 0, 0);
+  player.AddComponent<SpriteComponent>("rabbit", PLAYER_W, PLAYER_H, 1, 0, 0);
+  // Starts on the idle run; SetPlayerAnimation swaps to walk when it moves.
+  player.AddComponent<AnimationComponent>(ANIM_IDLE_FRAMES, ANIM_IDLE_FPS,
+                                          /*vertical=*/true, /*isLooped=*/true,
+                                          ANIM_IDLE_OFFSET);
   player.AddComponent<BoxColliderComponent>(
       static_cast<int>(PLAYER_W * PLAYER_SCALE),
       static_cast<int>(PLAYER_H * PLAYER_SCALE));
@@ -152,13 +163,31 @@ void PlayState::processInput() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// The idle and walk runs live in one strip, so switching is a change of
+// frameOffset/numFrames. startTime is reset so the new run begins at its first
+// frame -- without the animWalking_ guard this would run every frame and pin
+// the animation on frame 0 forever.
+void PlayState::SetPlayerAnimation(bool walking) {
+  if (walking == animWalking_)
+    return;
+  animWalking_ = walking;
+
+  Entity player = registry_.GetEntityByTag("player");
+  auto &anim = registry_.GetComponent<AnimationComponent>(player);
+  anim.frameOffset = walking ? ANIM_WALK_OFFSET : ANIM_IDLE_OFFSET;
+  anim.numFrames = walking ? ANIM_WALK_FRAMES : ANIM_IDLE_FRAMES;
+  anim.frameSpeedRate = walking ? ANIM_WALK_FPS : ANIM_IDLE_FPS;
+  anim.currentFrame = 0;
+  anim.startTime = SDL_GetTicks();
+}
+
 void PlayState::ResolvePlayer(float dt) {
   Entity player = registry_.GetEntityByTag("player");
   auto &transform = registry_.GetComponent<TransformComponent>(player);
   auto &pc = registry_.GetComponent<PlayerComponent>(player);
 
-  int pw = static_cast<int>(PLAYER_W * PLAYER_SCALE); // 32
-  int ph = static_cast<int>(PLAYER_H * PLAYER_SCALE); // 48
+  int pw = static_cast<int>(PLAYER_W * PLAYER_SCALE); // 37
+  int ph = static_cast<int>(PLAYER_H * PLAYER_SCALE); // 57
 
   // ── Horizontal input ──────────────────────────────────────────────────────
   float vx = 0.0f;
@@ -172,11 +201,19 @@ void PlayState::ResolvePlayer(float dt) {
   }
 
   // ── Jump ──────────────────────────────────────────────────────────────────
-  if (jumpPress_ && pc.isOnGround) {
+  // Jump buffer: a press is remembered for a short window instead of being
+  // discarded on the frame it arrives. Without it, pressing a few milliseconds
+  // before touching down silently did nothing, which is most of what "jump
+  // feels unresponsive" actually is.
+  if (jumpPress_) {
+    jumpBufferedAt_ = SDL_GetTicks();
+    jumpPress_ = false;
+  }
+  if (pc.isOnGround && SDL_GetTicks() - jumpBufferedAt_ <= JUMP_BUFFER_MS) {
     pc.velocity.y = pc.jumpSpeed;
     pc.isOnGround = false;
+    jumpBufferedAt_ = 0; // consumed
   }
-  jumpPress_ = false;
 
   // ── Gravity ───────────────────────────────────────────────────────────────
   if (!pc.isOnGround)
@@ -231,6 +268,21 @@ void PlayState::ResolvePlayer(float dt) {
     }
   }
 
+  // Ground probe, separate from the overlap resolve above. Resting snaps the
+  // feet to exactly bot*TILE_PX, so the body's last pixel (y + ph - 1) is in
+  // the empty row *above* the floor and the overlap test reads "not standing
+  // on anything". That made isOnGround oscillate -- true on roughly one frame
+  // in four -- so most jump presses landed on a frame that refused them.
+  // Probe the row immediately below the feet instead.
+  {
+    int left = static_cast<int>(transform.position.x) / TILE_PX;
+    int right = static_cast<int>(transform.position.x + pw - 1) / TILE_PX;
+    int below = static_cast<int>(transform.position.y + ph) / TILE_PX;
+    if (pc.velocity.y >= 0.0f &&
+        (IsSolid(left, below) || IsSolid(right, below)))
+      pc.isOnGround = true;
+  }
+
   // Fall off bottom → respawn
   if (transform.position.y > LEVEL_ROWS * TILE_PX + 100) {
     transform.position = {2.0f * TILE_PX, 10.0f * TILE_PX};
@@ -253,17 +305,31 @@ void PlayState::update() {
 
   ResolvePlayer(dt);
 
+  // ── Animation: walk run while moving, idle otherwise; the art faces west,
+  //    so flip it when heading right ──────────────────────────────────────
+  {
+    Entity player = registry_.GetEntityByTag("player");
+    const auto &pc = registry_.GetComponent<PlayerComponent>(player);
+    auto &sprite = registry_.GetComponent<SpriteComponent>(player);
+
+    SetPlayerAnimation(moveLeft_ || moveRight_);
+    sprite.flip = pc.facingRight ? SDL_FLIP_HORIZONTAL : SDL_FLIP_NONE;
+  }
+  registry_.GetSystem<AnimationSystem>().Update();
+
   // ── Camera: follow player horizontally, clamped to level ─────────────────
   Entity player = registry_.GetEntityByTag("player");
   auto &transform = registry_.GetComponent<TransformComponent>(player);
 
-  float levelWidth  = LEVEL_COLS * TILE_PX;
+  float levelWidth = LEVEL_COLS * TILE_PX;
   float levelHeight = LEVEL_ROWS * TILE_PX;
 
-  float targetX = transform.position.x - windowWidth_  / 2.0f + (PLAYER_W * PLAYER_SCALE) / 2.0f;
-  float targetY = transform.position.y - windowHeight_ / 2.0f + (PLAYER_H * PLAYER_SCALE) / 2.0f;
+  float targetX = transform.position.x - windowWidth_ / 2.0f +
+                  (PLAYER_W * PLAYER_SCALE) / 2.0f;
+  float targetY = transform.position.y - windowHeight_ / 2.0f +
+                  (PLAYER_H * PLAYER_SCALE) / 2.0f;
 
-  camera_.x = std::max(0.0f, std::min(targetX, levelWidth  - windowWidth_));
+  camera_.x = std::max(0.0f, std::min(targetX, levelWidth - windowWidth_));
   camera_.y = std::max(0.0f, std::min(targetY, levelHeight - windowHeight_));
 
   registry_.Update();

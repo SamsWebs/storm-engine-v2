@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+##  [1.2.2] — 2026-08-05
 
 Memory-safety and correctness pass over the networking layer and the ECS, plus a Windows cross-build. No breaking changes — every addition is additive.
 

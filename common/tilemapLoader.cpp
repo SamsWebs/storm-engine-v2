@@ -3,6 +3,20 @@
 TileMapLoader::TileMapLoader(const std::string &fileMap,
                              const std::string &filePng, int tileSize)
     : tileSize{tileSize}, mapSurface{nullptr} {
+  // A file that cannot be opened used to fall through to the CSV branch, where
+  // it produced an empty map and no diagnostic at all — a missing map and a
+  // map with no tiles were indistinguishable, and the empty result surfaced
+  // later as a crash somewhere unrelated. Report it here, once.
+  {
+    std::ifstream probe{fileMap};
+    if (!probe.is_open()) {
+      logger.Err("TileMapLoader: cannot open map file '" + fileMap +
+                 "' (check the path is relative to the working directory); "
+                 "loading nothing");
+      return;
+    }
+  }
+
   if (isEditorFormat(fileMap)) {
     loadFilemapEditor(fileMap);
   } else {
@@ -34,22 +48,46 @@ bool TileMapLoader::isEditorFormat(const std::string &fileMap) {
 // Legacy CSV format: each row is comma-separated tile indices.
 void TileMapLoader::loadFilemapCSV(const std::string &fileMap) {
   std::ifstream fmap{fileMap};
+  if (!fmap.is_open()) {
+    logger.Err("TileMapLoader: cannot open CSV map '" + fileMap + "'");
+    return;
+  }
+
+  // CSV maps index into the tileset PNG, so without a loaded PNG there is no
+  // grid width to map an index onto. That used to divide by zero.
+  if (mapResolution.x <= 0 || tileSize <= 0) {
+    logger.Err("TileMapLoader: CSV map '" + fileMap +
+               "' needs a tileset PNG and a positive tile size; "
+               "pass the PNG path as the second constructor argument");
+    return;
+  }
+
   std::string line;
   int y = 0;
-  if (fmap.is_open()) {
-    while (fmap >> line) {
-      std::stringstream s{line};
-      std::string strNum;
-      int x = 0;
-      while (std::getline(s, strNum, ',')) {
-        Tile tile;
-        tile.relativePosition = glm::ivec2(x, y);
-        tile.pixelSrcPosition = pixelPosFromTilePos(std::stoi(strNum));
-        map.push_back(tile);
+  while (fmap >> line) {
+    std::stringstream s{line};
+    std::string strNum;
+    int x = 0;
+    while (std::getline(s, strNum, ',')) {
+      // strtol, not stoi: stoi throws on a malformed cell, and the Switch
+      // build compiles -fno-exceptions where that aborts the process.
+      char *end = nullptr;
+      const long index = std::strtol(strNum.c_str(), &end, 10);
+      if (end == strNum.c_str() || *end != '\0') {
+        logger.Err("TileMapLoader: '" + fileMap + "' row " + std::to_string(y) +
+                   " column " + std::to_string(x) + " is not a number ('" +
+                   strNum + "'); skipping the cell");
         x++;
+        continue;
       }
-      y++;
+
+      Tile tile;
+      tile.relativePosition = glm::ivec2(x, y);
+      tile.pixelSrcPosition = pixelPosFromTilePos(static_cast<int>(index));
+      map.push_back(tile);
+      x++;
     }
+    y++;
   }
 }
 
@@ -57,7 +95,8 @@ void TileMapLoader::loadFilemapCSV(const std::string &fileMap) {
 // Editor format written by FileLoader::SaveMap:
 //
 //   group assetId tileW tileH srcX srcY zIndex worldX worldY scaleX scaleY
-//   collider [colW colH offX offY] animated [numFrames speed vert loop frameOff]
+//   collider [colW colH offX offY] animated [numFrames speed vert loop
+//   frameOff]
 //
 void TileMapLoader::loadFilemapEditor(const std::string &fileMap) {
   std::ifstream fmap{fileMap};
@@ -71,8 +110,8 @@ void TileMapLoader::loadFilemapEditor(const std::string &fileMap) {
   float worldX, worldY, scaleX, scaleY;
   int colliderFlag, animatedFlag;
 
-  while (fmap >> group >> assetId >> tileW >> tileH >> srcX >> srcY >>
-         zIndex >> worldX >> worldY >> scaleX >> scaleY >> colliderFlag) {
+  while (fmap >> group >> assetId >> tileW >> tileH >> srcX >> srcY >> zIndex >>
+         worldX >> worldY >> scaleX >> scaleY >> colliderFlag) {
 
     int colW = 0, colH = 0;
     float offX = 0.0f, offY = 0.0f;
@@ -97,12 +136,12 @@ void TileMapLoader::loadFilemapEditor(const std::string &fileMap) {
     tile.relativePosition = glm::ivec2(static_cast<int>(worldX) / ts,
                                        static_cast<int>(worldY) / ts);
     tile.pixelSrcPosition = glm::ivec2(srcX, srcY);
-    tile.scale            = glm::vec2(scaleX, scaleY);
-    tile.zIndex           = zIndex;
-    tile.assetId          = assetId;
-    tile.hasCollider      = (colliderFlag != 0);
-    tile.colliderW        = colW;
-    tile.colliderH        = colH;
+    tile.scale = glm::vec2(scaleX, scaleY);
+    tile.zIndex = zIndex;
+    tile.assetId = assetId;
+    tile.hasCollider = (colliderFlag != 0);
+    tile.colliderW = colW;
+    tile.colliderH = colH;
 
     map.push_back(tile);
   }
@@ -122,8 +161,18 @@ void TileMapLoader::loadImg(const std::string &filePng) {
 }
 
 glm::ivec2 TileMapLoader::pixelPosFromTilePos(int tilePos) {
-  const int tilesCountHorizontal = mapResolution.x / tileSize;
-  const int row    = tilePos / tilesCountHorizontal;
+  // Guard the divisor rather than trusting the caller: this is public, and a
+  // tileset narrower than one tile (or no tileset at all) made it divide by
+  // zero, which is a crash rather than a bad coordinate.
+  const int tilesCountHorizontal =
+      (tileSize > 0) ? (mapResolution.x / tileSize) : 0;
+  if (tilesCountHorizontal <= 0) {
+    logger.Err("TileMapLoader: no tileset loaded, or it is narrower than one "
+               "tile; cannot map tile index " +
+               std::to_string(tilePos) + " to a source rect");
+    return glm::ivec2(0, 0);
+  }
+  const int row = tilePos / tilesCountHorizontal;
   const int column = tilePos % tilesCountHorizontal;
   return glm::ivec2(column * tileSize, row * tileSize);
 }

@@ -4,10 +4,11 @@ The desktop platformer example built as an Android app: the engine and game comp
 
 Verified working on real hardware (arm64) over USB debugging.
 
+![Storm Engine v2 platformer example](screenshot.png)
+
 ## Controls
 
-The on-screen layout comes from `<stormengine2/input/virtualGamepad.h>` — a
-circular 8-way d-pad bottom-left and an Xbox-lettered action diamond
+The on-screen layout comes from `<stormengine2/input/virtualGamepad.h>` — a circular 8-way d-pad bottom-left and an Xbox-lettered action diamond
 bottom-right:
 
 ```text
@@ -16,9 +17,7 @@ bottom-right:
      (↓)                        (A)
 ```
 
-Pass `VPadStyle::Snes` to `MakeVPadLayout` for the SNES lettering (X top,
-Y left, A right, B bottom) instead. The four touch targets are in the same
-places either way — only which letter sits where changes.
+Pass `VPadStyle::Snes` to `MakeVPadLayout` for the SNES lettering (X top, Y left, A right, B bottom) instead. The four touch targets are in the same places either way — only which letter sits where changes.
 
 | Control | Action |
 |---------|--------|
@@ -30,53 +29,31 @@ places either way — only which letter sits where changes.
 | Esc / Back | quit |
 
 Touches are converted to the game's logical coordinate space with
-`SDL_RenderWindowToLogical`. That matters because `finger->x`/`y` are
-normalised over the *whole* drawable including letterbox bars, and the logical
-resolution is a fixed 800×480 (5:3) letterboxed onto a display that is usually
-wider — scaling by the logical width directly squashes every touch toward the
-centre, so the controls respond somewhere other than where they are drawn.
+`SDL_RenderWindowToLogical`. That matters because `finger->x`/`y` are normalised over the *whole* drawable including letterbox bars, and the logical resolution is a fixed 800×480 (5:3) letterboxed onto a display that is usually wider — scaling by the logical width directly squashes every touch toward the centre, so the controls respond somewhere other than where they are drawn.
 
 ## Orientation
 
 The app follows the phone in all four orientations, **including when the
-system auto-rotate toggle is off**.
+system auto-rotate toggle is off**.  
 
-`android:screenOrientation` in the manifest does not decide this on its own.
-SDL calls `SDLActivity.setOrientationBis()` from native code as the window is
-created and overwrites whatever the manifest asked for. For a resizable window
-with no `SDL_HINT_ORIENTATIONS` set, SDL picks
-`SCREEN_ORIENTATION_FULL_USER` — which honours the phone's auto-rotate lock,
-so on a device with auto-rotate off the app is pinned to the user's preferred
-orientation and never turns. Setting the hint does not help either: that same
-code path still resolves a resizable window allowing both orientations to
-`FULL_USER`.
+`android:screenOrientation` in the manifest does not decide this on its own. SDL calls SDLActivity.setOrientationBis()` from native code as the window is created and overwrites whatever the  manifest asked for. For a resizable window with no `SDL_HINT_ORIENTATIONS` set, SDL picks `SCREEN_ORIENTATION_FULL_USER` — which honours the phone's auto-rotate lock, so on a device with auto-rotate off the app is pinned to the user's preferred orientation and never turns. Setting the hint does not help either: that same code path still resolves a resizable window allowing both orientations to `FULL_USER`.
 
-So `PlatformerActivity` overrides `setOrientationBis()` and requests
-`SCREEN_ORIENTATION_FULL_SENSOR` directly, which ignores the lock. Verify with:
+So `PlatformerActivity` overrides `setOrientationBis()` and requests `SCREEN_ORIENTATION_FULL_SENSOR` directly, which ignores the lock. Verify with:
 
 ```bash
 adb logcat | grep setOrientation      # requestedOrientation=10 is FULL_SENSOR
 adb shell dumpsys activity activities | grep -i screen_orientation
 ```
 
-`configChanges` already lists `orientation|screenSize`, so the Activity is not
-recreated on a flip — SDL just sees a new drawable size.
+`configChanges` already lists `orientation|screenSize`, so the Activity is not recreated on a flip — SDL just sees a new drawable size.
 
-Orientation is per game: it lives in each game's own Activity (and manifest),
-not in the engine. A game that should stay landscape simply does not override
-`setOrientationBis` and sets `screenOrientation` in its own manifest.
+Orientation is per game: it lives in each game's own Activity (and manifest), not in the engine. A game that should stay landscape simply does not override `setOrientationBis` and sets `screenOrientation` in its own manifest.
 
-In portrait the fixed 800×480 logical size letterboxes into a band across the
-middle of the screen. The game is fully playable, but it is small, and the
-d-pad and buttons sit inside that band rather than at the physical screen
-edges — they are positioned in logical space. Making portrait feel native
-would need a responsive logical size or a separate portrait layout.
+In portrait the fixed 800×480 logical size letterboxes into a band across the middle of the screen. The game is fully playable, but it is small, and the d-pad and buttons sit inside that band rather than at the physical screen edges — they are positioned in logical space. Making portrait feel native would need a responsive logical size or a separate portrait layout.
 
 ## One-time setup
 
-1. **Submodules** (SDL2 2.30.11, SDL_image 2.8.8, SDL_ttf 2.22.0, SDL_mixer
-   2.8.1, tinyxml2 10.0.0, glm 1.0.1 — `--recursive` pulls SDL_ttf's vendored
-   FreeType):
+1. **Submodules** (SDL2 2.30.11, SDL_image 2.8.8, SDL_ttf 2.22.0, SDL_mixer 2.8.1, tinyxml2 10.0.0, glm 1.0.1 — `--recursive` pulls SDL_ttf's vendored FreeType):
 
    ```bash
    git submodule update --init --recursive vendor/android

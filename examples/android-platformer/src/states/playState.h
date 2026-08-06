@@ -3,12 +3,14 @@
 #include <SDL2/SDL.h>
 
 #include <stormengine2/assetStore.h>
+#include <stormengine2/components/animation.h>
 #include <stormengine2/components/boxCollider.h>
 #include <stormengine2/components/sprite.h>
 #include <stormengine2/components/transform.h>
 #include <stormengine2/ecs.h>
 #include <stormengine2/logger.h>
 #include <stormengine2/states/gameState.h>
+#include <stormengine2/systems/animation.h>
 #include <stormengine2/systems/render.h>
 #include <stormengine2/systems/renderCollider.h>
 #include <stormengine2/tilemapLoader.h>
@@ -30,9 +32,21 @@ constexpr int TILE_PX = static_cast<int>(TILE_SIZE * TILE_SCALE); // 40
 constexpr int LEVEL_COLS = 40;
 constexpr int LEVEL_ROWS = 28;
 
-constexpr int PLAYER_W = 16;
-constexpr int PLAYER_H = 24;
-constexpr float PLAYER_SCALE = 2.0f;
+// Rabbit sprite strip: 10 idle frames then 8 walk, each PLAYER_W x PLAYER_H.
+// Drawn 1:1 -- already the right size beside 40 px tiles.
+constexpr int PLAYER_W = 37;
+constexpr int PLAYER_H = 57;
+constexpr float PLAYER_SCALE = 1.0f;
+
+constexpr int ANIM_IDLE_OFFSET = 0;
+constexpr int ANIM_IDLE_FRAMES = 10;
+constexpr int ANIM_IDLE_FPS = 6;
+constexpr int ANIM_WALK_OFFSET = 10;
+constexpr int ANIM_WALK_FRAMES = 8;
+constexpr int ANIM_WALK_FPS = 10;
+
+// How long a jump press stays live waiting for the ground.
+constexpr Uint32 JUMP_BUFFER_MS = 120;
 
 // The desktop platformer with the engine's virtual gamepad: a circular d-pad
 // bottom-left moves (left/right; up also jumps, matching the keyboard) and the
@@ -61,6 +75,7 @@ private:
 
   bool IsSolid(int col, int row) const;
   void ResolvePlayer(float dt);
+  void SetPlayerAnimation(bool walking);
 
   static const std::string s_playID;
 
@@ -89,8 +104,10 @@ private:
   bool jumpPress_ = false;
 
   VPadLayout vpad_;
-  VPadState vpadState_;   // last evaluated frame, for the overlay
-  bool prevJump_ = false; // edge-detect the jump control
+  VPadState vpadState_;       // last evaluated frame, for the overlay
+  bool prevJump_ = false;     // edge-detect the jump control
+  Uint32 jumpBufferedAt_ = 0; // SDL ticks of the last unconsumed jump press
+  bool animWalking_ = false;  // which run of the strip is playing
 
   int millisecondsPreviousFrame_ = 0;
 };

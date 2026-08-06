@@ -1,333 +1,295 @@
-tiles 16x16-platformer 16 16 48 96 0 0 0 1 1 0 0 
-tiles 16x16-platformer 16 16 48 80 0 624 0 1 1 0 0 
-tiles 16x16-platformer 16 16 48 96 0 0 16 1 1 0 0 
-tiles 16x16-platformer 16 16 48 96 0 624 48 1 1 0 0 
-tiles 16x16-platformer 16 16 48 96 0 0 32 1 1 0 0 
-tiles 16x16-platformer 16 16 48 96 0 624 64 1 1 0 0 
-tiles 16x16-platformer 16 16 48 96 0 0 48 1 1 0 0 
-tiles 16x16-platformer 16 16 48 96 0 624 80 1 1 0 0 
-tiles 16x16-platformer 16 16 48 96 0 0 64 1 1 0 0 
-tiles 16x16-platformer 16 16 48 96 0 624 96 1 1 0 0 
-tiles 16x16-platformer 16 16 48 96 0 0 80 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 32 352 1 1 0 0 
-tiles 16x16-platformer 16 16 48 96 0 0 96 1 1 0 0 
-tiles 16x16-platformer 16 16 48 96 0 624 128 1 1 0 0 
-tiles 16x16-platformer 16 16 48 96 0 0 112 1 1 0 0 
-tiles 16x16-platformer 16 16 48 96 0 624 112 1 1 0 0 
-tiles 16x16-platformer 16 16 48 96 0 0 128 1 1 0 0 
-tiles 16x16-platformer 16 16 48 96 0 624 160 1 1 0 0 
-tiles 16x16-platformer 16 16 48 96 0 0 144 1 1 0 0 
-tiles 16x16-platformer 16 16 48 96 0 624 176 1 1 0 0 
-tiles 16x16-platformer 16 16 48 96 0 0 160 1 1 0 0 
-tiles 16x16-platformer 16 16 48 96 0 624 192 1 1 0 0 
-tiles 16x16-platformer 16 16 48 96 0 0 176 1 1 0 0 
-tiles 16x16-platformer 16 16 48 96 0 624 208 1 1 0 0 
-tiles 16x16-platformer 16 16 48 96 0 0 192 1 1 0 0 
-tiles 16x16-platformer 16 16 48 96 0 624 224 1 1 0 0 
-tiles 16x16-platformer 16 16 48 96 0 0 208 1 1 0 0 
-tiles 16x16-platformer 16 16 48 96 0 624 240 1 1 0 0 
-tiles 16x16-platformer 16 16 48 96 0 0 224 1 1 0 0 
-tiles 16x16-platformer 16 16 48 96 0 624 256 1 1 0 0 
-tiles 16x16-platformer 16 16 48 96 0 0 240 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 0 576 192 1 1 0 0 
-tiles 16x16-platformer 16 16 48 96 0 0 288 1 1 0 0 
-tiles 16x16-platformer 16 16 48 96 0 624 288 1 1 0 0 
-tiles 16x16-platformer 16 16 48 96 0 0 256 1 1 0 0 
-tiles 16x16-platformer 16 16 48 96 0 624 272 1 1 0 0 
-tiles 16x16-platformer 16 16 48 96 0 0 272 1 1 0 0 
-tiles 16x16-platformer 16 16 48 96 0 624 304 1 1 0 0 
-tiles 16x16-platformer 16 16 48 96 0 0 304 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 112 320 1 1 0 0 
-tiles 16x16-platformer 16 16 48 96 0 0 320 1 1 0 0 
-tiles 16x16-platformer 16 16 48 96 0 624 336 1 1 0 0 
-tiles 16x16-platformer 16 16 48 96 0 0 336 1 1 0 0 
-tiles 16x16-platformer 16 16 48 96 0 624 368 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 0 16 352 1 1 0 0 
-tiles 16x16-platformer 16 16 48 96 0 624 352 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 0 624 400 1 1 0 0 
-tiles 16x16-platformer 16 16 48 96 0 624 16 1 1 0 0 
-tiles 16x16-platformer 16 16 0 0 0 0 384 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 128 320 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 0 0 416 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 0 624 416 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 0 0 432 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 0 624 432 1 1 0 0 
-tiles 16x16-platformer 16 16 16 0 0 608 384 1 1 0 0 
+tiles 16x16-platformer 16 16 0 0 0 0 352 1 1 1 16 16 0 0 0 
+tiles 16x16-platformer 16 16 16 16 0 16 368 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 0 368 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 0 384 1 1 0 0 
 tiles 16x16-platformer 16 16 16 16 0 0 400 1 1 0 0 
-tiles 16x16-platformer 16 16 16 0 0 16 384 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 0 16 400 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 0 16 416 1 1 0 0 
 tiles 16x16-platformer 16 16 16 16 0 16 432 1 1 0 0 
-tiles 16x16-platformer 16 16 16 0 0 32 384 1 1 0 0 
+tiles 16x16-platformer 16 16 16 0 0 16 352 1 1 1 16 16 0 0 0 
+tiles 16x16-platformer 16 16 16 16 0 32 368 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 16 400 1 1 0 0 
 tiles 16x16-platformer 16 16 16 16 0 32 400 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 0 32 416 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 0 32 432 1 1 0 0 
-tiles 16x16-platformer 16 16 16 0 0 48 384 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 0 416 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 0 432 1 1 0 0 
+tiles 16x16-platformer 16 16 16 0 0 32 352 1 1 1 16 16 0 0 0 
+tiles 16x16-platformer 16 16 16 16 0 48 368 1 1 0 0 
 tiles 16x16-platformer 16 16 16 16 0 48 400 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 0 48 416 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 0 48 432 1 1 0 0 
-tiles 16x16-platformer 16 16 16 0 0 64 384 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 32 384 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 16 416 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 32 432 1 1 0 0 
+tiles 16x16-platformer 16 16 16 0 0 48 352 1 1 1 16 16 0 0 0 
+tiles 16x16-platformer 16 16 16 16 0 64 368 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 16 384 1 1 0 0 
 tiles 16x16-platformer 16 16 16 16 0 64 400 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 0 64 416 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 0 64 432 1 1 0 0 
-tiles 16x16-platformer 16 16 16 0 0 80 384 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 0 80 400 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 0 80 416 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 32 416 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 48 432 1 1 0 0 
+tiles 16x16-platformer 16 16 16 0 0 64 352 1 1 1 16 16 0 0 0 
+tiles 16x16-platformer 16 16 16 16 0 80 368 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 48 384 1 1 0 0 
 tiles 16x16-platformer 16 16 16 16 0 80 432 1 1 0 0 
-tiles 16x16-platformer 16 16 16 0 0 96 384 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 0 96 400 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 0 96 416 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 48 416 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 64 432 1 1 0 0 
+tiles 16x16-platformer 16 16 16 0 0 80 352 1 1 1 16 16 0 0 0 
+tiles 16x16-platformer 16 16 16 16 0 96 368 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 96 384 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 64 384 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 80 400 1 1 0 0 
 tiles 16x16-platformer 16 16 16 16 0 96 432 1 1 0 0 
-tiles 16x16-platformer 16 16 16 0 0 112 384 1 1 0 0 
+tiles 16x16-platformer 16 16 16 0 0 96 352 1 1 1 16 16 0 0 0 
+tiles 16x16-platformer 16 16 16 16 0 112 368 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 80 384 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 96 416 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 64 416 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 112 432 1 1 0 0 
+tiles 16x16-platformer 16 16 16 0 0 112 352 1 1 1 16 16 0 0 0 
+tiles 16x16-platformer 16 16 16 16 0 144 368 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 96 400 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 112 384 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 80 416 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 128 432 1 1 0 0 
+tiles 16x16-platformer 16 16 16 0 0 128 352 1 1 1 16 16 0 0 0 
+tiles 16x16-platformer 16 16 16 16 0 128 384 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 128 368 1 1 0 0 
 tiles 16x16-platformer 16 16 16 16 0 112 400 1 1 0 0 
 tiles 16x16-platformer 16 16 16 16 0 112 416 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 0 112 432 1 1 0 0 
-tiles 16x16-platformer 16 16 16 0 0 128 384 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 144 432 1 1 0 0 
+tiles 16x16-platformer 16 16 32 0 0 144 352 1 1 1 16 16 0 0 0 
+tiles 16x16-platformer 16 16 16 16 0 144 384 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 144 400 1 1 0 0 
 tiles 16x16-platformer 16 16 16 16 0 128 400 1 1 0 0 
 tiles 16x16-platformer 16 16 16 16 0 128 416 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 0 128 432 1 1 0 0 
-tiles 16x16-platformer 16 16 16 0 0 144 384 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 0 144 400 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 0 144 416 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 0 144 432 1 1 0 0 
-tiles 16x16-platformer 16 16 16 0 0 160 384 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 0 160 400 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 0 160 416 1 1 0 0 
 tiles 16x16-platformer 16 16 16 16 0 160 432 1 1 0 0 
-tiles 16x16-platformer 16 16 16 0 0 176 384 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 0 176 400 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 0 176 416 1 1 0 0 
+tiles 16x16-platformer 16 16 0 0 0 160 400 1 1 1 16 16 0 0 0 
+tiles 16x16-platformer 16 16 16 16 0 144 416 1 1 0 0 
 tiles 16x16-platformer 16 16 16 16 0 176 432 1 1 0 0 
-tiles 16x16-platformer 16 16 16 0 0 192 384 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 0 192 400 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 0 192 416 1 1 0 0 
+tiles 16x16-platformer 16 16 16 0 0 176 400 1 1 1 16 16 0 0 0 
+tiles 16x16-platformer 16 16 16 16 0 160 416 1 1 0 0 
 tiles 16x16-platformer 16 16 16 16 0 192 432 1 1 0 0 
-tiles 16x16-platformer 16 16 16 0 0 208 384 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 0 208 400 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 0 208 416 1 1 0 0 
+tiles 16x16-platformer 16 16 16 0 0 192 400 1 1 1 16 16 0 0 0 
+tiles 16x16-platformer 16 16 16 16 0 176 416 1 1 0 0 
 tiles 16x16-platformer 16 16 16 16 0 208 432 1 1 0 0 
-tiles 16x16-platformer 16 16 16 0 0 224 384 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 0 224 400 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 0 224 416 1 1 0 0 
+tiles 16x16-platformer 16 16 16 0 0 208 400 1 1 1 16 16 0 0 0 
+tiles 16x16-platformer 16 16 16 16 0 192 416 1 1 0 0 
 tiles 16x16-platformer 16 16 16 16 0 224 432 1 1 0 0 
-tiles 16x16-platformer 16 16 16 0 0 240 384 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 0 240 400 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 0 240 416 1 1 0 0 
+tiles 16x16-platformer 16 16 16 0 0 224 400 1 1 1 16 16 0 0 0 
+tiles 16x16-platformer 16 16 16 16 0 208 416 1 1 0 0 
 tiles 16x16-platformer 16 16 16 16 0 240 432 1 1 0 0 
-tiles 16x16-platformer 16 16 16 0 0 256 384 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 0 256 400 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 0 256 416 1 1 0 0 
+tiles 16x16-platformer 16 16 16 0 0 240 400 1 1 1 16 16 0 0 0 
+tiles 16x16-platformer 16 16 16 16 0 224 416 1 1 0 0 
 tiles 16x16-platformer 16 16 16 16 0 256 432 1 1 0 0 
-tiles 16x16-platformer 16 16 16 0 0 320 384 1 1 0 0 
+tiles 16x16-platformer 16 16 16 0 0 256 400 1 1 1 16 16 0 0 0 
+tiles 16x16-platformer 16 16 16 16 0 240 416 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 272 432 1 1 0 0 
+tiles 16x16-platformer 16 16 16 0 0 272 400 1 1 1 16 16 0 0 0 
+tiles 16x16-platformer 16 16 16 16 0 256 416 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 288 432 1 1 0 0 
+tiles 16x16-platformer 16 16 16 0 0 288 400 1 1 1 16 16 0 0 0 
+tiles 16x16-platformer 16 16 16 16 0 272 416 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 304 432 1 1 0 0 
+tiles 16x16-platformer 16 16 32 0 0 304 400 1 1 1 16 16 0 0 0 
+tiles 16x16-platformer 16 16 16 16 0 288 416 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 320 432 1 1 0 0 
+tiles 16x16-platformer 16 16 0 0 0 320 304 1 1 1 16 16 0 0 0 
+tiles 16x16-platformer 16 16 16 16 0 352 320 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 320 352 1 1 0 0 
+tiles 16x16-platformer 16 16 32 48 2 0 304 1 1 1 0 0 0 0 0 
 tiles 16x16-platformer 16 16 16 16 0 320 400 1 1 0 0 
 tiles 16x16-platformer 16 16 16 16 0 320 416 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 0 320 432 1 1 0 0 
-tiles 16x16-platformer 16 16 16 0 0 336 384 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 0 336 400 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 0 336 416 1 1 0 0 
 tiles 16x16-platformer 16 16 16 16 0 336 432 1 1 0 0 
-tiles 16x16-platformer 16 16 16 0 0 352 384 1 1 0 0 
+tiles 16x16-platformer 16 16 64 0 0 144 304 1 1 0 0 
+tiles 16x16-platformer 16 16 16 0 0 336 304 1 1 1 16 16 0 0 0 
+tiles 16x16-platformer 16 16 16 16 0 336 320 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 352 336 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 336 336 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 336 352 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 336 400 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 352 432 1 1 0 0 
+tiles 16x16-platformer 16 16 16 0 0 352 304 1 1 1 16 16 0 0 0 
+tiles 16x16-platformer 16 16 16 16 0 368 336 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 320 336 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 352 352 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 336 416 1 1 0 0 
 tiles 16x16-platformer 16 16 16 16 0 352 400 1 1 0 0 
 tiles 16x16-platformer 16 16 16 16 0 352 416 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 0 352 432 1 1 0 0 
-tiles 16x16-platformer 16 16 16 0 0 368 384 1 1 0 0 
+tiles 16x16-platformer 16 16 16 0 0 368 304 1 1 1 16 16 0 0 0 
+tiles 16x16-platformer 16 16 16 16 0 368 320 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 384 320 1 1 0 0 
 tiles 16x16-platformer 16 16 16 16 0 368 400 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 0 368 416 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 0 368 432 1 1 0 0 
-tiles 16x16-platformer 16 16 16 0 0 384 384 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 0 384 400 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 480 304 1 1 0 0 
 tiles 16x16-platformer 16 16 16 16 0 384 416 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 0 384 432 1 1 0 0 
-tiles 16x16-platformer 16 16 16 0 0 400 384 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 0 400 400 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 368 416 1 1 0 0 
+tiles 16x16-platformer 16 16 16 0 0 384 304 1 1 1 16 16 0 0 0 
+tiles 16x16-platformer 16 16 16 16 0 384 352 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 368 352 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 400 352 1 1 0 0 
 tiles 16x16-platformer 16 16 16 16 0 400 416 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 368 432 1 1 0 0 
 tiles 16x16-platformer 16 16 16 16 0 400 432 1 1 0 0 
-tiles 16x16-platformer 16 16 16 0 0 416 384 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 0 416 400 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 0 416 416 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 0 416 432 1 1 0 0 
-tiles 16x16-platformer 16 16 16 0 0 432 384 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 0 432 400 1 1 0 0 
+tiles 16x16-platformer 16 16 32 0 0 400 304 1 1 1 16 16 0 0 0 
+tiles 16x16-platformer 16 16 16 16 0 400 336 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 400 320 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 384 336 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 400 400 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 384 400 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 384 432 1 1 0 0 
+tiles 16x16-platformer 16 16 0 0 0 416 400 1 1 1 16 16 0 0 0 
 tiles 16x16-platformer 16 16 16 16 0 432 416 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 0 432 432 1 1 0 0 
-tiles 16x16-platformer 16 16 16 0 0 448 384 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 0 448 400 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 576 416 1 1 0 0 
+tiles 16x16-platformer 16 16 16 0 0 432 400 1 1 1 16 16 0 0 0 
 tiles 16x16-platformer 16 16 16 16 0 448 416 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 416 432 1 1 0 0 
+tiles 16x16-platformer 16 16 16 0 0 448 400 1 1 1 16 16 0 0 0 
+tiles 16x16-platformer 16 16 16 16 0 464 416 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 432 432 1 1 0 0 
+tiles 16x16-platformer 16 16 32 0 0 464 400 1 1 1 16 16 0 0 0 
+tiles 16x16-platformer 16 16 16 16 0 464 432 1 1 0 0 
 tiles 16x16-platformer 16 16 16 16 0 448 432 1 1 0 0 
-tiles 16x16-platformer 16 16 16 0 0 512 384 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 0 512 400 1 1 0 0 
+tiles 16x16-platformer 16 16 0 0 0 480 272 1 1 1 16 16 0 0 0 
+tiles 16x16-platformer 16 16 16 16 0 496 304 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 480 320 1 1 0 0 
+tiles 16x16-platformer 16 16 64 160 0 320 256 1 1 0 0 
+tiles 16x16-platformer 16 16 32 64 2 0 320 1 1 1 0 0 0 0 0 
+tiles 16x16-platformer 16 16 16 16 0 480 368 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 480 384 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 480 400 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 480 416 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 480 432 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 496 432 1 1 0 0 
+tiles 16x16-platformer 16 16 16 0 0 496 272 1 1 1 16 16 0 0 0 
+tiles 16x16-platformer 16 16 16 16 0 480 288 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 512 304 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 512 320 1 1 0 0 
+tiles 16x16-platformer 16 16 48 160 0 304 256 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 528 368 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 512 368 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 496 400 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 416 416 1 1 0 0 
 tiles 16x16-platformer 16 16 16 16 0 512 416 1 1 0 0 
 tiles 16x16-platformer 16 16 16 16 0 512 432 1 1 0 0 
-tiles 16x16-platformer 16 16 16 0 0 528 384 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 0 528 400 1 1 0 0 
+tiles 16x16-platformer 16 16 16 0 0 512 272 1 1 1 16 16 0 0 0 
+tiles 16x16-platformer 16 16 16 16 0 496 288 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 528 304 1 1 0 0 
+tiles 16x16-platformer 16 16 96 0 0 288 256 1 1 0 0 
+tiles 16x16-platformer 16 16 32 80 2 0 336 1 1 1 0 0 0 0 0 
+tiles 16x16-platformer 16 16 64 144 2 608 384 1 1 1 0 0 0 0 0 
+tiles 16x16-platformer 16 16 16 16 0 496 368 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 496 384 1 1 0 0 
 tiles 16x16-platformer 16 16 16 16 0 528 416 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 512 400 1 1 0 0 
 tiles 16x16-platformer 16 16 16 16 0 528 432 1 1 0 0 
-tiles 16x16-platformer 16 16 16 0 0 544 384 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 0 544 400 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 0 544 416 1 1 0 0 
+tiles 16x16-platformer 16 16 16 0 0 528 272 1 1 1 16 16 0 0 0 
+tiles 16x16-platformer 16 16 16 16 0 512 288 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 544 304 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 496 320 1 1 0 0 
+tiles 16x16-platformer 16 16 64 0 0 256 256 1 1 0 0 
+tiles 16x16-platformer 16 16 80 0 0 272 256 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 544 384 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 512 384 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 528 384 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 496 416 1 1 0 0 
 tiles 16x16-platformer 16 16 16 16 0 544 432 1 1 0 0 
-tiles 16x16-platformer 16 16 16 0 0 560 384 1 1 0 0 
+tiles 16x16-platformer 16 16 16 0 0 544 272 1 1 1 16 16 0 0 0 
+tiles 16x16-platformer 16 16 16 16 0 528 288 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 560 304 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 528 320 1 1 0 0 
+tiles 16x16-platformer 16 16 64 144 2 112 336 1 1 1 0 0 0 0 0 
+tiles 16x16-platformer 16 16 64 144 2 208 384 1 1 1 0 0 0 0 0 
+tiles 16x16-platformer 16 16 16 16 0 560 368 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 544 400 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 528 400 1 1 0 0 
 tiles 16x16-platformer 16 16 16 16 0 560 400 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 544 416 1 1 0 0 
+tiles 16x16-platformer 16 16 32 0 0 560 272 1 1 1 16 16 0 0 0 
+tiles 16x16-platformer 16 16 16 16 0 544 288 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 560 288 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 560 320 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 544 320 1 1 0 0 
+tiles 16x16-platformer 16 16 64 144 0 112 336 1 1 1 0 0 0 0 0 
+tiles 16x16-platformer 16 16 16 16 0 544 368 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 560 384 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 304 416 1 1 0 0 
 tiles 16x16-platformer 16 16 16 16 0 560 416 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 0 560 432 1 1 0 0 
-tiles 16x16-platformer 16 16 16 0 0 576 384 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 0 576 400 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 0 576 416 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 0 576 432 1 1 0 0 
-tiles 16x16-platformer 16 16 16 0 0 592 384 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 0 592 400 1 1 0 0 
+tiles 16x16-platformer 16 16 0 0 0 576 400 1 1 1 16 16 0 0 0 
 tiles 16x16-platformer 16 16 16 16 0 592 416 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 0 592 432 1 1 0 0 
-tiles 16x16-platformer 16 16 16 0 0 624 384 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 0 608 400 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 560 432 1 1 0 0 
+tiles 16x16-platformer 16 16 16 0 0 592 400 1 1 1 16 16 0 0 0 
 tiles 16x16-platformer 16 16 16 16 0 608 416 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 576 432 1 1 0 0 
+tiles 16x16-platformer 16 16 16 0 0 608 400 1 1 1 16 16 0 0 0 
+tiles 16x16-platformer 16 16 16 16 0 624 416 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 592 432 1 1 0 0 
+tiles 16x16-platformer 16 16 32 0 0 624 400 1 1 1 16 16 0 0 0 
+tiles 16x16-platformer 16 16 16 16 0 624 432 1 1 0 0 
 tiles 16x16-platformer 16 16 16 16 0 608 432 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 224 288 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 448 224 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 464 224 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 480 224 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 496 224 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 288 288 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 272 288 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 256 288 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 240 288 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 592 192 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 576 192 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 368 256 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 432 224 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 320 256 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 336 256 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 352 256 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 608 192 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 512 224 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 544 192 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 560 192 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 64 352 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 48 352 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 480 64 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 496 64 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 512 64 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 528 64 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 288 128 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 560 64 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 544 64 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 352 96 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 368 96 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 384 96 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 400 96 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 0 128 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 224 32 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 208 32 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 0 0 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 0 16 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 0 32 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 176 160 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 128 32 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 144 32 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 160 32 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 176 32 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 192 32 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 304 128 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 96 160 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 112 160 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 128 160 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 144 160 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 160 160 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 416 96 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 432 96 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 224 128 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 240 128 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 256 128 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 272 128 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 0 48 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 0 64 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 0 144 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 0 160 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 0 80 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 0 96 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 0 112 1 1 0 0 
-tiles 16x16-platformer 16 16 48 96 0 0 352 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 0 432 224 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 0 32 352 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 176 320 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 144 320 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 208 288 1 1 0 0 
-tiles 16x16-platformer 16 16 48 96 0 624 32 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 0 464 224 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 0 448 224 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 0 480 224 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 0 512 224 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 0 496 224 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 160 320 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 0 48 352 1 1 0 0 
-tiles 16x16-platformer 16 16 48 96 0 0 368 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 16 352 1 1 0 0 
-tiles 16x16-platformer 16 16 48 96 0 624 144 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 0 592 192 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 0 608 192 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 0 560 192 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 0 544 192 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 80 352 1 1 0 0 
-tiles 16x16-platformer 16 16 48 96 0 624 320 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 0 176 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 0 192 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 0 208 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 0 224 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 0 240 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 0 256 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 0 272 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 0 288 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 0 320 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 0 336 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 0 368 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 0 352 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 624 0 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 0 304 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 624 16 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 624 32 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 624 48 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 624 64 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 624 80 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 624 96 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 624 112 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 624 128 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 1 288 400 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 1 288 416 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 1 336 416 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 1 320 416 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 624 192 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 624 176 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 624 144 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 624 160 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 624 208 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 624 224 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 624 240 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 624 256 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 624 272 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 624 288 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 624 304 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 624 320 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 624 336 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 624 352 1 1 0 0 
-tiles 16x16-platformer 16 16 64 144 1 624 368 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 1 304 416 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 1 288 432 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 1 256 416 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 1 304 400 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 1 320 400 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 1 272 432 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 1 256 432 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 1 256 400 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 1 304 432 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 1 464 432 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 1 320 432 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 1 272 400 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 1 272 416 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 1 480 432 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 1 496 432 1 1 0 0 
-tiles 16x16-platformer 16 16 16 16 1 512 432 1 1 0 0 
-tiles 16x16-platformer 16 16 16 0 1 336 384 1 1 0 0 
-tiles 16x16-platformer 16 16 16 0 1 320 384 1 1 0 0 
-tiles 16x16-platformer 16 16 16 0 1 304 384 1 1 0 0 
-tiles 16x16-platformer 16 16 16 0 1 288 384 1 1 0 0 
-tiles 16x16-platformer 16 16 16 0 1 272 384 1 1 0 0 
+tiles 16x16-platformer 16 16 80 160 0 336 256 1 1 0 0 
+tiles 16x16-platformer 16 16 96 160 0 352 256 1 1 0 0 
+tiles 16x16-platformer 16 16 112 80 0 416 240 1 1 0 0 
+tiles 16x16-platformer 16 16 80 0 0 384 256 1 1 0 0 
+tiles 16x16-platformer 16 16 80 0 0 400 256 1 1 0 0 
+tiles 16x16-platformer 16 16 96 0 0 416 256 1 1 0 0 
+tiles 16x16-platformer 16 16 64 0 0 368 256 1 1 0 0 
+tiles 16x16-platformer 16 16 112 80 0 560 256 1 1 0 0 
+tiles 16x16-platformer 16 16 96 0 0 224 304 1 1 0 0 
+tiles 16x16-platformer 16 16 80 0 0 192 304 1 1 0 0 
+tiles 16x16-platformer 16 16 80 0 0 208 304 1 1 0 0 
+tiles 16x16-platformer 16 16 80 0 0 160 304 1 1 0 0 
+tiles 16x16-platformer 16 16 80 0 0 176 304 1 1 0 0 
+tiles 16x16-platformer 16 16 48 0 0 608 224 1 1 0 0 
+tiles 16x16-platformer 16 16 48 0 0 432 320 1 1 0 0 
+tiles 16x16-platformer 16 16 48 0 0 608 320 1 1 0 0 
+tiles 16x16-platformer 16 16 64 112 1 416 48 1 1 0 0 
+tiles 16x16-platformer 16 16 96 112 1 320 288 1 1 0 0 
+tiles 16x16-platformer 16 16 0 96 -1 48 16 1 1 0 0 
+tiles 16x16-platformer 16 16 0 96 -1 288 32 1 1 0 0 
+tiles 16x16-platformer 16 16 0 96 -1 544 16 1 1 0 0 
+tiles 16x16-platformer 16 16 0 48 1 304 304 1 1 0 0 
+tiles 16x16-platformer 16 16 0 48 1 304 320 1 1 0 0 
+tiles 16x16-platformer 16 16 0 48 1 304 336 1 1 0 0 
+tiles 16x16-platformer 16 16 0 48 1 304 352 1 1 0 0 
+tiles 16x16-platformer 16 16 16 0 1 176 304 1 1 1 0 0 0 0 0 
+tiles 16x16-platformer 16 16 16 0 1 192 304 1 1 1 0 0 0 0 0 
+tiles 16x16-platformer 16 16 0 48 1 464 272 1 1 0 0 
+tiles 16x16-platformer 16 16 0 48 1 464 288 1 1 0 0 
+tiles 16x16-platformer 16 16 0 48 1 464 304 1 1 0 0 
+tiles 16x16-platformer 16 16 0 48 1 464 320 1 1 0 0 
+tiles 16x16-platformer 16 16 32 0 1 224 304 1 1 1 0 0 0 0 0 
+tiles 16x16-platformer 16 16 0 48 1 464 352 1 1 0 0 
+tiles 16x16-platformer 16 16 0 48 1 464 368 1 1 0 0 
+tiles 16x16-platformer 16 16 0 48 1 464 384 1 1 0 0 
+tiles 16x16-platformer 16 16 16 48 1 48 336 1 1 0 0 
+tiles 16x16-platformer 16 16 16 64 1 80 336 1 1 0 0 
+tiles 16x16-platformer 16 16 32 80 1 112 336 1 1 0 0 
+tiles 16x16-platformer 16 16 48 32 1 208 384 1 1 0 0 
+tiles 16x16-platformer 16 16 16 48 1 256 384 1 1 0 0 
+tiles 16x16-platformer 16 16 16 80 1 272 384 1 1 0 0 
+tiles 16x16-platformer 16 16 16 48 1 576 384 1 1 0 0 
+tiles 16x16-platformer 16 16 32 80 1 608 384 1 1 0 0 
+tiles 16x16-platformer 16 16 16 16 0 320 320 1 1 0 0 
+tiles 16x16-platformer 16 16 0 48 0 143 354 1 1 0 0 
+tiles 16x16-platformer 16 16 0 0 1 143 350 1 1 0 0 
+tiles 16x16-platformer 16 16 0 48 1 145 352 1 1 0 0 
+tiles 16x16-platformer 16 16 0 64 1 145 370 1 1 0 0 
+tiles 16x16-platformer 16 16 0 64 1 145 386 1 1 0 0 
+tiles 16x16-platformer 16 16 0 64 1 145 393 1 1 0 0 
+tiles 16x16-platformer 16 16 0 64 1 144 408 1 1 0 0 
+tiles 16x16-platformer 16 16 0 0 1 480 352 1 1 1 0 0 0 0 0 
+tiles 16x16-platformer 16 16 16 0 1 512 352 1 1 1 0 0 0 0 0 
+tiles 16x16-platformer 16 16 16 0 1 496 352 1 1 1 0 0 0 0 0 
+tiles 16x16-platformer 16 16 16 0 1 528 352 1 1 1 0 0 0 0 0 
+tiles 16x16-platformer 16 16 32 0 1 560 352 1 1 1 0 0 0 0 0 
+tiles 16x16-platformer 16 16 16 0 1 352 400 1 1 1 0 0 0 0 0 
+tiles 16x16-platformer 16 16 16 0 1 368 400 1 1 1 0 0 0 0 0 
+tiles 16x16-platformer 16 16 16 0 1 384 400 1 1 1 0 0 0 0 0 
+tiles 16x16-platformer 16 16 16 0 1 336 400 1 1 1 0 0 0 0 0 
+tiles 16x16-platformer 16 16 16 0 1 544 352 1 1 1 0 0 0 0 0 
+tiles 16x16-platformer 16 16 16 0 1 400 400 1 1 1 0 0 0 0 0 
+tiles 16x16-platformer 16 16 0 64 1 144 368 1 1 1 0 0 0 0 0 
+tiles 16x16-platformer 16 16 0 64 1 144 384 1 1 1 0 0 0 0 0 
+tiles 16x16-platformer 16 16 0 64 1 144 400 1 1 1 0 0 0 0 0 
+tiles 16x16-platformer 16 16 16 0 1 208 304 1 1 1 0 0 0 0 0 
+tiles 16x16-platformer 16 16 0 0 1 144 304 1 1 1 0 0 0 0 0 
+tiles 16x16-platformer 16 16 48 0 1 608 224 1 1 1 0 0 0 0 0 
+tiles 16x16-platformer 16 16 48 0 1 608 320 1 1 1 0 0 0 0 0 
+tiles 16x16-platformer 16 16 16 0 1 160 304 1 1 1 0 0 0 0 0 
+tiles 16x16-platformer 16 16 0 0 1 288 400 1 1 1 0 0 0 0 0 
+tiles 16x16-platformer 16 16 0 0 1 304 400 1 1 1 0 0 0 0 0 
+tiles 16x16-platformer 16 16 0 0 1 320 400 1 1 1 0 0 0 0 0 

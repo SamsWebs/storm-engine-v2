@@ -12,7 +12,8 @@ date_added: "2026-08-03"
 
 # Storm! Engine v2
 
-> **Current release: v1.2.0** — public API stable for the 1.x line.
+> **Current release: v1.2.1** — public API stable for the 1.x line.
+> Unreleased work (this branch) is headed for v1.2.2 — see `CHANGELOG.md` `[Unreleased]`.
 > Repo: `github.com/WillSams/storm-engine-v2` · License: WTFPL
 
 ---
@@ -22,7 +23,16 @@ date_added: "2026-08-03"
 The engine is a C++17 shared library built on SDL2. Games consume it
 either as an installed package (`-lstormenginev2`) or by compiling `common/`
 directly into the project (common for Switch, Android, and submodule consumers).
+
+A Windows cross-build exists via MinGW-w64 (`Makefile.win`,
+`cmake/toolchain-mingw64.cmake`, `examples/examples.win.mk`), producing
+`libstormenginev2.dll` plus the spec suite. It is not covered by CI, which
+builds `Dockerfile.debian` only.
+
 The `common/net/` module is a port of Teeworlds 0.7.5 networking (zlib).
+Android compiles all of `common/` including `common/net/`
+(`file(GLOB_RECURSE ...)`); the Switch example enumerates source directories
+non-recursively and therefore does not build `common/net/`.
 
 **The engine ships no main loop, no Game class, no window management.**
 `Game::Run()` is written by the game. The only engine piece in it is
@@ -41,7 +51,7 @@ is no engine quit API.
 | **XML Loader** | `<stormengine2/xmlLoader.h>` | Parse XML asset/entity definitions via tinyxml2 |
 | **Logger** | `<stormengine2/logger.h>` | Timestamped, color-coded logging with callback hooks |
 | **Networking** | `<stormengine2/net/net.h>` | UDP host/join: reliable chunks, snapshots, kick/ban |
-| **Touch Input** | `<stormengine2/input/touchControls.h>`, `<stormengine2/input/virtualGamepad.h>` | SDL-free touch primitives and virtual gamepad layout |
+| **Touch Input** | `<stormengine2/input/touchControls.h>`, `<stormengine2/input/virtualGamepad.h>` | SDL-free touch primitives and virtual gamepad layout. `MakeVPadLayout(w, h, style)` takes an optional `VPadStyle`, defaulting to `VPadStyle::Xbox` (Y top, X left, B right, A bottom); pass `VPadStyle::Snes` for the older arrangement. Touch-target positions are identical under both — only the lettering moves. |
 
 ---
 
@@ -63,10 +73,25 @@ player.AddComponent<RigidBodyComponent>(glm::vec2(0, 0));
 player.AddComponent<SpriteComponent>("player", 64, 64, 1);
 
 // Systems are registered with optional constructor args
+// NOTE: AddSystem takes its ctor args by lvalue reference (`Targs &... args`),
+// so temporaries do not bind — bind them to a named variable first:
+//   int hp = 5; registry.AddSystem<HealthSystem>(hp);   // OK
+//   registry.AddSystem<HealthSystem>(5);                // does not compile
 registry.AddSystem<MovementSystem>();
 registry.AddSystem<RenderSystem>();
 registry.AddSystem<AnimationSystem>();
 registry.AddSystem<CollisionSystem>();
+
+// Reference accessor — PRECONDITION: the entity has the component. On a miss it
+// logs (throttled) and returns a shared default-constructed fallback.
+auto &t = player.GetComponent<TransformComponent>();
+
+// Pointer accessor — silent, returns nullptr on a miss (no pool, id out of
+// range, signature bit clear, or a null registry). Use this whenever absence
+// is possible; it cannot alias.
+if (auto *rb = player.TryGetComponent<RigidBodyComponent>()) {
+    rb->velocity.x = 0;
+}
 ```
 
 **Critical:** Entity creation and destruction are **deferred**. Always call
@@ -81,32 +106,63 @@ These are the biggest correctness traps — understand them before writing ECS c
    flushes `entitiesToBeAdded`. `AddComponent`/`RemoveComponent` only flip signature
    bits; they **never re-evaluate system membership**. Adding a component to a live
    entity will not get it into a matching system; removing one will not take it out.
-   The only fix is **kill-and-recreate**.
+   The usual fix is **kill-and-recreate**; a live entity can also be refreshed by
+   hand with `registry.RemoveEntityFromSystems(e); registry.AddEntityToSystems(e);`
+   — both are public. Calling `AddEntityToSystems` alone double-adds the entity to
+   systems it already matches, because `System::AddEntityToSystem` push_backs
+   unconditionally.
 
 2. **`AddSystem<T>()` only constructs and registers the system** — it never touches
    entities. A system registered after entities were already flushed starts empty
    and stays empty. Always register systems before creating entities.
 
 3. **`MAX_COMPONENTS = 32` is a process-wide cap** — `IComponent::nextId` is a single
-   static. A 33rd component type anywhere in the binary makes `Signature.set(id)` throw.
+   static. A 33rd component type does **not** throw any more: `EcsComponentIdIsValid`
+   range-checks the id, logs a throttled error, and the type is then ignored
+   everywhere — `RequireComponent` drops the requirement, `AddComponent` /
+   `RemoveComponent` no-op, `HasComponent` returns `false`, and `GetComponent`
+   returns the fallback. Signature bits are set with `operator[]`, never
+   `bitset::set()`, so no throw is emitted into a `-fno-exceptions` game TU.
 
 4. **Component storage is dense, not sparse** — one `std::vector<T>` per type, indexed
    directly by entity id. Memory per component type is O(highest entity id). Every
    component type must be **default-constructible**.
 
-5. **`Entity` constructor does not initialize `registry`** — only `Registry::CreateEntity()`
-   sets it. `Entity(88)` constructed directly has an indeterminate pointer; any
-   `GetComponent`/`AddComponent`/`Kill`/`Tag` on it is UB.
+5. **A hand-built `Entity` is inert, not UB** — `Entity::registry` is `nullptr` by
+   default and only `Registry::CreateEntity()` sets it. `Entity(88)` built directly
+   is safe to call but does nothing: every forwarder null-checks first, then logs a
+   throttled error and no-ops (`Kill`/`Tag`/`Group`/`AddComponent`/`RemoveComponent`),
+   returns `false` (`HasComponent`/`HasTag`/`BelongsToGroup`), returns `nullptr`
+   (`TryGetComponent`), or returns the default-constructed fallback (`GetComponent`).
+   It is still a caller bug — it just no longer segfaults.
 
 6. **No system scheduler, no virtual `System::Update`** — each concrete system declares
    its own non-virtual `Update` with a bespoke signature. The game state calls each by
    name in an order it chooses.
 
-7. **`Registry::AddEntityToSystem` (singular) is declared but never defined** — calling
-   it is a link error. The real one is `AddEntityToSystems`.
+7. **`GetComponent<T>()` never throws on a miss — it returns a shared fallback** —
+   when the entity has no such component (no pool, id out of range, signature bit
+   clear, or a type past `MAX_COMPONENTS`) it logs a throttled error and returns
+   `EcsFallbackComponent<T>()`: one thread-local instance per component type,
+   re-zeroed per miss. Two misses still hand back references that alias each other.
+   Use `Registry::TryGetComponent<T>` / `Entity::TryGetComponent<T>` (silent,
+   `nullptr` on a miss) whenever absence is possible.
 
 8. **The `Logger` writes to `std::cout` on every entity creation and component add** —
-   ECS-heavy frames do synchronous console I/O.
+   ECS-heavy frames still do a console write per operation, but it is buffered:
+   `logHelper` terminates lines with `'\n'` and only calls `std::cout.flush()` for
+   `LOG_ERROR`. ECS diagnostics are throttled to the first
+   `ECS_MAX_DIAGNOSTIC_REPORTS` (4) occurrences per call site and then go quiet,
+   and `Logger::messages` is capped at 1000 entries.
+
+9. **Entity ids are recycled, and `Entity` carries no generation counter** —
+   `Registry::IsAlive(e)` reports whether the id is currently in use (id created
+   and not parked in `freeIds`), and `KillEntity` now ignores a kill for an entity
+   that is not alive or is already pending kill this frame, logging a throttled
+   error instead of queueing a double-kill. A **stale handle whose id has since
+   been recycled still reads as alive** and will kill the new occupant — tracked
+   as P5 in `docs/TECH_DEBT.md`. `IsAlive` scans `freeIds`, so it is O(freed ids),
+   not O(1).
 
 ### Built-in Components
 
@@ -115,7 +171,7 @@ These are the biggest correctness traps — understand them before writing ECS c
 | `TransformComponent` | `components/transform.h` | `position` (glm::vec2), `scale` (glm::vec2), `rotation` (double, degrees) |
 | `RigidBodyComponent` | `components/rigidBody.h` | `velocity` (glm::vec2, px/sec) |
 | `SpriteComponent` | `components/sprite.h` | `assetId`, `width`, `height`, `zIndex`, `isFixed`, `flip`, `srcRect`, `offset` |
-| `AnimationComponent` | `components/animation.h` | `numFrames`, `frameSpeedRate`, `vertical`, `isLooped`, `frameOffset` |
+| `AnimationComponent` | `components/animation.h` | ctor args: `numFrames`, `frameSpeedRate`, `vertical` (default `true`), `isLooped` (default `true`), `frameOffset`; also public: `currentFrame`, `startTime` (set to `SDL_GetTicks()` in the ctor), `lastFrame` (non-looped stop frame, 0 = use `numFrames - 1`) |
 | `BoxColliderComponent` | `components/boxCollider.h` | `width`, `height`, `offset` (glm::vec2) |
 
 ### Built-in Systems
@@ -123,7 +179,7 @@ These are the biggest correctness traps — understand them before writing ECS c
 | System | Requires | What it does |
 |--------|----------|-------------|
 | `MovementSystem` | Transform + RigidBody | Moves entities by `velocity * deltaTime` |
-| `RenderSystem` | Transform + Sprite | Draws sprites sorted by `zIndex`, supports camera offset |
+| `RenderSystem` | Transform + Sprite | Draws sprites sorted by `zIndex`; applies the camera offset except to sprites with `isFixed` (HUD/screen-space), and honours `sprite.offset`, `transform.scale`, `transform.rotation` and `sprite.flip` |
 | `AnimationSystem` | Sprite + Animation | Advances sprite sheet frames (horizontal or vertical) |
 | `CollisionSystem` | Transform + BoxCollider | AABB collision detection; kills entities with RigidBody on contact |
 | `RenderColliderSystem` | Transform + BoxCollider | Debug overlay: draws collider outlines in green |
@@ -161,13 +217,17 @@ public:
 player.Tag("player");
 enemy.Group("enemies");
 
-// Retrieve by tag (throws if missing)
-Entity p = registry.GetEntityByTag("player");
-
-// Iterate a group safely
-if (registry.DoesGroupExist("enemies")) {
-    for (auto &e : registry.GetEntitiesByGroup("enemies")) { ... }
+// GetEntityByTag has a PRECONDITION: the tag exists. It uses map::at, which
+// throws std::out_of_range (and terminates under -fno-exceptions, e.g. the
+// Switch build). Entity has no "none" value, so this one cannot be softened
+// into a silent miss the way GetEntitiesByGroup was — guard it.
+if (registry.DoesTagExist("player")) {
+    Entity p = registry.GetEntityByTag("player");
 }
+
+// GetEntitiesByGroup returns an empty vector on a miss (and logs, throttled),
+// so no guard is required. DoesGroupExist still exists if you want to branch.
+for (auto &e : registry.GetEntitiesByGroup("enemies")) { ... }
 ```
 
 ---
@@ -197,8 +257,17 @@ public:
 };
 ```
 
-**Important:** `GameState` already includes all engine headers (ecs.h,
-assetStore.h, all systems). Don't re-include them in state headers.
+**Important:** `GameState` transitively pulls in `ecs.h`, `assetStore.h`,
+`logger.h`, `tilemapLoader.h`, every component in `common/components/` and every
+system in `common/systems/`. It does **not** include `common/input/`
+(`touchControls.h`, `virtualGamepad.h`) or `common/net/`; states using touch, the
+virtual gamepad, or networking must include those themselves.
+
+Do not *rely* on that transitive reach — include what you use. The breadth of
+this header is a documented defect (`KNOWN_ISSUES.md` §8: ~713 headers and ~145k
+preprocessed lines to declare a 23-line interface) and trimming it is a v3 goal,
+so code leaning on the transitive path breaks when it is fixed. Listing your own
+includes costs nothing and makes that upgrade a no-op.
 
 **Critical:** Never call `SDL_PollEvent` in both `Game::ProcessInput` and a
 state's `processInput`. The event queue is shared — let the active state own
@@ -220,11 +289,26 @@ Rules to code against:
 - **`onExit()` must be idempotent** — it can run twice (machine call + destructor).
 - **`changeState` to the same `getStateID()`** is a no-op that deletes the
   rejected new state **inline**, not deferred.
+- **There is no `pause()` hook** — `pushState` does not call anything on the
+  state beneath it (it is simply no longer the `back()` that gets ticked), and
+  it does not `onExit()` it. Only `popState` calls `resume()`, on the newly
+  exposed top; `changeState` never calls `resume()`. `popState` on an empty
+  stack is a safe no-op.
 - **Initialize in `onEnter()`, tear down in `onExit()`** — not the ctor/dtor.
-  `changeState` calls `onEnter()` after pushing; `clean()` calls `onExit()`
-  before deleting.
+  `pushState` calls `onEnter()` *after* pushing; `changeState` calls it *before*
+  pushing (so during a `changeState`'s `onEnter()` the new state is not yet on
+  the stack — `getGameStates().back()` is not you). `clean()` calls `onExit()`
+  on every stacked state before deleting.
+- **`clean()` exits the whole stack** — it calls `onExit()` on every stacked
+  state, top-down in reverse push order, then deletes them all and sweeps the
+  defunct list. A pushed-under state was entered, so it owes an `onExit()`;
+  `clean()` on an empty stack is a safe no-op.
 - **The machine owns every state pointer** — pass `new`-allocated states and
   never delete them yourself.
+- **`clean()` is not automatic** — `~GameStateMachine()` is empty and frees
+  nothing. Call `gameStateMachine.clean()` yourself during shutdown (the
+  examples do it in `Game::Destroy()`), or every stacked and defunct state
+  leaks.
 
 ---
 
@@ -238,9 +322,14 @@ Timestep is variable dt with a 60 FPS **cap**: each state computes
 enforces a minimum frame rate. Games typically stack two throttles:
 `SDL_RENDERER_PRESENTVSYNC` *and* the state's own delay budget.
 
-There is **no keyboard or gamepad abstraction**. `common/input/` contains
-only touch primitives. Keyboard/quit handling is raw `SDL_PollEvent` inside
-each state's `processInput()`.
+There is **no keyboard or physical-gamepad abstraction** — nothing under
+`common/` references `SDL_Keycode`, `SDL_SCANCODE`, `SDL_GameController` or
+`SDL_Joystick`. `common/input/` holds the touch primitives
+(`touchControls.h`: `TouchZone`/`TouchPoint`/`TouchZones`/`TouchInput`) and the
+SDL-free virtual gamepad (`virtualGamepad.h`: `MakeVPadLayout(w, h, style =
+VPadStyle::Xbox)`, `EvalVPad`, `VPadState`, `VPadLayout`, `enum class VPadStyle
+{ Xbox, Snes }`). Keyboard/quit handling is raw `SDL_PollEvent` inside each
+state's `processInput()`.
 
 ```cpp
 void Game::Run() {
@@ -271,6 +360,11 @@ void PlayState::update() {
 }
 ```
 
+The `millisecondsPreviousFrame` used above is a protected `int` on `GameState`
+(alongside `m_loadingComplete`, `m_exiting` and `m_textureIDList`) — inherit it,
+don't redeclare it. `GameState`'s constructor is protected and its destructor is
+virtual.
+
 `MILLISECS_PER_FRAME` is defined as `1000 / 60` (targeting 60 FPS) in
 `gameState.h`.
 
@@ -286,6 +380,11 @@ assetStore->AddTexture(renderer, "player", "./assets/gfx/player.png");
 SDL_Texture *tex = assetStore->GetTexture("player");
 assetStore->ClearAssets();  // free all (also called in destructor)
 ```
+
+Re-adding an existing id destroys the previous texture, so any `SDL_Texture *`
+you cached from an earlier `GetTexture` for that id dangles. A failed load logs
+via `Logger::Err` and returns — the id simply stays unmapped, and `GetTexture`
+keeps returning `nullptr`.
 
 The `AssetStore_Ptr` (`std::unique_ptr<AssetStore>`) is typically created in
 `Game` and moved into the first state via `std::move`. Pass raw pointers or
@@ -320,8 +419,16 @@ auto objects = loader.GetObjects("PLAY_STATE");
 
 // Convenience: load textures directly into AssetStore
 LoadTexturesFromXml("assets/game.xml", "PLAY_STATE", "./assets/",
-                    renderer, assetStore, &logger);
+                    renderer, assetStore.get(), &logger);  // AssetStore*, not AssetStore_Ptr
 ```
+
+```cpp
+XmlLoader loader("assets/game.xml");
+if (!loader.IsValid()) { /* file missing or malformed — getters return {} */ }
+```
+`GetTextures`/`GetObjects` also return an empty vector for an unknown stateId or
+a state with no `<TEXTURES>`/`<OBJECTS>` child — silently, with no log.
+`LoadTexturesFromXml` does the `IsValid()` check for you and logs on failure.
 
 XML structure:
 ```xml
@@ -351,7 +458,8 @@ The net module provides host/join LAN play over UDP.
 | `NetConnection` | Reliable transport: vital chunks, acks, resends |
 | `NetSnapshot` / `NetSnapshotDelta` | Tick state replication with per-client deltas |
 | `NetMessageWriter` / `NetMessageReader` | Game-defined message packing |
-| `NetVarInt` | Variable-length integer encoding for compact packets |
+| `NetVarIntPack` / `NetVarIntUnpack` | Free functions (there is no `NetVarInt` class) for variable-length ints; unpack rejects non-canonical encodings |
+| `NetSocket` | Non-blocking UDP socket + `NetNowMs()` / `NetAddressToString()` helpers |
 
 See `docs/networking.md` for the wire format and integration recipes.
 
@@ -366,21 +474,42 @@ These traps require tracing multiple files to discover:
   overwrites — copy anything you need past the callback.
 - **Single-threaded** — no `<thread>`/`<mutex>`/`<atomic>`. All callbacks fire
   synchronously on the thread calling `Poll()`/`Update()`.
+- **Parsing is strict by design.** `NetVarIntUnpack` rejects non-canonical
+  encodings, and `NetMessageReader::ReadString` fails unless the wire string
+  carries its own terminator — hand-rolled packets that "decode fine" elsewhere
+  are rejected here. Anything a peer gets to see must come from `NetNonce32()`
+  (ChaCha20 keystream), never `NetRandom32()` (raw xorshift64, invertible from
+  a handful of outputs).
 - **Every vital `Send` is its own datagram** — broadcasting N reliable messages
   per tick costs N datagrams per client.
 - **Overflowing the unacked-vital window kills the connection** (96 entries or
   16 KB), it does not block or drop.
+  A vital chunk is also rejected — same fatal `SetError` path — when the ring
+  write wraps into bytes still pinned by a live unacked entry, so a connection
+  can die with the 16 KB pool far from full if acks are lagging.
 - **`NetSnapshot` is two-phase:** `AddItem` only before `Finish()`,
   `FindItem`/`GetItemByIndex` only after. An empty delta base must still have
   `Finish()` called on it.
+  This applies to every base, not just empty ones: `NumItems()` still reports
+  items on an unfinished snapshot while `GetItemByIndex`/`FindItem` bail out
+  early, so `Create()` iterates and reads uninitialised type/id locals.
+- **`Apply()` wants the exact delta size.** Pass the byte count `Create()`
+  returned, never `sizeof(buf)` — trailing bytes fail the parse and `Apply()`
+  returns false with `to` left reset.
+- **`NetSnapshotDelta::Create()` returns 0 for "no changes" and -1 for "buffer
+  too small".** 0 is not an error — it means send nothing this tick. Size the
+  buffer with `EstimateSize()`.
 - **Zero coupling to the ECS or the engine tick.** Snapshots are flat arrays;
   the game hand-marshals ECS components in and out. Nothing in `net/` drives a
   tick — each net example paces itself.
 - **Hard ceilings:** chunk ≤ 1200 bytes, datagram ≤ 1400, snapshot ≤ 256 items /
   2048 int32s, prediction cache = 16 ticks (~267 ms at 60 Hz).
-- **`-fno-exceptions` on Switch** — the ECS throws through `std::map::at`
-  (`GetSystem`, `GetEntityByTag`, `GetEntitiesByGroup`). On Switch those become
-  `abort`, not catchable errors.
+- **`-fno-exceptions` on Switch** — `Registry::GetSystem` (`common/ecs.h:389`)
+  and `Registry::GetEntityByTag` (`common/ecs.cpp:288`) still throw through
+  `std::map::at`; on Switch (`examples/nx-platformer/Makefile:30`) those become
+  `abort`, not catchable errors — guard with `HasSystem()` / `DoesTagExist()`.
+  `GetEntitiesByGroup` no longer throws: a group nobody joined logs once and
+  returns an empty vector (`common/ecs.cpp:323-336`).
 
 ---
 
@@ -409,8 +538,9 @@ Xbox lettering (the default) is Y top, X left, B right, A bottom; SNES is
 X top, Y left, A right, B bottom. Both put the four touch targets in the same
 places — only which letter sits where changes.
 
-D-pad uses 8-way angle sectors (diagonals set two flags). Action buttons are
-a XBOX-style diamond: Y top, X left, B right, A bottom.
+D-pad uses 8-way angle sectors (diagonals set two flags), with an inner
+deadzone at 25% of the radius and an outer cutoff at the radius; a component
+registers when it exceeds `tan(22.5°)` of the other.
 
 ---
 
@@ -421,7 +551,8 @@ a XBOX-style diamond: Y top, X left, B right, A bottom.
 | **Linux** | `.deb` package or build from source via `Makefile.debian` |
 | **Nintendo Switch** | devkitPro + SDL2 portlibs, compiles engine into `.nro` |
 | **Android** | Gradle + CMake + NDK, engine compiled into JNI library via `SDLActivity` |
-| **Windows/WSL** | WSL2 with same `apt` prerequisites; native Windows not officially supported |
+| **Windows** | MinGW-w64 cross-compile from Linux: `make -f Makefile.win` builds `build/win/libstormenginev2.dll` + `tests.exe` against the *same* vendored SDL2 sources Android uses (`vendor/android/`). `make -f Makefile.win test` runs the suite under Wine. Not covered by CI. |
+| **WSL** | WSL2 with the same `apt` prerequisites drives the Linux `Makefile.debian` path |
 
 When consuming as a submodule (Switch, Android, or game-specific), the engine
 is compiled directly into the game binary — no shared library to distribute.
@@ -435,13 +566,17 @@ is compiled directly into the game binary — no shared library to distribute.
 **There is no plain `Makefile` at the repo root.** Bare `make` fails — every
 root invocation needs `-f Makefile.debian`.
 
+(Inside `Dockerfile.debian`'s image, `Makefile.debian` is copied in as
+`/opt/library/Makefile`, so bare `make target` / `make install` works there —
+which is why `.github/scripts/ci-build-examples.sh` uses them unqualified.)
+
 ```bash
-make -f Makefile.debian              # default: clean -> test -> build .so
+make -f Makefile.debian              # default: build tests -> run tests -> build .so (no clean)
 make -f Makefile.debian target       # build ONLY ./bin/libstormenginev2.so
 make -f Makefile.debian test         # build ./bin/tests and run it
 make -f Makefile.debian test-target  # build tests without running
-make -f Makefile.debian run-test     # run already-built tests (no recompile)
-make -f Makefile.debian clean        # rm ./bin/* and every *.o under repo root
+make -f Makefile.debian run-test     # rebuild tests if stale, then run them
+make -f Makefile.debian clean        # rm ./bin/* and every *.o AND *.d under repo root
 sudo make -f Makefile.debian install # .so + headers to /usr/local
 ```
 
@@ -452,15 +587,64 @@ you only want the library.
 `install` has **no prerequisites** — it will happily install a stale `.so`.
 Build `target` first.
 
+`install` honours `DESTDIR` and `PREFIX` (`make install DESTDIR=<staging>`),
+which is how the release workflow stages the `.deb` tree — same code path as a
+from-source install, so the two cannot drift. It `rm -rf`s
+`$(PREFIX)/include/stormengine2` before copying, so headers deleted from
+`common/` stop living on forever, then strips `*.o`/`*.d`/`*.cpp` out of the
+copied tree.
+
+**Build profiles.** `PROFILE=debug` (default) is `-O0 -g`; `PROFILE=release`
+is `-O2` with no `-g`. `OPT` and `DEBUGFLAGS` can also be set on their own
+(`make OPT=-O1`, `make DEBUGFLAGS=-ggdb3`). The release workflow passes
+`PROFILE=release`, so the shipped `.deb` is no longer an `-O0` build.
+
+```bash
+make -f Makefile.debian PROFILE=release target
+```
+
+### Engine (Windows, cross-compiled)
+
+```bash
+make -f Makefile.win deps      # one-time: cross-build vendored SDL2 et al
+make -f Makefile.win           # build/win/libstormenginev2.dll + tests.exe
+make -f Makefile.win test      # run the spec suite under wine64
+make -f Makefile.win clean     # drop objects, keep deps
+make -f Makefile.win distclean # drop everything including deps
+```
+
+Prereqs: `sudo apt install mingw-w64 cmake`. Uses `x86_64-w64-mingw32-g++-posix`
+(the win32-threads gcc has no `<thread>`, which `specs/net/netLoopback.spec.cpp`
+needs). Deps come from `vendor/android/`, so Windows and Android can never be on
+different SDL versions. `stage-dlls` resolves the import graph and copies the
+mingw runtime DLLs beside the binaries — a missing one is a silent non-zero exit
+under Wine, not an error message. Examples cross-build through
+`examples/examples.win.mk`, though no example ships a `Makefile.win` yet.
+
 ### Build System Hazards
 
 - **`clean` has repo-wide blast radius.** `ROOT_DIR` derives from `base.mk`'s
   own realpath, so `cd examples/puzzle && make clean` deletes every `*.o` in
   the repository. Since `examples.mk` is `all: clean $(TARGET)`, building any
   one example wipes every other example's objects.
-- **No header dependency tracking on desktop.** No `-MMD`/`-MP`. Editing a
-  header does not rebuild dependents; you get silently stale objects. This is
-  why every `all` starts with `clean`.
+- **`ROOT_DIR` is `:=`, deliberately.** `MAKEFILE_LIST` grows as make reads the
+  generated `.d` files, so with a recursive `=` the `lastword` became whichever
+  `.d` was read last: `-I$(ROOT_DIR)/vendor` pointed at nothing, `clean` walked
+  a subtree instead of the repo, and the `%.o` rule stopped matching in
+  `editor/` and `examples/` — make silently fell through to its built-in
+  flagless `g++ -c`, dropping `-std=c++17` and every `-I`. Do not change it.
+- **Header dependency tracking is on (desktop).** `base.mk` compiles with
+  `-MMD -MP` and the generated `.d` files are `-include`d, so editing a header
+  rebuilds every object that includes it. `Makefile.debian`'s `all` no longer
+  starts with `clean`. `examples/examples.mk` and `editor/Makefile` still do
+  (`all: clean $(TARGET)`), so building any example or the editor is still a
+  full rebuild — and still has repo-wide blast radius (see above).
+- **Command-line flags are stamped.** `PROFILE`/`OPT`/`DEBUGFLAGS` arrive on the
+  command line and touch no file, so neither the `.d` files nor the `base.mk`
+  prerequisite would notice them changing. `base.mk` md5s `CCFLAGS` into
+  `$(ROOT_DIR)/.build-flags` and every `%.o` depends on that stamp, so
+  `make && make PROFILE=release target` can no longer link `-O0 -g` objects
+  into the release `.so`.
 - **The Switch build lives in `examples/nx-platformer/`.** A dead `Makefile.nx`
   at the repo root used to shadow it; it was deleted (P42) because it recursed
   into a root `Makefile` that does not exist.
@@ -468,6 +652,21 @@ Build `target` first.
   binary. Examples do *not* auto-launch.
 - **GTK3 and Lua are linked unconditionally**, even for headless networking
   examples. `pkg-config gtk+-3.0` must resolve or nothing compiles.
+
+### CI
+
+`pr-validate.yml` builds `Dockerfile.debian`, runs the spec suite, then pipes
+`.github/scripts/ci-build-examples.sh` into the image: it installs the engine
+and builds **every desktop example** (jrpg, netchat, netplay-checkers, netrepl,
+platformer, puzzle, shooter, sports, strategy) plus the editor. The editor is
+compile-only — it is the one tree that calls `NFD_*`, and libnfd has no Debian
+package, so the link step cannot run. `nx-platformer` and `android-platformer`
+are not built at all: neither toolchain is in the image, and `.dockerignore`
+keeps both trees out of the build context. The Windows cross-build is not in CI
+either.
+
+The script overrides `LIB` on the command line to drop `-lnfd` and GTK; no
+example calls either.
 
 ### Tests
 
@@ -487,9 +686,14 @@ spec file or use `It_Only(...)`/`Describe_Only(...)` source-level selection.
 
 ### Games (submodule consumers)
 
-Games typically have their own Makefile that compiles `common/*.cpp` from the
-submodule alongside their game source. See `examples/platformer/Makefile` and
-`base.mk` / `examples.mk` for the pattern.
+Two patterns exist, and the desktop examples are *not* the submodule one.
+`examples/platformer/Makefile` is three lines that `include ../examples.mk`,
+and `examples.mk` links the **installed** library (`-lstormenginev2`) — it
+compiles no engine source at all. The submodule pattern, compiling the engine
+into the game binary, is what `examples/nx-platformer/Makefile`,
+`examples/android-platformer/app/jni/CMakeLists.txt` and
+`examples/examples.win.mk` do. When copying it, glob engine sources
+**recursively**.
 
 **`nx-platformer` compiles only `common/*.cpp` (a non-recursive glob)** — so
 `common/net/` is silently absent from the Switch build. Watch for the same
@@ -504,6 +708,10 @@ networking builds there.
 - tinyxml2 (XML loading)
 - Igloo + snowhouse (test framework, must be built from source)
 - GTK3 and Lua (linked unconditionally on desktop, even for headless examples)
+- NFD (`-lnfd`, editor-only — `Makefile.debian` filters it back out of the
+  library and test links, and CI overrides `LIB` for the examples; `vendor/nfd`
+  ships only `nfd.h` and a LICENSE, so nothing can actually link it on Debian)
+- zlib (`-lz`)
 
 ---
 
@@ -519,6 +727,7 @@ networking builds there.
 8. **Camera-aware rendering** — `RenderSystem` accepts an optional `SDL_Rect*` camera; `isFixed` sprites ignore it (for HUD/UI).
 9. **Geometric pool growth** — component pools grow 2x to avoid O(n²) reallocation.
 10. **Two consumption modes** — installed `.so` (desktop) or compile `common/` directly (Switch, Android, submodules). Editing `common/` changes desktop builds only after `make install`.
+11. **No throw on a game data path** — component ids are range-checked before any `bitset` access (`set`/`test` carry an `out_of_range` throw that would be emitted into a `-fno-exceptions` game TU, e.g. the Switch build), a miss returns a default/`nullptr` instead of aborting, and every diagnostic is throttled to its first 4 occurrences per call site (`ECS_MAX_DIAGNOSTIC_REPORTS`). `GetEntitiesByGroup` returns an empty vector on a miss; `AssetStore::GetTexture` returns `nullptr`. The two reachable throws left on a data path are `TileMapLoader`'s `std::stoi` and `GetEntityByTag`'s `.at()`.
 
 ---
 
@@ -534,6 +743,19 @@ player.AddComponent<RigidBodyComponent>(glm::vec2(0, 0));
 player.AddComponent<SpriteComponent>("player", 64, 64, 1);
 player.AddComponent<AnimationComponent>(4, 10, false, true);  // 4 frames, 10 FPS, horizontal, looped
 player.AddComponent<BoxColliderComponent>(64, 64);
+```
+
+### Reading a Component That May Not Be There
+
+```cpp
+// GetComponent returns a reference, so a miss cannot be reported: it logs
+// (throttled) and hands back a per-thread fallback that two misses SHARE.
+if (auto *rb = player.TryGetComponent<RigidBodyComponent>()) {
+    rb->velocity.x = 40.0;
+}
+// Registry-side equivalent: registry.TryGetComponent<RigidBodyComponent>(player)
+// Liveness / lookup guards: registry.IsAlive(e), registry.DoesTagExist("player")
+// before registry.GetEntityByTag("player") — that one still .at()s.
 ```
 
 ### State Transition from Within a State
@@ -583,7 +805,8 @@ General 2D game dev principles, mapped to how Storm Engine v2 implements them.
 |-----------|-------------------------------|
 | **Tile size** — 16x16, 32x32, 64x64 | `TileMapLoader` constructor takes `tileSize` (default 32). The JRPG example uses 8 to preserve exact editor pixel coordinates. |
 | **Auto-tiling** — use for terrain | Not built in. The tile editor is manual paint/erase. Auto-tiling is a game-side concern. |
-| **Collision** — simplified shapes | `Tile.hasCollider` + `colliderW`/`colliderH` on each tile. The engine spawns `BoxColliderComponent` entities; `CollisionSystem` does AABB. |
+| **Collision** — simplified shapes | `TileMapLoader` parses `hasCollider` + `colliderW`/`colliderH` into each `Tile` and creates **no entities at all** — its whole output is `const Map &getMap()`. The game iterates `getMap()` and adds `BoxColliderComponent` itself; `CollisionSystem` then does AABB. |
+| **Animated tiles** — editor-authored | Not supported at runtime. The editor writes animation fields into `.map` files and `TileMapLoader` parses and discards them, because `Tile` has nowhere to put them (fixing that changes `sizeof(Tile)`, an ABI break). Drive tile animation from game code with `AnimationComponent`. |
 
 | Layer | Content | Engine support |
 |-------|---------|---------------|
@@ -602,8 +825,8 @@ General 2D game dev principles, mapped to how Storm Engine v2 implements them.
 | Polygon | Complex shapes | Not built in — implement as custom component + custom system |
 
 - **Pixel-perfect vs physics-based:** pick one approach per game. The engine's `CollisionSystem` kills entities with `RigidBodyComponent` on contact — it's a simple arcade collision, not a physics solver.
-- **Fixed timestep for consistency:** the engine uses variable dt with a 60 FPS cap (`SDL_Delay` on the remainder). For deterministic simulation (e.g., replay systems), games should implement their own fixed timestep.
-- **Layers for filtering:** use entity groups (`registry.GroupEntity`) to partition entities for collision logic.
+- **Fixed timestep for consistency:** the engine does no frame pacing at all — `common/states/gameState.h` defines `FPS`/`MILLISECS_PER_FRAME` and nothing else; there is not a single `SDL_Delay` in `common/`. Every state re-implements the variable-dt loop with a 60 FPS `SDL_Delay` budget itself, so a game wanting a deterministic fixed timestep simply writes a different loop. (This is the same point as Key Design Decision 6, "no main loop".)
+- **Layers for filtering:** use entity groups (`registry.GroupEntity`) to partition entities for collision logic. Note: one group per entity and one tag per entity. `GroupEntity` calls `RemoveEntityGroup` first, so re-grouping *moves* an entity rather than adding a second membership; groups are not a bitmask layer system.
 
 ### Camera Systems
 
@@ -632,6 +855,8 @@ different engine capabilities and game-side patterns.
 - **Tile collision** — `BoxColliderComponent` on tiles + entities; `CollisionSystem` kills on contact, so platformers typically need a custom collision system that resolves instead of killing
 
 The engine's `platformer` example demonstrates the basic pattern: `TransformComponent` + `RigidBodyComponent` + `SpriteComponent` + `AnimationComponent` + `BoxColliderComponent`. The `nx-platformer` and `android-platformer` variants show the same game on Switch and Android.
+
+The `android-platformer` variant is not a pure port: it is the reference consumer of the engine's virtual gamepad. It builds the layout once from the logical window size (`MakeVPadLayout(w, h)` — Xbox lettering by default), feeds SDL touches through `EvalVPad` each frame, letterboxes with `SDL_RenderSetLogicalSize`, and handles orientation by overriding `setOrientationBis` in `PlatformerActivity` (it requests `SCREEN_ORIENTATION_FULL_SENSOR`, so the game follows the device through all four orientations even with the auto-rotate lock on; SDL overwrites the manifest's `screenOrientation` from native code, so the manifest alone cannot decide this). It also links `common/net/` (`GLOB_RECURSE` + the `INTERNET` permission).
 
 #### Shooter (Side-scrolling shoot-em-up)
 
@@ -701,12 +926,12 @@ The engine's `netplay-checkers` example demonstrates graphical, authoritative-ne
 |-------|-----|
 | Call `SDL_PollEvent` in both Game and State | Let the active state own all event polling |
 | Forget `registry.Update()` before systems | Always flush deferred adds/kills first |
-| Re-include engine headers in state headers | `GameState` already includes them all |
+| Lean on `gameState.h`'s transitive includes instead of including what you use | It is true that `gameState.h` drags in SDL2 and every component/system — ~713 headers, ~145k preprocessed lines, to declare a 23-line interface — but that path is a documented defect (KNOWN_ISSUES #8) and goes away in v3. Include what you use in your own headers. |
 | Move `AssetStore_Ptr` to multiple states | Move once to first state, pass raw ptr/ref after |
 | Delete states inline on transition | Use the state machine's push/pop/change (deferred deletion) |
 | Add components before registering systems | Register systems first, then create entities |
 | `AddComponent` on a live entity to get it into a system | Kill and recreate the entity — membership is computed once |
-| Call `make` without `-f Makefile.debian` at repo root | Always use `-f Makefile.debian` |
+| Call bare `make` at repo root — there is no default `Makefile` | Name the makefile: `-f Makefile.debian` for the Linux `.so` + spec suite, `-f Makefile.win` for the MinGW-w64 cross-build (`build/win/libstormenginev2.dll`, `tests.exe` under Wine) |
 | Run `./bin/tests` from outside the repo root | Run from repo root — specs hardcode relative paths |
 | Forget `Update()` before `Poll()` in networking | `NetConnection` caches the clock in `Update` only |
 | Keep `NetChunk::data` past the callback | Copy it — the next `Feed()` overwrites the scratch buffer |
@@ -716,6 +941,10 @@ The engine's `netplay-checkers` example demonstrates graphical, authoritative-ne
 | Jittery camera | Smooth camera following with interpolation in your state's `update()` |
 | Mix pixel-perfect and physics-based collision | Pick one approach per game |
 | Forget to null-check `AssetStore::GetTexture` | It returns `nullptr` for missing IDs, not an exception |
+| Call `GetComponent<T>` where a miss is possible | Use `TryGetComponent<T>` — `GetComponent` returns a shared per-thread fallback on a miss, and two misses alias each other |
+| Call `GetEntityByTag` unguarded | Guard with `DoesTagExist(tag)` — it still `.at()`s, which terminates under `-fno-exceptions` |
+| Keep an `Entity` past the frame it might die in | Ids are recycled and `Entity` carries no generation, so a stale handle can kill a live entity; `IsAlive` cannot tell them apart. Re-look up by tag or group |
+| Hand-build an `Entity(88)` and call methods on it | Every forwarder now null-checks `registry` and no-ops with a throttled log — it is not UB any more, but it still does nothing |
 
 ---
 
@@ -728,14 +957,17 @@ tilemap-based levels, networking code, or touch input for mobile targets.
 
 ## Naming Conventions
 
-Three member-naming schemes coexist and are load-bearing:
+Member-naming schemes coexist and are load-bearing:
 - Engine ECS core: bare names (`numEntities`)
 - `GameStateMachine`: `m_` prefix (`m_gameStates`)
-- Game/state code: trailing underscore (`renderer_`)
+- Engine `common/net/` **and** game/state code: trailing underscore (`nowMs_`, `sock_`, `renderer_`)
+- Editor (`editor/src/`): bare `m` prefix, no underscore (`mMousePosX`, `mSpriteComponent`)
 
-Method casing is split: PascalCase in ECS/AssetStore/Logger (`CreateEntity`,
-`AddTexture`), camelCase in the state machine and `GameState` virtuals
-(`pushState`, `processInput`, `onEnter`) — overrides must match camelCase.
+Method casing is PascalCase everywhere except the state machine and the
+`GameState` virtuals — that includes `common/net/` (`Start`, `Update`, `Poll`,
+`Send`) and `common/input/` (`MakeVPadLayout`, `EvalVPad`). The camelCase
+exceptions are `pushState`, `processInput`, `onEnter` and friends — overrides
+must match camelCase.
 
 Games always include the engine with angle brackets
 (`#include <stormengine2/ecs.h>`); quoted/relative includes are reserved for
@@ -749,12 +981,44 @@ the game's own headers.
 - The engine does not provide audio playback — games handle SDL_mixer
   initialization and music/SFX themselves.
 - No built-in physics engine — `CollisionSystem` does simple AABB detection
-  only. Games needing complex physics implement their own.
+  only. Games needing complex physics implement their own. It does not merely
+  *detect*: on an overlap it calls `Kill()` on each entity that has a
+  `RigidBodyComponent` (static scenery survives). There is no callback, no event
+  queue, no event bus — `common/systems/collision.h:32` carries the
+  `// TODO: emit an event`. Any game needing bounce, damage, triggers or pickups
+  hand-rolls its own overlap pass.
+- **Thirty-two component types, process-wide.** `MAX_COMPONENTS` is 32 and
+  `Signature` is `std::bitset<32>`; ids come from one global counter, so the cap
+  is per binary, not per `Registry`. Overflow no longer throws — the id is
+  range-checked, logged and ignored — but a system whose `RequireComponent<T>`
+  was dropped keeps an empty signature, and an empty signature matches **every**
+  entity. Prefer widening a component with a `kind` enum over declaring a new one.
 - No built-in scene editor beyond the tile map editor. Entity placement is
   code-driven or XML-driven.
 - The engine ships no main loop, no Game class, no window management.
-- No keyboard or gamepad abstraction — only touch primitives in `common/input/`.
-- `common/net/` is absent from Switch and Android builds (non-recursive glob).
-- The editor has its own `SpriteComponent` copy that shadows the engine's.
+- No keyboard or *physical* gamepad abstraction — games read SDL (or libnx
+  `PadState` on Switch) themselves. `common/input/` ships SDL-free touch
+  primitives (`touchControls.h`) plus the on-screen virtual gamepad
+  (`virtualGamepad.h`): `MakeVPadLayout(w, h, VPadStyle = VPadStyle::Xbox)` /
+  `EvalVPad`, lettered Xbox-style by default (Y top, X left, B right, A bottom)
+  or `VPadStyle::Snes` on request.
+- `common/net/` is absent from the **Switch** build only:
+  `examples/nx-platformer/Makefile` globs `$(wildcard $(dir)/*.cpp)` over
+  `include/stormengine2` (a symlink to `common/`), which is non-recursive and
+  picks up 6 of the 13 translation units. The **Android** example does build it
+  — `app/jni/CMakeLists.txt` uses `GLOB_RECURSE` and the manifest carries
+  `INTERNET`.
+- The editor's shadowing copy of `common/components/sprite.h` is gone;
+  `editor/include/` was deleted and the editor now compiles against the
+  installed engine headers with `#include <stormengine2/components/sprite.h>`.
+- Ten further defects are **real, understood and deliberately unfixed in 1.x**
+  because each needs a source or ABI break; they are tracked in
+  `KNOWN_ISSUES.md` with a workaround apiece. Highlights: recycled entity ids
+  with no generation counter, implicit `Entity(std::size_t)` conversion,
+  component set frozen at admission, copyable `NetServer`/`NetClient`, tile
+  animation fields discarded by the loader, and **no namespaces — every engine
+  type (`Entity`, `Registry`, `Logger`, `Tile`…) is a global symbol**, so a game
+  declaring its own collides. (`docs/TECH_DEBT.md` is gitignored and local-only;
+  `KNOWN_ISSUES.md` is the tracked record.)
 
 

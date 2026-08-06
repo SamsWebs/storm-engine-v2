@@ -62,6 +62,13 @@ FLAGSTAMP := $(ROOT_DIR)/.build-flags
 $(shell new=$$(printf '%s' "$(CCFLAGS)" | md5sum); \
         [ "$$new" = "$$(cat $(FLAGSTAMP) 2>/dev/null)" ] \
           || printf '%s' "$$new" > $(FLAGSTAMP))
+# Empty rule so make knows the stamp can be made. Without it, GNU make 4.3's
+# implicit-rule search does not see a file created by $(shell) during the same
+# invocation, so the %.o rule's prerequisite looks unsatisfiable, make falls
+# back to its built-in rule, and every compile drops -std=c++17 (the CI
+# failure this guards). The recipe is empty on purpose — the $(shell) above
+# owns the write; this line only declares the target exists.
+$(FLAGSTAMP): ;
 
 # examples/examples.mk and editor/Makefile both define OBJS before including
 # this file, so their dependency files can be pulled in from here and neither

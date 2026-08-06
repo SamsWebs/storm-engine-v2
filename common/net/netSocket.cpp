@@ -1,3 +1,16 @@
+// inet_ntop requires _WIN32_WINNT >= 0x0600 (Vista), so this must be defined
+// before the <winsock2.h> include further down this file. Nothing above that
+// include needs it: netSocket.h pulls in only <string>, logger.h and
+// netTypes.h, none of which reach winsock2.h or windows.h. It is a fallback
+// for a compile that forgets the flag — every Windows build file here already
+// passes -D_WIN32_WINNT=0x0600 (Makefile.win, examples/examples.win.mk), and
+// the #ifndef below keeps this from colliding with them.
+#ifdef _WIN32
+#ifndef _WIN32_WINNT
+#define _WIN32_WINNT 0x0600
+#endif
+#endif
+
 #include <chrono>
 #include <cstdio>
 #include <cstring>
@@ -9,8 +22,12 @@
 #ifdef _WIN32
 #include <winsock2.h>
 #include <ws2tcpip.h>
+// mswsock.h for SIO_UDP_CONNRESET; it needs winsock2.h ahead of it.
+#include <mswsock.h>
+#include <process.h>
 using SocketHandle = int;
 #define NET_INVALID_SOCKET INVALID_SOCKET
+#define NET_GETPID _getpid
 #else
 #include <arpa/inet.h>
 #include <errno.h>
@@ -21,17 +38,20 @@ using SocketHandle = int;
 #include <unistd.h>
 using SocketHandle = int;
 #define NET_INVALID_SOCKET (-1)
+#define NET_GETPID getpid
 #endif
 
+// ws2_32 refuses every entry point with WSANOTINITIALISED until WSAStartup has
+// succeeded once in the process — name resolution included, not just socket().
+// So every function here that touches winsock calls this first, and it has to
+// be idempotent: the function-local static runs its initializer exactly once,
+// on whichever call gets there first, and is thread-safe by construction.
 static bool NetSocketsInit() {
 #ifdef _WIN32
-  static bool done = false;
-  static bool ok = false;
-  if (!done) {
-    done = true;
+  static const bool ok = [] {
     WSADATA wsa;
-    ok = WSAStartup(MAKEWORD(2, 2), &wsa) == 0;
-  }
+    return WSAStartup(MAKEWORD(2, 2), &wsa) == 0;
+  }();
   return ok;
 #else
   return true;
@@ -68,6 +88,17 @@ bool NetSocket::Open(uint16_t port) {
     Close();
     return false;
   }
+
+#ifdef _WIN32
+  // Windows turns an ICMP port-unreachable drawn by a previous sendto into a
+  // WSAECONNRESET on the *next* recvfrom of this UDP socket. That is noise for
+  // a connectionless socket — a peer that quit should not stop us reading from
+  // everyone else — so switch it off. Best-effort: a stack that rejects the
+  // ioctl just leaves the behaviour on, which Recv also handles.
+  DWORD connReset = 0, ioctlBytes = 0;
+  WSAIoctl((SOCKET)fd_, SIO_UDP_CONNRESET, &connReset, sizeof(connReset), NULL,
+           0, &ioctlBytes, NULL, NULL);
+#endif
 
   sockaddr_in addr;
   std::memset(&addr, 0, sizeof(addr));
@@ -116,16 +147,42 @@ int NetSocket::Recv(NetAddress &addr, uint8_t *data, int maxSize) {
   sockaddr_in from;
   socklen_t fromLen = sizeof(from);
 #ifdef _WIN32
-  int n = recvfrom((SOCKET)fd_, (char *)data, maxSize, 0, (sockaddr *)&from,
-                   &fromLen);
+  // -1 means "nothing left to read" to both Poll drain loops, which break on
+  // it. Two winsock errors would be misread as that and stall every remaining
+  // datagram for the tick, so neither is allowed to reach the return below.
+  // The bound only guards a stack that reports the same error forever; each
+  // iteration otherwise consumes one queued datagram or notification.
+  int n = -1;
+  for (int attempt = 0; attempt < 8; attempt++) {
+    fromLen = sizeof(from);
+    n = recvfrom((SOCKET)fd_, (char *)data, maxSize, 0, (sockaddr *)&from,
+                 &fromLen);
+    if (n >= 0)
+      break;
+    int err = WSAGetLastError();
+    if (err == WSAEMSGSIZE) {
+      // The datagram was bigger than maxSize. Winsock consumed it and filled
+      // the buffer, then reported an error; POSIX recvfrom returns maxSize for
+      // the same case. Match POSIX so the caller sees one truncated packet.
+      n = maxSize;
+      break;
+    }
+    if (err == WSAECONNRESET || err == WSAENETRESET)
+      continue; // stale ICMP unreachable, socket is still fine — read again
+    if (!NetWouldBlock())
+      logger_.Err("NetSocket: recvfrom failed");
+    return -1;
+  }
+  if (n < 0)
+    return -1;
 #else
   int n = recvfrom(fd_, data, maxSize, 0, (sockaddr *)&from, &fromLen);
-#endif
   if (n < 0) {
     if (!NetWouldBlock())
       logger_.Err("NetSocket: recvfrom failed");
     return -1;
   }
+#endif
   addr.ip = from.sin_addr.s_addr;
   addr.port = from.sin_port;
   return n;
@@ -153,6 +210,9 @@ uint32_t NetIpToHost(const NetAddress &addr) { return ntohl(addr.ip); }
 uint16_t NetPortToHost(const NetAddress &addr) { return ntohs(addr.port); }
 
 std::string NetAddressToString(const NetAddress &addr) {
+  // inet_ntop is a ws2_32 call, so it needs winsock up even though no socket
+  // is involved. Logging an address before anything opens a socket is normal.
+  (void)NetSocketsInit();
   char buf[INET_ADDRSTRLEN + 8];
   char ip[INET_ADDRSTRLEN];
   struct in_addr in;
@@ -164,6 +224,14 @@ std::string NetAddressToString(const NetAddress &addr) {
 
 bool NetResolveAddress(const std::string &hostOrIp, uint16_t port,
                        NetAddress &out) {
+  // getaddrinfo is a ws2_32 call and fails with WSANOTINITIALISED until
+  // WSAStartup has run. NetClient::Connect resolves the host *before* it opens
+  // its socket, so a client-only process reaches here with winsock still down
+  // and every hostname — dotted-quad literals included, since no AI_NUMERICHOST
+  // short-circuits the resolver — would fail as if the name were bad.
+  if (!NetSocketsInit())
+    return false;
+
   struct addrinfo hints;
   std::memset(&hints, 0, sizeof(hints));
   hints.ai_family = AF_INET; // IPv4 for now
@@ -196,11 +264,15 @@ uint32_t NetNowMs() {
 }
 
 uint32_t NetRandom32() {
-  // Reseed on first use and after fork(2): a forked child inherits the
-  // parent's state, so the pid check guarantees independent streams.
+  // Reseed on first use, and on POSIX after fork(2) as well: a forked child
+  // inherits the parent's state, so the pid check guarantees independent
+  // streams. Windows has no fork, so _getpid() is fixed for the process
+  // lifetime and the pid half of the test never fires there — the first-use
+  // seeding is what does the work. Kept unconditional because the cost is one
+  // comparison per call and a POSIX-only branch here would buy nothing.
   static uint64_t seed = 0;
   static uint32_t seedPid = 0;
-  if (seed == 0 || seedPid != (uint32_t)getpid()) {
+  if (seed == 0 || seedPid != (uint32_t)NET_GETPID()) {
     // Mix a few independent sources; if any is weak or fails, the rest
     // still carry entropy (urandom > random_device > time + address).
     std::random_device rd;
@@ -210,10 +282,10 @@ uint32_t NetRandom32() {
       urandom.read((char *)&s, (std::streamsize)sizeof(s));
     uint64_t t = NetNowMs();
     seed = s ^ (t << 32 | t) ^ (uint64_t)(uintptr_t)&seed ^
-           ((uint64_t)(uint32_t)getpid() << 16) ^ 0x9E3779B97F4A7C15ULL;
+           ((uint64_t)(uint32_t)NET_GETPID() << 16) ^ 0x9E3779B97F4A7C15ULL;
     if (seed == 0)
       seed = 0x9E3779B97F4A7C15ULL;
-    seedPid = (uint32_t)getpid();
+    seedPid = (uint32_t)NET_GETPID();
   }
   // xorshift64
   seed ^= seed << 13;

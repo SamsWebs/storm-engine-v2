@@ -1,18 +1,40 @@
 FROM storminator16/igloo-testing:latest
 
-# Install dependencies missing from the base image
+# Install dependencies missing from the base image. `time` is needed because
+# examples/examples.mk and editor/Makefile both shell out to /usr/bin/time;
+# `dpkg-dev` provides dpkg-shlibdeps, which the release workflow runs in here
+# to derive the .deb's Depends: field from the built library.
+#
+# The two symlinks put Lua where base.mk expects it. Debian versions both the
+# library and the header directory (/usr/include/lua5.4), but base.mk only ever
+# searches -I/usr/local/include and links -llua — which is where a from-source
+# Lua install lands, and how the README tells you to set the host up. Without
+# the header link, vendor/sol/sol.hpp fails on <lua.h> and the editor does not
+# compile.
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    dpkg-dev \
     libglm-dev \
     libgtk-3-dev \
     liblua5.4-dev \
+    time \
     && ln -sf $(find /usr/lib -name 'liblua5.4.so' | head -1) /usr/local/lib/liblua.so \
+    && ln -sf /usr/include/lua5.4/*.h /usr/include/lua5.4/lua.hpp /usr/local/include/ \
     && rm -rf /var/lib/apt/lists/*
 
-# # Copy the source code into the container
+# Copy the source code into the container.
+#
+# examples/ and editor/ are here so CI can actually compile them — before this
+# they entered no image and no workflow, so an engine change that broke every
+# example still shipped a green build and a .deb. See
+# .github/scripts/ci-build-examples.sh for what is and is not covered.
+# .dockerignore keeps out examples/nx-platformer and examples/android-platformer:
+# they need devkitPro and the Android NDK, neither of which is in this image.
 RUN mkdir -p /opt/library
 COPY ./common /opt/library/common
 COPY ./vendor /opt/library/vendor
 COPY ./specs /opt/library/specs
+COPY ./examples /opt/library/examples
+COPY ./editor /opt/library/editor
 COPY ./Makefile.debian /opt/library/Makefile
 COPY ./base.mk /opt/library/base.mk
 

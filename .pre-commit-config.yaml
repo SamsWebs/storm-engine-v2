@@ -1,4 +1,4 @@
-# Pre-commit hooks for Center Ice Hockey.
+# Pre-commit hooks for Storm! Engine v2.
 #
 # One-time setup (per clone):  pre-commit install
 # Then clang-format runs automatically on staged C/C++ files at every commit;

@@ -1,5 +1,70 @@
 # Changelog
 
+##  [1.2.2] — 2026-08-05
+
+Memory-safety and correctness pass over the networking layer and the ECS, plus a Windows cross-build. No breaking changes — every addition is additive.
+
+### Added
+
+- `Registry::TryGetComponent<T>()` / `Entity::TryGetComponent<T>()` — return `nullptr` when the component is absent. This is the correct accessor whenever a miss is possible; `GetComponent` must return a reference and therefore cannot report one.
+- `Registry::IsAlive(Entity)` and `Registry::DoesTagExist(const std::string &)` — guards for the accessors that cannot fail safely on their own.
+- Windows cross-build via MinGW-w64: `Makefile.win`, `cmake/toolchain-mingw64.cmake`, `examples/examples.win.mk`. Builds `libstormenginev2.dll` and the spec suite. Not covered by CI, which builds `Dockerfile.debian` only.
+- `VPadStyle` and an optional third argument to `MakeVPadLayout(w, h, style)` — the action diamond is now lettered Xbox-style by default (Y top, X left, B right, A bottom); pass `VPadStyle::Snes` for the previous arrangement. The four touch targets are in identical positions under both, so only the lettering moves; a game binding to `state.a` gets the same button under a different thumb. **Existing calls compile unchanged but move to the Xbox lettering** — pass `VPadStyle::Snes` explicitly to keep the old layout.
+- `KNOWN_ISSUES.md` — defects that cannot be fixed within the frozen 1.x API, each with a workaround and the reason. Candidates for a future v3.
+- README section documenting the 32 component-type limit: it is per binary rather than per `Registry`, and it counts types rather than instances.
+
+### Fixed
+
+- **`NetControlPacket::Unpack` overran its payload buffer.** `payloadSize` was assigned before an unbounded `memcpy`, so a full-MTU control datagram overwrote it with attacker-chosen bytes — up to a 64 KB out-of-bounds read on the client, which then copied it into a `std::string` and logged it. Unauthenticated: one UDP datagram.
+- **`NetServer::SendControl` smashed the stack** on a `DisconnectClient` reason longer than the payload buffer.
+- **`BufferVital`'s ring wrap** left a tail gap the consumers did not know about, so retransmits carried the wrong bytes after roughly 16 KB of vital traffic.
+- **`NetMessageReader::ReadString` leaked the caller's buffer.** An unterminated wire string left stale bytes in `out` and reported success, so a truncated or hostile packet made the caller read what the peer never sent. It now fails closed and null-terminates on every exit path.
+- **Handshake nonces were predictable.** `NetRandom32` was a raw xorshift64, and six observed nonces recovered its state — voiding the cookie handshake's anti-spoofing guarantee. A slot's server nonce is also rotated on any CONNECT other than a genuine mid-handshake retry: the nonce is the connection token, travels in cleartext in every packet header, and equality against it is the only authentication on an inbound connected packet.
+- **`Registry::GetComponent` returned a shared mutable static on a miss**, so a write through one miss surfaced in every later miss, including across `Registry` instances.
+- **`std::bitset` could throw out of `ecs.h`.** Component ids are now range-checked and the accesses use `operator[]`, which removes `__throw_out_of_range_fmt` from the header entirely — it aborted rather than threw under the Switch build's `-fno-exceptions`.
+- **`Registry::GetEntitiesByGroup` aborted on an unknown group** (`.at()` on a missing key). Returns an empty vector now.
+- **`KillEntity` rejects an already-dead entity in O(1)**, replacing a linear scan on a per-frame path.
+- **Networking never compiled on Android.** `app/jni/CMakeLists.txt` globbed `common/*.cpp` non-recursively, silently dropping all seven `common/net/` translation units, and the manifest lacked `android.permission.INTERNET` — which fails at runtime, not at build time. Verified: 490 `Net*` symbols now present in `libmain.so`, both ABIs.
+- Non-canonical varints and trailing bytes in `NetSnapshotDelta::Apply` are rejected; snapshot keys with item type ≥ `0x8000` no longer encode as negative varints (receiver-side only, no wire-format change).
+- `editor/include/stormengine2/components/sprite.h` was a byte-identical copy shadowing the installed header, where it could only ever hide upstream fixes.
+- **Android touch input responded away from where the controls were drawn.** `finger->x`/`y` are normalised over the whole drawable, letterbox bars included, but the example scaled them by the logical width directly. The logical size is a fixed 800x480 (5:3) letterboxed onto a display that is usually wider, so every touch was squashed toward the centre. Now converted with `SDL_RenderWindowToLogical`, which knows the viewport offset and scale.
+- **Android movement latched on and never released.** The example accumulated touch state into its movement flags (`moveRight_ = moveRight_ || ...`), and only a `SDL_KEYUP` cleared them. Lifting a finger raises no event — it simply stops appearing in the touch list — so on a device with no keyboard the first touch in a direction pinned the player walking that way forever. Keyboard state is now held separately and the merged flags are rebuilt from scratch each frame.
+
+### Changed
+
+- `examples/android-platformer` now drives the engine's virtual gamepad (`<stormengine2/input/virtualGamepad.h>`) instead of the older three-zone `touchControls.h` scheme: a circular 8-way d-pad bottom-left and an Xbox-lettered action diamond bottom-right. D-pad left/right move, d-pad up and **A** jump; the controls this game does not read are drawn dimmed rather than implying an input that does nothing. The virtual gamepad shipped in 1.2.0 with specs but no consumer — this is its first.
+- `examples/android-platformer` follows the phone through all four orientations, including when the system auto-rotate toggle is off. The manifest alone cannot do this: SDL calls `SDLActivity.setOrientationBis()` from native code as the window is created and overwrites `android:screenOrientation`, choosing `SCREEN_ORIENTATION_FULL_USER` for a resizable window — which honours the auto-rotate lock, so the app was pinned to the user's preferred orientation. Setting `SDL_HINT_ORIENTATIONS` does not help; the same path still resolves to `FULL_USER`. `PlatformerActivity` now overrides `setOrientationBis()` and requests `FULL_SENSOR`. Orientation stays a per-game decision, made in the game's own Activity rather than by the engine. In portrait the fixed logical size letterboxes into a band across the middle; the game is playable but small, and the controls sit inside that band because they are positioned in logical space.
+- The logger no longer flushes on every line — only on errors. ECS miss diagnostics are throttled, so a game missing every frame no longer does 60 flushed writes a second.
+- Removed the dead root `Makefile.nx` (it recursed into a root `Makefile` that does not exist; the working Switch path is `examples/nx-platformer/`), a stray 0-byte `kNetMaxPacketSize` file, and the tracked `editor/imgui.ini` runtime state.
+- `.dockerignore` no longer lets host-built object files into the Debian image, where they could be linked stale.
+- The join address in `examples/netplay-checkers/README.md` and `docs/networking.md` is a placeholder rather than a literal `192.168.1.10`, which read as something to type verbatim. Both now say to substitute the host's own LAN address (or `localhost` for two processes on one machine) and note that `Connect()` does not wait for the server: pointing a client at an address nothing is listening on succeeds, retries silently, and times out about ten seconds later with no indication the address was wrong.
+
+### Notes
+
+- Suite: 210 → 273 specs. The new coverage is adversarial — truncated and oversize packets, malformed deltas, component-id overflow, recycled-id handles.
+- Two ECS defects are deliberately left open because they cannot be fixed without breaking the 1.x ABI: a stale `Entity` handle whose id has been recycled kills the new entity, and a system that overflows the component cap matches every entity instead of none. Both are documented in `KNOWN_ISSUES.md`, and two specs pin the current wrong behaviour so a future fix has to update them.
+
+## [1.2.1] — 2026-07-31
+
+UDP networking, ported from Teeworlds 0.7.5 (zlib). Released as an automatic patch bump; this entry is retroactive.
+
+### Added
+
+- `common/net/` and the umbrella header `<stormengine2/net/net.h>` — client/server LAN play over raw non-blocking UDP sockets, with no SDL_net or enet dependency.
+  - `NetServer` / `NetClient` — cookie handshake, per-IP connection caps, bans, kick and timeout handling.
+  - `NetConnection` — reliability layer: vital chunks with acks and resends, non-vital chunks that may be dropped or reordered. Owns no socket; the caller supplies a send callback.
+  - `NetSnapshot` / `NetSnapshotDelta` / `NetSnapshotCache` — tick state replication with per-client deltas and a 16-tick prediction cache.
+  - `NetMessageWriter` / `NetMessageReader` — message packing for game-defined message ids.
+  - `NetSocket` — the only OS-touching piece (BSD sockets, winsock behind `_WIN32`).
+- Examples: `netchat` (console host/join with reliable echo), `netrepl` (60 Hz authoritative host demonstrating snapshot deltas), `netplay-checkers` (graphical, ECS, full-state broadcast).
+- `docs/networking.md` — wire format and integration recipes.
+
+### Notes
+
+- Suite: 137 → 210 specs.
+- The module is SDL-free and has no coupling to the ECS or the engine tick; games marshal their own components into snapshots.
+- Not included in the Switch or Android builds at this release — both globbed engine sources non-recursively. Fixed for Android in the next release; the Switch path remains homebrew-only via devkitPro.
+
 ## [1.2.0] — 2026-07-10
 
 Virtual gamepad promoted from the Android platformer into the engine core.

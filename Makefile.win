@@ -1,0 +1,190 @@
+# ── Windows build (MinGW-w64 cross-compile from Linux) ──────────────────────
+#
+# Produces build/win/libstormenginev2.dll and build/win/tests.exe.
+#
+# SDL2 and satellites are cross-built from the SAME vendored sources the
+# Android build uses (vendor/android/ — upstream libsdl-org at release-2.30.11).
+# Nothing is downloaded; Windows cannot drift to a different SDL than Android.
+#
+# Prerequisites:
+#   sudo apt install mingw-w64 cmake
+#
+# Targets:
+#   make -f Makefile.win           deps (once) + lib + tests
+#   make -f Makefile.win deps      just build the vendored libraries
+#   make -f Makefile.win test      run the spec suite under Wine
+#   make -f Makefile.win clean     drop objects (keeps deps)
+#   make -f Makefile.win distclean drop everything including deps
+
+BUILD     := build/win
+OBJDIR    := $(BUILD)/obj
+DEPS      := $(CURDIR)/$(BUILD)/deps
+TOOLCHAIN := $(CURDIR)/cmake/toolchain-mingw64.cmake
+VENDOR    := vendor/android
+
+CROSS := x86_64-w64-mingw32
+# The -posix variant, not the bare one: specs/net/netLoopback.spec.cpp uses
+# <thread>, which the win32-threads gcc does not implement. cmake/toolchain-
+# mingw64.cmake must name the matching -posix compilers — mixing the two
+# threading models across the deps/engine link boundary is an ABI hazard, not
+# just a link error waiting to happen.
+CXX   := $(CROSS)-g++-posix
+
+# glm from the vendored tree — engine collider headers need it and there is
+# no glm in the mingw sysroot. Deliberately no host include path here: this is
+# a cross-compile, and /usr/local/include holds native x86-64 Linux SDL2 and
+# glm that would be substituted silently the moment a header went missing from
+# the paths above. See SPEC_CXXFLAGS for the one place it is still needed.
+CXXFLAGS := -std=c++17 -Wall -Wextra -O2 -fPIC \
+            -D_WIN32_WINNT=0x0600 \
+            -Icommon -I$(VENDOR)/glm \
+            -I$(DEPS)/include -I$(DEPS)/include/SDL2 \
+            -MMD -MP
+
+# igloo is header-only, is not vendored, and exists only under /usr/local, so
+# the spec suite cannot compile without the host path. Scoped to specs/ alone:
+# it is the test harness, it is not linked into the shipped DLL, and none of
+# the 13 engine translation units can pick a native Linux header from it.
+# -isystem rather than -I so it stays last in the search order.
+SPEC_CXXFLAGS := $(CXXFLAGS) -isystem /usr/local/include
+
+# -mconsole keeps stdout visible (Logger), which is the only diagnostic on a
+# headless Windows box. Switch to -mwindows when shipping.
+LDFLAGS := -L$(DEPS)/lib -mconsole -static-libgcc -static-libstdc++
+LIBS    := -lmingw32 -lSDL2main -lSDL2 -lSDL2_image -lSDL2_ttf -lSDL2_mixer \
+           -ltinyxml2 -lws2_32
+
+# Engine sources — recursive, same as Makefile.debian
+LIBSRCS := $(shell find common -name '*.cpp')
+LIBOBJS := $(patsubst common/%.cpp, $(OBJDIR)/engine/%.o, $(LIBSRCS))
+
+# Spec sources + engine sources (specs link the engine statically)
+TESTSRCS := $(shell find specs -name '*.cpp')
+TESTOBJS := $(patsubst specs/%.cpp, $(OBJDIR)/specs/%.o, $(TESTSRCS))
+
+DEPFILES = $(patsubst %.o,%.d,$(LIBOBJS) $(TESTOBJS))
+
+DEPS_STAMP := $(DEPS)/.stamp
+
+TARGET      := $(BUILD)/libstormenginev2.dll
+TEST_TARGET := $(BUILD)/tests.exe
+
+.PHONY: all deps test stage-dlls clean distclean
+
+all: $(TARGET) $(TEST_TARGET)
+
+# ── Vendored dependencies ───────────────────────────────────────────────────
+deps: $(DEPS_STAMP)
+
+$(DEPS_STAMP):
+	@echo "Cross-building SDL2 + satellites for Windows (first run only)…"
+	@mkdir -p $(BUILD)/dep-build
+	@for lib in SDL2 SDL_image2 SDL_ttf2 SDL_mixer2 tinyxml2; do \
+	  echo "  → $$lib"; \
+	  shared=ON; \
+	  case $$lib in tinyxml2) shared=OFF;; esac; \
+	  cmake -S $(VENDOR)/$$lib -B $(BUILD)/dep-build/$$lib \
+	    -DCMAKE_TOOLCHAIN_FILE=$(TOOLCHAIN) \
+	    -DCMAKE_BUILD_TYPE=Release \
+	    -DCMAKE_INSTALL_PREFIX=$(DEPS) \
+	    -DCMAKE_PREFIX_PATH=$(DEPS) \
+	    -DWIN_DEPS_PREFIX=$(DEPS) \
+	    -DBUILD_SHARED_LIBS=$$shared \
+	    -DSDL_TEST=OFF -DSDL2IMAGE_SAMPLES=OFF -DSDL2TTF_SAMPLES=OFF \
+	    -DSDL2MIXER_SAMPLES=OFF \
+	    -DSDL2IMAGE_VENDORED=OFF -DSDL2TTF_VENDORED=ON -DSDL2MIXER_VENDORED=OFF \
+	    -DSDL2TTF_HARFBUZZ=OFF \
+	    -DSDL2MIXER_FLAC=OFF -DSDL2MIXER_MOD=OFF -DSDL2MIXER_MIDI=OFF \
+	    -DSDL2MIXER_OPUS=OFF -DSDL2MIXER_WAVPACK=OFF \
+	    -Dtinyxml2_BUILD_TESTING=OFF \
+	    > $(BUILD)/dep-build/$$lib-configure.log 2>&1 || \
+	    { echo "configure failed for $$lib — see $(BUILD)/dep-build/$$lib-configure.log"; exit 1; }; \
+	  cmake --build $(BUILD)/dep-build/$$lib --target install -j$$(nproc) \
+	    > $(BUILD)/dep-build/$$lib-build.log 2>&1 || \
+	    { echo "build failed for $$lib — see $(BUILD)/dep-build/$$lib-build.log"; exit 1; }; \
+	done
+	@touch $@
+
+# ── Shared library ─────────────────────────────────────────────────────────
+$(TARGET): $(DEPS_STAMP) $(LIBOBJS)
+	@mkdir -p $(BUILD)
+	$(CXX) -shared -o $@ $(LIBOBJS) $(LDFLAGS) $(LIBS)
+	@$(MAKE) --no-print-directory -f Makefile.win stage-dlls
+
+# ── Spec suite ──────────────────────────────────────────────────────────────
+$(TEST_TARGET): $(DEPS_STAMP) $(TESTOBJS) $(LIBOBJS)
+	@mkdir -p $(BUILD)
+	$(CXX) -o $@ $(TESTOBJS) $(LIBOBJS) $(LDFLAGS) $(LIBS)
+	@$(MAKE) --no-print-directory -f Makefile.win stage-dlls
+
+test: $(TEST_TARGET)
+	wine64 $(TEST_TARGET)
+
+# Neither tests.exe nor libstormenginev2.dll starts without its DLLs beside it,
+# and Windows says nothing useful when one is missing — under Wine it was a
+# bare "exit 53" with no output at all. Hardcoding the list is exactly what
+# produced that: the first attempt shipped libwinpthread-1.dll but not
+# libstdc++-6.dll, which a vendored DLL pulled in. So resolve the import graph
+# instead and copy whatever is still unresolved out of the mingw runtime. This
+# is not decorative — the deps stage does not carry the exe's -static-libgcc
+# -static-libstdc++ (see LDFLAGS), so re-enabling an SDL_mixer/SDL_image codec
+# or flipping a VENDORED flag can add a C++ runtime import to a vendored DLL
+# with nothing else to catch it.
+#
+# Three passes because a DLL staged in one pass brings imports of its own; the
+# loop stops early once a pass stages nothing. The final loop warns about
+# anything still unresolved that the mingw runtime could have supplied — the
+# case that would otherwise surface as a silent non-zero exit under Wine.
+#
+# Resolution goes through $(CXX) -print-file-name first, which returns the
+# runtime belonging to the compiler actually in use. That matters here:
+# /usr/lib/gcc/$(CROSS) carries both a 9.3-posix and a 9.3-win32
+# libstdc++-6.dll, and staging the win32 one beside a -posix build reintroduces
+# the very ABI mismatch the toolchain file was fixed to avoid.
+stage-dlls:
+	@mkdir -p $(BUILD)
+	@cp -u $(DEPS)/bin/*.dll $(BUILD)/ 2>/dev/null || true
+	@cd $(BUILD) && \
+	imports() { \
+	  for f in $(notdir $(TARGET)) $(notdir $(TEST_TARGET)) *.dll; do \
+	    [ -f "$$f" ] || continue; \
+	    $(CROSS)-objdump -p "$$f" 2>/dev/null | awk '/DLL Name/ {print $$3}'; \
+	  done | sort -u; \
+	}; \
+	runtime() { \
+	  p=$$($(CXX) -print-file-name="$$1" 2>/dev/null); \
+	  if [ -f "$$p" ]; then echo "$$p"; return 0; fi; \
+	  find /usr/lib/gcc/$(CROSS) /usr/$(CROSS) -name "$$1" 2>/dev/null | head -1; \
+	}; \
+	for pass in 1 2 3; do \
+	  found=0; \
+	  for n in $$(imports); do \
+	    [ -f "$$n" ] && continue; \
+	    src=$$(runtime "$$n"); \
+	    if [ -n "$$src" ]; then cp -u "$$src" .; found=1; fi; \
+	  done; \
+	  [ $$found -eq 0 ] && break; \
+	done; \
+	for n in $$(imports); do \
+	  if [ ! -f "$$n" ] && [ -n "$$(runtime "$$n")" ]; then \
+	    echo "WARNING: $$n is a mingw runtime DLL and was not staged"; \
+	  fi; \
+	done; \
+	true
+
+# ── Compile rules ───────────────────────────────────────────────────────────
+$(OBJDIR)/engine/%.o: common/%.cpp | $(DEPS_STAMP)
+	@mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(OBJDIR)/specs/%.o: specs/%.cpp | $(DEPS_STAMP)
+	@mkdir -p $(dir $@)
+	$(CXX) $(SPEC_CXXFLAGS) -c $< -o $@
+
+clean:
+	rm -rf $(OBJDIR) $(TARGET) $(TEST_TARGET)
+
+distclean:
+	rm -rf $(BUILD)
+
+-include $(DEPFILES)

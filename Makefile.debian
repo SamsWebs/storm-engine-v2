@@ -6,7 +6,13 @@ BIN_DIR   		= ./bin
 TARGET 			= $(BIN_DIR)/$(BIN)
 TEST_TARGET 	= $(BIN_DIR)/$(TEST_BIN)
 
-all: clean test-target run-test target
+# No `clean` prerequisite here any more. base.mk now compiles with -MMD -MP
+# and the .d files it writes are pulled back in at the bottom of this file, so
+# editing a header rebuilds every object that includes it. The unconditional
+# clean existed only to paper over that gap and made every build a full one.
+# Switching PROFILE is handled too — base.mk stamps the flags and every object
+# depends on that stamp, so -O0 and -O2 objects can no longer be mixed.
+all: test-target run-test target
 
 include ./base.mk
 
@@ -17,10 +23,27 @@ target : $(LIBOBJS)
 	mkdir -p $(BIN_DIR)
 	$(CC) $^ $(LIB) -shared -o $(TARGET)
 
+# Staging prefix. .github/workflows/build-and-release.yml packages the .deb by
+# running `make install DESTDIR=<staging>` rather than re-implementing the
+# copy, so the tree the package ships and the tree a from-source install
+# produces cannot drift apart.
+DESTDIR ?=
+PREFIX ?= /usr/local
+INSTALL_INCLUDE_DIR = $(DESTDIR)$(PREFIX)/include/stormengine2
+INSTALL_LIB_DIR = $(DESTDIR)$(PREFIX)/lib
+
+# The include dir is wiped before the copy: a bare `cp -r` never removes
+# anything, so headers and whole directories deleted from common/ lived on in
+# /usr/local/include/stormengine2 forever. The find then strips the build
+# by-products cp drags along — the old `rm -r .../*.o` matched the top level
+# only, left common/net/*.o and every .cpp behind, and failed outright when
+# the glob matched nothing.
 install:
-	mkdir -p /usr/local/include/stormengine2
-	cp $(TARGET) /usr/local/lib && cp -r ./common/* /usr/local/include/stormengine2
-	rm -r /usr/local/include/stormengine2/*.o
+	rm -rf $(INSTALL_INCLUDE_DIR)
+	mkdir -p $(INSTALL_INCLUDE_DIR) $(INSTALL_LIB_DIR)
+	cp $(TARGET) $(INSTALL_LIB_DIR)
+	cp -r ./common/* $(INSTALL_INCLUDE_DIR)
+	find $(INSTALL_INCLUDE_DIR) \( -name '*.o' -o -name '*.d' -o -name '*.cpp' \) -delete
 
 # NFD is editor-only — strip it from both library and test builds
 LIB := $(filter-out -lnfd,$(LIB))
@@ -31,9 +54,14 @@ TESTSRCS  	:= $(shell find specs -name '*.cpp')
 TESTSRCS  	+= $(shell find common -name '*.cpp')
 TESTOBJS  	= $(TESTSRCS:.cpp=.o)
 
-run-test:
+# Ordering prerequisite, not just a listed goal: without it `make -j test`
+# could start the test binary before the link that produces it.
+run-test: test-target
 	$(TEST_TARGET)
 
 test-target: $(TESTOBJS)
 	mkdir -p $(BIN_DIR)
 	$(CC) $^ $(LIB) -pthread -o $(TEST_TARGET)
+
+# Header dependency tracking. Both lists overlap on common/, hence the sort.
+-include $(sort $(LIBOBJS:.o=.d) $(TESTOBJS:.o=.d))

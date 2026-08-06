@@ -3,21 +3,103 @@
 std::size_t IComponent::nextId = 0;
 std::unique_ptr<Registry> Registry::instance = nullptr;
 
+const char *EcsSuppressionNote(unsigned int counter) {
+  return counter >= ECS_MAX_DIAGNOSTIC_REPORTS
+             ? " (further identical reports suppressed)"
+             : "";
+}
+
+void EcsReportErr(const std::string &message) {
+  static Logger ecsLogger;
+  ecsLogger.Err(message);
+}
+
+bool EcsComponentIdIsValid(std::size_t componentId, const char *where,
+                           unsigned int &counter) {
+  if (componentId < MAX_COMPONENTS) {
+    return true;
+  }
+
+  if (EcsShouldReport(counter)) {
+    EcsReportErr(std::string(where) + ": component id " +
+                 std::to_string(componentId) + " is past MAX_COMPONENTS (" +
+                 std::to_string(MAX_COMPONENTS) +
+                 "); this component type is ignored everywhere. Reduce the "
+                 "number of distinct component types." +
+                 EcsSuppressionNote(counter));
+  }
+
+  return false;
+}
+
+const char *ComponentMissDescription(ComponentMiss miss) {
+  switch (miss) {
+  case ComponentMiss::TooManyTypes:
+    return "uses a component type past MAX_COMPONENTS";
+  case ComponentMiss::NoPool:
+    return "has no pool for the component type";
+  case ComponentMiss::OutOfRange:
+    return "is out of range for the component type";
+  case ComponentMiss::NotOwned:
+    return "does not have the component";
+  default:
+    return "has the component";
+  }
+}
+
 std::size_t Entity::GetId() const { return id; }
 
-void Entity::Kill() { registry->KillEntity(*this); }
+// A bare Entity (one built as Entity(88) instead of handed out by
+// Registry::CreateEntity) has a null registry pointer. Guard every forwarder:
+// the call is a caller mistake either way, but an unguarded dereference turns
+// it into a segfault with no diagnostic.
+void Entity::Kill() {
+  if (registry == nullptr) {
+    static unsigned int reports = 0;
+    if (EcsShouldReport(reports)) {
+      EcsReportErr("Entity::Kill: entity " + std::to_string(id) +
+                   " has no registry; ignoring" + EcsSuppressionNote(reports));
+    }
+    return;
+  }
+  registry->KillEntity(*this);
+}
 
-void Entity::Tag(const std::string &tag) { registry->TagEntity(*this, tag); }
+void Entity::Tag(const std::string &tag) {
+  if (registry == nullptr) {
+    static unsigned int reports = 0;
+    if (EcsShouldReport(reports)) {
+      EcsReportErr("Entity::Tag: entity " + std::to_string(id) +
+                   " has no registry; ignoring" + EcsSuppressionNote(reports));
+    }
+    return;
+  }
+  registry->TagEntity(*this, tag);
+}
 
 bool Entity::HasTag(const std::string &tag) const {
+  if (registry == nullptr) {
+    return false;
+  }
   return registry->EntityHasTag(*this, tag);
 }
 
 void Entity::Group(const std::string &group) {
+  if (registry == nullptr) {
+    static unsigned int reports = 0;
+    if (EcsShouldReport(reports)) {
+      EcsReportErr("Entity::Group: entity " + std::to_string(id) +
+                   " has no registry; ignoring" + EcsSuppressionNote(reports));
+    }
+    return;
+  }
   registry->GroupEntity(*this, group);
 }
 
 bool Entity::BelongsToGroup(const std::string &group) const {
+  if (registry == nullptr) {
+    return false;
+  }
   return registry->EntityBelongsToGroup(*this, group);
 }
 
@@ -65,10 +147,65 @@ Entity Registry::CreateEntity() {
   return entity;
 }
 
-void Registry::KillEntity(Entity entity) { entitiesToBeKilled.insert(entity); }
+bool Registry::IsAlive(Entity entity) const {
+  const auto entityId = entity.GetId();
+
+  // An id is in use once CreateEntity has handed it out (id < numEntities) and
+  // for as long as Update()'s kill flush has not parked it back in freeIds.
+  // CreateEntity pops it off freeIds again when it recycles the id.
+  if (entityId >= numEntities) {
+    return false;
+  }
+
+  return std::find(freeIds.begin(), freeIds.end(),
+                   static_cast<int>(entityId)) == freeIds.end();
+}
+
+void Registry::KillEntity(Entity entity) {
+  const auto entityId = entity.GetId();
+
+  // One liveness test covers both rejections this needs: an id that was never
+  // created, and an id already recycled into freeIds (the double-kill that
+  // used to alias two live entities onto one id).
+  //
+  // KNOWN GAP: ids are recycled, so a stale handle whose id has since been
+  // handed to a new entity reads as alive and kills that new entity instead.
+  // Closing it needs a generation counter inside Entity, which changes
+  // sizeof(Entity) — an ABI break, tracked as P5 in docs/TECH_DEBT.md.
+  if (!IsAlive(entity)) {
+    static unsigned int reports = 0;
+    if (EcsShouldReport(reports)) {
+      logger.Err("KillEntity: entity " + std::to_string(entityId) +
+                 " is not alive (never created, or already killed); ignoring" +
+                 EcsSuppressionNote(reports));
+    }
+    return;
+  }
+
+  if (entitiesToBeKilled.count(entity) > 0) {
+    static unsigned int reports = 0;
+    if (EcsShouldReport(reports)) {
+      logger.Err("KillEntity: entity " + std::to_string(entityId) +
+                 " is already pending kill this frame; ignoring" +
+                 EcsSuppressionNote(reports));
+    }
+    return;
+  }
+
+  entitiesToBeKilled.insert(entity);
+}
 
 void Registry::AddEntityToSystems(Entity entity) {
   const auto entityId = entity.GetId();
+
+  if (entityId >= entityComponentSignatures.size()) {
+    static unsigned int reports = 0;
+    if (EcsShouldReport(reports)) {
+      logger.Err("AddEntityToSystems: entity " + std::to_string(entityId) +
+                 " is out of range; ignoring" + EcsSuppressionNote(reports));
+    }
+    return;
+  }
 
   const auto entityComponentSignature = entityComponentSignatures[entityId];
 
@@ -139,6 +276,14 @@ bool Registry::EntityHasTag(Entity entity, const std::string &tag) const {
   return it->second == entity;
 }
 
+bool Registry::DoesTagExist(const std::string &tag) const {
+  return entityPerTag.find(tag) != entityPerTag.end();
+}
+
+// PRECONDITION: DoesTagExist(tag). Unlike GetEntitiesByGroup this cannot be
+// softened to a silent miss — the return type is Entity, which has no "none"
+// value, and inventing Entity(0) would hand back a live, unrelated entity.
+// Callers guard with DoesTagExist; see P19 in docs/TECH_DEBT.md.
 Entity Registry::GetEntityByTag(const std::string &tag) const {
   return entityPerTag.at(tag);
 }
@@ -171,12 +316,26 @@ bool Registry::EntityBelongsToGroup(Entity entity,
 
   const auto &groupEntities = it->second; // by reference — don't copy the set
 
-  return groupEntities.find(entity.GetId()) != groupEntities.end();
+  return groupEntities.find(entity) != groupEntities.end();
 }
 
 std::vector<Entity>
 Registry::GetEntitiesByGroup(const std::string &group) const {
-  auto &setOfEntities = entitiesPerGroup.at(group);
+  // find rather than .at: a group nobody has joined is not an error, and .at
+  // throws, which under -fno-exceptions (the Switch build) terminates the
+  // process. Matches AssetStore::GetTexture's miss behaviour.
+  auto it = entitiesPerGroup.find(group);
+  if (it == entitiesPerGroup.end()) {
+    static unsigned int reports = 0;
+    if (EcsShouldReport(reports)) {
+      logger.Err("GetEntitiesByGroup: group '" + group +
+                 "' does not exist; returning an empty list" +
+                 EcsSuppressionNote(reports));
+    }
+    return std::vector<Entity>();
+  }
+
+  const auto &setOfEntities = it->second;
 
   return std::vector<Entity>(
       setOfEntities.begin(),

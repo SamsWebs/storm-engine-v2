@@ -23,3 +23,13 @@ jobs:
 
       - name: Run tests
         run: docker run --rm stormenginev2-test:amd64
+
+      # The examples and the editor consume the engine the way a game does, so
+      # they catch API breakage the spec suite does not. See the script header
+      # for what it covers — notably the editor is compile-only (libnfd has no
+      # Debian package) and the devkitPro / Android example trees are not built
+      # at all, because neither toolchain is in the image.
+      - name: Build examples and compile the editor
+        run: |
+          docker run --rm -i stormenginev2-test:amd64 \
+            sh -s < .github/scripts/ci-build-examples.sh

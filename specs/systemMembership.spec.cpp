@@ -1,0 +1,252 @@
+#include <igloo/igloo_alt.h>
+
+#include "../common/ecs.h"
+
+#include <type_traits>
+
+using namespace igloo;
+
+// Component ids come off one process-global counter with a hard ceiling of
+// MAX_COMPONENTS (KNOWN_ISSUES.md §3), so every new type declared in the suite
+// is spent budget. Two are enough for everything below.
+struct SpecMembershipPosition {
+  int value = 0;
+};
+
+struct SpecMembershipVelocity {
+  int value = 0;
+};
+
+class SpecMembershipMoverSystem : public System {
+public:
+  SpecMembershipMoverSystem() {
+    RequireComponent<SpecMembershipPosition>();
+    RequireComponent<SpecMembershipVelocity>();
+  }
+};
+
+class SpecMembershipPositionSystem : public System {
+public:
+  SpecMembershipPositionSystem() { RequireComponent<SpecMembershipPosition>(); }
+};
+
+// System::sortEntities is protected, so a subclass is the only way to reach
+// it — which is exactly how RenderSystem orders by z-index
+// (common/systems/render.h:25).
+class SpecSortableSystem : public System {
+public:
+  SpecSortableSystem() { RequireComponent<SpecMembershipPosition>(); }
+
+  void SortByDescendingId() {
+    sortEntities(
+        [](const Entity &a, const Entity &b) { return b.GetId() < a.GetId(); });
+  }
+};
+
+Describe(SystemMembershipSpec) {
+
+  //////////////////////////////////////////////////////////////////////////
+  // KNOWN_ISSUES.md §5 — "Adding or removing a component never changes
+  // system membership".
+  //
+  // THESE CASES PIN A KNOWN LIMITATION, NOT DESIRED BEHAVIOUR. Membership is
+  // computed once per entity, when Registry::Update() flushes
+  // entitiesToBeAdded (common/ecs.cpp:231-237). AddComponent and
+  // RemoveComponent only flip signature bits; nothing re-evaluates which
+  // systems the entity belongs to. Fixing that is an ECS redesign that
+  // changes System's layout, so it is frozen out of the 1.x line.
+  //
+  // A v3 that fixes it MUST make these fail. Flip them deliberately then —
+  // do not delete them, and do not "repair" them here.
+  //////////////////////////////////////////////////////////////////////////
+  Describe(ComponentChangesAfterAdmission) {
+
+    It(should_not_admit_an_entity_when_a_component_is_added_after_the_flush) {
+      Registry registry;
+      registry.AddSystem<SpecMembershipMoverSystem>();
+
+      Entity entity = registry.CreateEntity();
+      registry.AddComponent<SpecMembershipPosition>(entity);
+      registry.Update(); // membership is decided here, and only here
+
+      registry.AddComponent<SpecMembershipVelocity>(entity);
+      registry.Update(); // no re-evaluation happens
+
+      // The entity now satisfies the system's signature in every way that
+      // matters...
+      Assert::That(registry.HasComponent<SpecMembershipPosition>(entity),
+                   Equals(true));
+      Assert::That(registry.HasComponent<SpecMembershipVelocity>(entity),
+                   Equals(true));
+
+      // ...and the system still does not have it. 1u would be correct; 0u is
+      // what the engine does.
+      Assert::That(registry.GetSystem<SpecMembershipMoverSystem>()
+                       .GetSystemEntities()
+                       .size(),
+                   Equals(0u));
+    };
+
+    It(should_keep_an_entity_in_a_system_after_its_component_is_removed) {
+      Registry registry;
+      registry.AddSystem<SpecMembershipPositionSystem>();
+
+      Entity entity = registry.CreateEntity();
+      registry.AddComponent<SpecMembershipPosition>(entity);
+      registry.Update();
+
+      Assert::That(registry.GetSystem<SpecMembershipPositionSystem>()
+                       .GetSystemEntities()
+                       .size(),
+                   Equals(1u));
+
+      registry.RemoveComponent<SpecMembershipPosition>(entity);
+      registry.Update();
+
+      Assert::That(registry.HasComponent<SpecMembershipPosition>(entity),
+                   Equals(false));
+
+      // PINS A KNOWN LIMITATION: the system keeps iterating an entity whose
+      // component is gone, and GetComponent there hands back the shared
+      // fallback instead of real data. 0u would be correct.
+      Assert::That(registry.GetSystem<SpecMembershipPositionSystem>()
+                       .GetSystemEntities()
+                       .size(),
+                   Equals(1u));
+    };
+
+    // Same single-evaluation mechanism seen from the other side: a system
+    // registered after the flush never sees the entities that already exist.
+    It(should_not_backfill_a_system_added_after_the_flush) {
+      Registry registry;
+
+      Entity entity = registry.CreateEntity();
+      registry.AddComponent<SpecMembershipPosition>(entity);
+      registry.Update();
+
+      registry.AddSystem<SpecMembershipPositionSystem>();
+      registry.Update();
+
+      // PINS A KNOWN LIMITATION: 1u would be correct.
+      Assert::That(registry.GetSystem<SpecMembershipPositionSystem>()
+                       .GetSystemEntities()
+                       .size(),
+                   Equals(0u));
+    };
+
+    // The documented workaround (KNOWN_ISSUES.md §5, "Meanwhile"): add every
+    // component the entity will ever need before the admitting Update.
+    It(should_admit_an_entity_that_was_complete_before_the_flush) {
+      Registry registry;
+      registry.AddSystem<SpecMembershipMoverSystem>();
+
+      Entity entity = registry.CreateEntity();
+      registry.AddComponent<SpecMembershipPosition>(entity);
+      registry.AddComponent<SpecMembershipVelocity>(entity);
+      registry.Update();
+
+      auto &entities =
+          registry.GetSystem<SpecMembershipMoverSystem>().GetSystemEntities();
+      Assert::That(entities.size(), Equals(1u));
+      Assert::That(entities[0].GetId(), Equals(entity.GetId()));
+    };
+
+    // The other documented workaround: kill the entity and create a
+    // replacement carrying the full component set.
+    It(should_admit_a_replacement_entity_created_with_every_component) {
+      Registry registry;
+      registry.AddSystem<SpecMembershipMoverSystem>();
+
+      Entity original = registry.CreateEntity();
+      registry.AddComponent<SpecMembershipPosition>(original);
+      registry.Update();
+
+      original.Kill();
+      registry.Update();
+
+      Entity replacement = registry.CreateEntity();
+      registry.AddComponent<SpecMembershipPosition>(replacement);
+      registry.AddComponent<SpecMembershipVelocity>(replacement);
+      registry.Update();
+
+      Assert::That(registry.GetSystem<SpecMembershipMoverSystem>()
+                       .GetSystemEntities()
+                       .size(),
+                   Equals(1u));
+    };
+  };
+
+  //////////////////////////////////////////////////////////////////////////
+  // System::sortEntities — protected, reached by subclassing, and the hook
+  // RenderSystem's z-ordering depends on. Nothing else in the suite calls it.
+  //////////////////////////////////////////////////////////////////////////
+  Describe(SortEntitiesHook) {
+
+    It(should_reorder_the_system_entity_list_in_place) {
+      Registry registry;
+      registry.AddSystem<SpecSortableSystem>();
+
+      Entity first = registry.CreateEntity();
+      registry.AddComponent<SpecMembershipPosition>(first);
+      Entity second = registry.CreateEntity();
+      registry.AddComponent<SpecMembershipPosition>(second);
+      Entity third = registry.CreateEntity();
+      registry.AddComponent<SpecMembershipPosition>(third);
+
+      registry.Update();
+
+      auto &entities =
+          registry.GetSystem<SpecSortableSystem>().GetSystemEntities();
+      Assert::That(entities.size(), Equals(3u));
+      Assert::That(entities[0].GetId(), Equals(first.GetId()));
+      Assert::That(entities[2].GetId(), Equals(third.GetId()));
+
+      registry.GetSystem<SpecSortableSystem>().SortByDescendingId();
+
+      Assert::That(entities.size(), Equals(3u));
+      Assert::That(entities[0].GetId(), Equals(third.GetId()));
+      Assert::That(entities[1].GetId(), Equals(second.GetId()));
+      Assert::That(entities[2].GetId(), Equals(first.GetId()));
+    };
+
+    It(should_tolerate_sorting_an_empty_system) {
+      Registry registry;
+      registry.AddSystem<SpecSortableSystem>();
+      registry.Update();
+
+      registry.GetSystem<SpecSortableSystem>().SortByDescendingId();
+
+      Assert::That(
+          registry.GetSystem<SpecSortableSystem>().GetSystemEntities().size(),
+          Equals(0u));
+    };
+  };
+
+  //////////////////////////////////////////////////////////////////////////
+  // KNOWN_ISSUES.md §2 — Entity(std::size_t) is not explicit, so a bare
+  // integer converts to an Entity at any call site that takes one.
+  //
+  // PINS A KNOWN LIMITATION. Adding `explicit` is a source break, so it is
+  // frozen out of 1.x; a v3 that adds it must update this case deliberately.
+  //////////////////////////////////////////////////////////////////////////
+  Describe(ImplicitEntityConversion) {
+
+    It(should_still_convert_a_bare_integer_to_an_entity) {
+      Assert::That(std::is_convertible<std::size_t, Entity>::value,
+                   Equals(true));
+
+      Registry registry;
+      Entity real = registry.CreateEntity();
+      registry.Update();
+
+      // The conversion at work: 88 is not an entity, and this still compiles.
+      // It is a no-op because KillEntity rejects an id that is not alive
+      // (common/ecs.cpp:175) — but it should never have been callable.
+      registry.KillEntity(88);
+      registry.Update();
+
+      Assert::That(registry.IsAlive(real), Equals(true));
+      Assert::That(registry.IsAlive(Entity(88)), Equals(false));
+    };
+  };
+};

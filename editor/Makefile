@@ -12,8 +12,10 @@ all: clean $(TARGET)
 
 include ../base.mk
 
-# Prepend our local include dir so it shadows any installed headers with bugs
-CCFLAGS := -I$(PWD)/include $(CCFLAGS)
+# editor/include used to shadow the installed engine headers here. It held one
+# byte-identical copy of common/components/sprite.h and was deleted (P45): the
+# shadow could only ever hide upstream fixes. This repo is upstream — fix
+# headers in common/ instead of overriding them.
 
 clean:
 	rm -f $(TARGET) && rm -f $(shell find . -name "*.o")

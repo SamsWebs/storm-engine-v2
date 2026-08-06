@@ -8,18 +8,39 @@ A lightweight, ECS-based 2D game engine built on SDL2 — made for game jams and
 
 ## Features
 
-- **Entity-Component-System (ECS)** architecture
+- **Entity-Component-System (ECS)** architecture — up to 32 component types per binary ([see below](#component-type-limit))
 - **Sprite rendering** with camera, z-index sorting, and flip support
 - **Tilemap support** — load maps painted with the built-in tile editor (`.map` format, auto-detected)
 - **Box collider** components with debug overlay
 - **Asset store** for textures
 - **Game state machine** for managing scenes
 - **Logger** utility
-- **Virtual gamepad** for touch devices — d-pad + action-button layout, pure and spec'd (`<stormengine2/input/virtualGamepad.h>`)
+- **Virtual gamepad** for touch devices — d-pad + action-button layout, pure and spec'd (`<stormengine2/input/virtualGamepad.h>`), driven by `examples/android-platformer`
 - **UDP networking** — host/join LAN play: reliable + unreliable chunks, kick/ban/timeout, snapshot replication with per-client deltas and a prediction cache (`<stormengine2/net/net.h>`, see [docs/networking.md](docs/networking.md))
 - Built-in **tile map editor** with drag-to-paint, drag-to-erase, and layer support
 - Example games: platformer, shooter, strategy, puzzle, JRPG, sports, Android platformer
 - Platforms: Linux, Nintendo Switch (source builds), Android (source builds, verified on hardware); iOS possible via the same SDL layer
+
+## Component type limit
+
+An entity's component set is tracked as a bitmask, so the engine supports **32 distinct component types**:
+
+```cpp
+constexpr unsigned int MAX_COMPONENTS = 32;   // common/ecs.h
+using Signature = std::bitset<MAX_COMPONENTS>;
+```
+
+Two things about that number are easy to get wrong:
+
+**It is per binary, not per `Registry`.** Type ids come from a single process-wide counter, handed out on first use of each distinct `Component<T>`. Every `Registry` you create draws from the same pool of 32, so splitting your world across several registries — one per game state, as the examples do — does not buy you more types. The five components the engine ships (`TransformComponent`, `RigidBodyComponent`, `SpriteComponent`, `BoxColliderComponent`, `AnimationComponent`) count against your budget as soon as you use them, leaving 27 for the game.
+
+**It counts types, not instances.** Ten thousand entities carrying `TransformComponent` use one id. Component types are cheap to instance and expensive to *declare*, so prefer widening an existing component over adding a new one — a `kind` enum inside one component costs nothing, a new struct costs a permanent 1/32.
+
+Declaring a 33rd type is reported on the error log and the type is ignored; it does not throw, so it will not abort the Switch build. But a system whose requirement was dropped this way ends up matching **every** entity rather than none, so treat overflow as a bug to fix, not a degraded mode to ship. Count your types before you get close.
+
+Raising the cap means editing `MAX_COMPONENTS` and rebuilding **everything** that includes `ecs.h`. Anything less is undefined behaviour: `Signature` is `std::bitset<MAX_COMPONENTS>`, so two translation units compiled with different values disagree about what type `Signature` *is*.
+
+Note that this mismatch is silent up to 64. `sizeof(std::bitset<N>)` is 8 bytes for every `N` from 1 to 64 and 16 bytes from 65, so bumping 32 → 64 changes no struct layout and no size check will catch a stale object file — a game built against a 32-component header linked to a 64-component `.so` will simply misbehave. If you raise it, rebuild the library, the editor, and every game against the same header in one go.
 
 ## Installation
 
@@ -221,11 +242,16 @@ cd examples/android-platformer
 adb shell am start -n com.stormengine.platformer/.PlatformerActivity
 ```
 
-The example adds on-screen touch pads (pure, spec'd zone logic) on top of the
-desktop platformer, letterboxes a fixed logical resolution onto any screen, and
-extracts APK assets to internal storage at first launch so the engine's
-plain-file I/O works unchanged. See the example README for the build gotchas
-(shared vs. static SDL, the `SDL2/SDL_image.h` include shim, adb multi-device).
+The example drives the engine's virtual gamepad (`<stormengine2/input/virtualGamepad.h>`
+— circular d-pad plus action diamond, pure and spec'd) on top of the desktop
+platformer, letterboxes a fixed logical resolution onto any screen, and extracts
+APK assets to internal storage at first launch so the engine's plain-file I/O
+works unchanged. It follows the phone through all four orientations even when
+the system auto-rotate toggle is off; orientation is a per-game decision made
+in the game's own Activity, not by the engine. See the example README for the
+controls, the orientation mechanics (SDL overrides the manifest at window
+creation), and the build gotchas (shared vs. static SDL, the
+`SDL2/SDL_image.h` include shim, adb multi-device).
 
 ### Using Storm Engine in your own Android project
 

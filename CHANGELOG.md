@@ -1,5 +1,27 @@
 # Changelog
 
+## [Unreleased]
+
+Correctness pass over the networking handshake, the editor and four examples, from a review of `main`. One wire-format change, described under **Changed**.
+
+### Fixed
+
+- **A single lost ACCEPT killed a join permanently.** ACCEPT is the last datagram of the handshake and nothing acknowledges it, so the client re-sends CONNECT_READY until one lands — but the server answered only the first, and its own step-2 retry was unreachable (`step = 2` and `online = true` are set together, so a step-2 slot always took the online branch of `Update`). The client sat re-sending into silence until it timed out, while the server had already counted it connected and fired `onConnect_`. Repeated CONNECT_READY is now answered with a fresh ACCEPT.
+- **`onConnect_` could fire twice for one `clientId` with no disconnect between.** A CONNECT for a slot that was already online rotated the nonce and reset `step` to 1 without clearing `online`, so the following CONNECT_READY ran the accept path a second time. In `netplay-checkers` that seated the same player twice and consumed the seat the real second player needed. CONNECT arrives before any nonce is agreed and so cannot be authenticated; an online slot is now left strictly alone.
+- **One spoofed datagram could kick any connected player.** `kNetControlClose` was honoured on a source-address match alone, with no cookie check, while `kNetControlConnectReady` seventeen lines above compared both nonces. Everything the cookie handshake protected on the way in was unprotected on the way out.
+- **Opening an editor project merged it into the open one and corrupted the save.** `LoadProject` only ever created entities — nothing killed the tiles already in the world, and the tileset vectors were appended to without a clear. Both projects rendered on top of each other, and the next Save walked the `"tiles"` group and wrote every tile from both into whichever `.map` was open, with the other project's tileset entries added to its `.lua`. `CreateNewCanvas` was the only path that cleared, and Open does not go through it. The undo history is still not cleared on Open — it holds commands naming entity ids from the previous project.
+- **The editor logged `"Tile ID: " + mTileId`** — pointer arithmetic on a `const char[]`, not concatenation. Once tile ids passed the literal's length the result pointed past the array and `std::string`'s constructor scanned arbitrary rodata for a NUL: garbage in the log, then a segfault once the scan left the mapped page. Three sites.
+- **The editor died by SIGFPE on a tile with zero animation frames.** Its `AnimationSystem` shadows the engine's and had dropped the `numFrames <= 0` guard, while the animation panel writes the value straight through. The unsaved map went with it.
+- **`RemoveTileCommand::Redo` guarded on the wrong sentinel** — `mTileId == 0` against an unset value of `(size_t)-1`, so it never caught the case it was written for and instead skipped the tile that genuinely had id 0.
+- **The hockey example built its entire scene twice.** `PlayState`'s constructor called `onEnter()` and `changeState` called it again, so every entity, both `Tag("player")` calls and two `TTF_OpenFont`s ran twice. The four heap `Entity` handles and the first font leaked, and a frozen duplicate player, goalie and puck sat on the rink for the whole match.
+- **The shooter's missing-player guard threw in exactly the case it guarded.** `EntityHasTag(GetEntityByTag("player"), "player")` evaluates the throwing lookup as its own argument. It uses `DoesTagExist` now, and `SpawnBullet`'s unguarded lookup is guarded too.
+- **Every tile in the tanks example sampled the wrong tileset cell.** The `SpriteComponent` call omitted the `isFixed` argument, so `srcX` bound to the bool and `srcY` to `srcRectX`. The level rendered as a strip of the tileset's top row, and every tile with a non-zero `srcX` was silently marked screen-fixed.
+- **`netrepl` encoded a new client's first delta against the previous occupant's snapshot.** Slot ids are recycled and the per-client base was never reset, so the joiner decoded per-tick diffs as absolute positions — all six players bunched into the corner, permanently, because the bases stayed diverged.
+
+### Changed
+
+- **`kNetControlClose` now carries the sender's cookie pair ahead of the reason string.** This is what authenticates a disconnect. Slots that are not yet online stay exempt: they hold no game state, and a client aborting before CONNECT_ACCEPT has no server nonce to quote — making it wait out the handshake timeout instead would earn it a 60 s IP ban. A pre-1.2.3 peer's clean disconnect is no longer parsed by a current server; the connection timeout still reaps it about ten seconds later.
+
 ##  [1.2.2] — 2026-08-05
 
 Memory-safety and correctness pass over the networking layer and the ECS, plus a Windows cross-build. No breaking changes — every addition is additive.

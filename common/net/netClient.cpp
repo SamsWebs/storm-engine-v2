@@ -33,13 +33,19 @@ bool NetClient::Connect(const std::string &host, uint16_t port) {
 
 void NetClient::Disconnect(const std::string &reason) {
   if (online_ || step_ != 0) {
+    // The cookie pair goes ahead of the reason: the server will not tear down
+    // a live session on an unauthenticated CLOSE. Before CONNECT_ACCEPT there
+    // is no server nonce to quote, but the slot is not online either, so the
+    // zeroed prefix is accepted and the aborted handshake still closes.
     uint8_t buf[kNetMaxChunkSize];
+    std::memcpy(buf, clientNonce_, 4);
+    std::memcpy(buf + 4, serverNonce_, 4);
     int len = (int)reason.size();
-    if (len >= (int)sizeof(buf))
-      len = (int)sizeof(buf) - 1;
-    std::memcpy(buf, reason.c_str(), len);
-    buf[len] = '\0';
-    SendControl(kNetControlClose, buf, len + 1);
+    if (len >= (int)sizeof(buf) - 9)
+      len = (int)sizeof(buf) - 9;
+    std::memcpy(buf + 8, reason.c_str(), len);
+    buf[8 + len] = '\0';
+    SendControl(kNetControlClose, buf, 8 + len + 1);
   }
   Fail(reason);
 }

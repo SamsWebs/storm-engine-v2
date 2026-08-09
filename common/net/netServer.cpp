@@ -75,11 +75,13 @@ void NetServer::Update() {
                     NetAddressToString(slot.addr) + " timed out");
         FreeSlot(&slot, "handshake timeout");
       } else if (now - slot.lastSendMs >= kNetHandshakeRetryMs) {
+        // Only step 1 is ever reachable here: step 2 is set together with
+        // online (see ProcessControl), so a step-2 slot takes the branch
+        // above. Its ACCEPT is retransmitted on demand instead, when the
+        // client re-sends CONNECT_READY.
         slot.lastSendMs = now;
         if (slot.step == 1)
           SendControl(slot.addr, kNetControlConnectAccept, slot.serverNonce, 4);
-        else if (slot.step == 2)
-          SendControl(slot.addr, kNetControlAccept, slot.serverNonce, 4);
       }
     }
   }
@@ -220,18 +222,28 @@ void NetServer::HandleConnect(const NetAddress &from,
     return;
   }
   if (Slot *existing = FindSlot(from)) {
-    // A genuine mid-handshake retry (step 1, not yet online) answers with the
-    // nonce this slot was already issued: the client re-sends CONNECT every
-    // retry until CONNECT_ACCEPT lands, and minting a fresh one each time
-    // handed out an unlimited supply of generator samples (P9).
+    // An online slot is left strictly alone. CONNECT arrives before any nonce
+    // is agreed, so it is the one datagram that cannot be authenticated:
+    // re-arming a live session on one lets a delayed or spoofed copy from the
+    // player's own address reset the handshake and run the accept path twice,
+    // firing a second onConnect_ for a clientId the game still holds seated.
+    // A client that really did restart sends CLOSE on the way out, and one
+    // that died without sending it is reaped by the connection timeout.
+    if (existing->online)
+      return;
+    // A genuine mid-handshake retry (step 1) answers with the nonce this slot
+    // was already issued: the client re-sends CONNECT every retry until
+    // CONNECT_ACCEPT lands, and minting a fresh one each time handed out an
+    // unlimited supply of generator samples (P9).
     //
-    // Anything else — in particular a CONNECT for a slot that is already
-    // online — must rotate. The server nonce IS the connection token, it
-    // travels in cleartext in every connected packet header, and equality
-    // against it is the only authentication on an inbound connected packet.
-    // Reusing it here would let anyone who captured one datagram replay the
-    // token through a spoofed CONNECT/CONNECT_READY and seize the slot.
-    if (existing->online || existing->step != 1)
+    // Any other step must rotate instead. The server nonce IS the connection
+    // token, it travels in cleartext in every connected packet header, and
+    // equality against it is the only authentication on an inbound connected
+    // packet. Reusing it would let anyone who captured one datagram replay
+    // the token through a spoofed CONNECT/CONNECT_READY and seize the slot.
+    // No such step is reachable today (a used slot is at 1, or at 2 and
+    // therefore online); this stands guard if that ever changes.
+    if (existing->step != 1)
       TokenToNonce(NetNonce32(), existing->serverNonce);
     std::memcpy(existing->clientNonce, clientNonce, 4);
     existing->step = 1;
@@ -284,11 +296,19 @@ void NetServer::ProcessControl(const NetAddress &from,
         HandleConnect(from, ctrl.payload);
       return;
     }
-    if (ctrl.payloadSize < 8 || slot->step != 1)
+    if (ctrl.payloadSize < 8 || (slot->step != 1 && slot->step != 2))
       return;
     if (std::memcmp(ctrl.payload, slot->clientNonce, 4) != 0 ||
         std::memcmp(ctrl.payload + 4, slot->serverNonce, 4) != 0)
       return; // stale or forged cookie
+    if (slot->step == 2) {
+      // ACCEPT is the last datagram of the handshake and nothing acks it, so
+      // a client that never saw it keeps re-sending CONNECT_READY. Answer
+      // every one — but the slot is already online, so this must not re-run
+      // the accept path or onConnect_ would fire twice for one join.
+      SendControl(from, kNetControlAccept, slot->serverNonce, 4);
+      return;
+    }
     slot->step = 2;
     slot->lastRecvMs = NetNowMs();
     slot->conn.Start(NetNowMs(), NonceToToken(slot->serverNonce),
@@ -305,15 +325,30 @@ void NetServer::ProcessControl(const NetAddress &from,
 
   case kNetControlClose: {
     Slot *slot = FindSlot(from);
-    if (slot) {
-      char reason[128] = "closed by client";
-      int len = ctrl.payloadSize;
-      if (len > 1 && len < (int)sizeof(reason)) {
-        std::memcpy(reason, ctrl.payload, len);
-        reason[len] = '\0';
-      }
-      FreeSlot(slot, reason);
+    if (!slot)
+      break;
+    // Closing a live session is authenticated exactly like opening one: the
+    // client's own cookie pair, in the clear, ahead of the reason. Matching
+    // on the source address alone let one spoofed datagram kick any player
+    // whose IP:port an attacker could see, which handed back everything the
+    // cookie handshake was there to protect.
+    //
+    // A slot that is not yet online is exempt: it holds no game state, so
+    // freeing it cannot kick anyone, and a client that aborts before
+    // CONNECT_ACCEPT has no server nonce to quote. Making it wait out the
+    // handshake timeout instead would earn it a 60 s IP ban.
+    if (slot->online &&
+        (ctrl.payloadSize < 8 ||
+         std::memcmp(ctrl.payload, slot->clientNonce, 4) != 0 ||
+         std::memcmp(ctrl.payload + 4, slot->serverNonce, 4) != 0))
+      break;
+    char reason[128] = "closed by client";
+    int len = ctrl.payloadSize - 8;
+    if (len > 1 && len < (int)sizeof(reason)) {
+      std::memcpy(reason, ctrl.payload + 8, len);
+      reason[len] = '\0';
     }
+    FreeSlot(slot, reason);
     break;
   }
 

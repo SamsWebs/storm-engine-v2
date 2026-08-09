@@ -2,7 +2,7 @@
 
 RemoveTileCommand::RemoveTileCommand(
     std::shared_ptr<MouseControl> &mouseControl)
-    : mMouseControl(mouseControl), mTileId(-1), mCollider(false),
+    : mMouseControl(mouseControl), mTileId(kNoTile), mCollider(false),
       mAnimated(false), mBoxColliderComponent(), mTransformComponent(),
       mSpriteComponent(), mAnimationComponent() {}
 
@@ -45,8 +45,10 @@ void RemoveTileCommand::Undo() {
 
 // Redo removes the tile again
 void RemoveTileCommand::Redo() {
-  // If the id is -1, it was not set, leave the function
-  if (mTileId == 0)
+  // Undo never ran, so there is no tile to remove again. This compared
+  // against 0 while the unset value was (size_t)-1, so it both failed to
+  // catch the unset case and skipped the tile that really did have id 0.
+  if (mTileId == kNoTile)
     return;
 
   auto entities = Registry::Instance().GetEntitiesByGroup("tiles");
@@ -54,9 +56,9 @@ void RemoveTileCommand::Redo() {
   for (auto &entity : entities) {
     if (entity.GetId() == mTileId) {
       entity.Kill();
-      logger.Log("REMOVE: __REDO__LINE__58: Tile: {0} has been removed!" +
-                 mTileId);
-      mTileId = -1;
+      logger.Log("REMOVE: Tile " + std::to_string(mTileId) +
+                 " has been removed!");
+      mTileId = kNoTile;
     }
   }
 }

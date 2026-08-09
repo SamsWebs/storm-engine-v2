@@ -48,6 +48,24 @@ void FileLoader::LoadProject(sol::state &lua, const std::string &filename,
   // Execute the script
   lua.script_file(filename);
 
+  // Opening a project replaces the one on screen, so the old world goes
+  // first. Without this the new tiles are appended to it: both render on top
+  // of each other, and the next Save walks the "tiles" group and writes the
+  // previous project's tiles into whichever file is open now. CreateNewCanvas
+  // is the only other path that clears, and Open does not go through it.
+  // Done after the script parses and runs, so a bad project file leaves the
+  // current one alone.
+  assetIds.clear();
+  assetFilepaths.clear();
+  for (const char *group : {"tiles", "colliders"}) {
+    if (!Registry::Instance().DoesGroupExist(group))
+      continue;
+    for (Entity entity : Registry::Instance().GetEntitiesByGroup(group))
+      entity.Kill();
+  }
+  // Entity destruction is deferred; flush it before the load creates new ones.
+  Registry::Instance().Update();
+
   sol::table project = lua["project"];
   int assetNum = 0;
   int mapNum = 0;

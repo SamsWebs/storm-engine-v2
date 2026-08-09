@@ -13,9 +13,7 @@ PlayState::PlayState(SDL_Renderer *renderer, int windowWidth, int windowHeight,
                      bool &isRunning)
     : renderer_{renderer}, windowWidth_{windowWidth},
       windowHeight_{windowHeight}, isDebugging_{isDebugging},
-      assetStore_{std::move(assetStore)}, isRunning_{isRunning} {
-  onEnter();
-}
+      assetStore_{std::move(assetStore)}, isRunning_{isRunning} {}
 
 PlayState::~PlayState() { onExit(); }
 

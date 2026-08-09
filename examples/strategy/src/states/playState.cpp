@@ -70,7 +70,7 @@ void PlayState::SpawnEntities() {
         glm::vec2(tileScale * tileSize * tile.relativePosition.x,
                   tileScale * tileSize * tile.relativePosition.y),
         glm::vec2(tileScale, tileScale));
-    bg.AddComponent<SpriteComponent>("tile-map", tileSize, tileSize, 0,
+    bg.AddComponent<SpriteComponent>("tile-map", tileSize, tileSize, 0, false,
                                      tile.pixelSrcPosition.x,
                                      tile.pixelSrcPosition.y);
   }

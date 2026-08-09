@@ -65,10 +65,25 @@ int RunHost(uint16_t port) {
   // NetServer is ~369 KB (16 connection slots inline), so it does not belong
   // on the stack. A desktop main() has 8 MB and hides this, but SDL runs the
   // game on its own thread on Android, where the stack is far smaller.
+  // Per-client confirmed snapshots; an empty finished snapshot means the
+  // first delta a client gets is the full world state. Declared ahead of the
+  // server so the connect callback can reset a slot's base.
+  NetSnapshot bases[NetServer::kMaxClients];
+  for (NetSnapshot &base : bases)
+    base.Finish();
+
   auto serverOwner = std::make_unique<NetServer>();
   NetServer &server = *serverOwner;
-  server.SetOnClientConnect(
-      [&](int clientId) { printf("== client %d joined ==\n", clientId); });
+  server.SetOnClientConnect([&](int clientId) {
+    printf("== client %d joined ==\n", clientId);
+    // Slot ids are recycled, so this one may still hold the departed
+    // client's confirmed snapshot. The new client's own base is empty, so
+    // encoding against the old one sends per-tick diffs that it decodes as
+    // absolute positions — every player draws bunched in the corner, and
+    // because the bases stay diverged it never recovers.
+    bases[clientId] = NetSnapshot();
+    bases[clientId].Finish();
+  });
   server.SetOnClientDisconnect([&](int clientId, const std::string &reason) {
     printf("== client %d left: %s ==\n", clientId, reason.c_str());
   });
@@ -76,12 +91,6 @@ int RunHost(uint16_t port) {
     fprintf(stderr, "netrepl: cannot bind port %u\n", port);
     return 1;
   }
-
-  // Per-client confirmed snapshots; an empty finished snapshot means the
-  // first delta a client gets is the full world state.
-  NetSnapshot bases[NetServer::kMaxClients];
-  for (NetSnapshot &base : bases)
-    base.Finish();
 
   printf("replication host on port %u — %d players at %d Hz (Ctrl-C to stop)\n",
          server.GetPort(), kNumPlayers, kTickHz);

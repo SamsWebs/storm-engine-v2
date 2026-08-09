@@ -122,6 +122,8 @@ void PlayState::SpawnPlayer() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 void PlayState::SpawnBullet() {
+  if (!registry_.DoesTagExist("player"))
+    return;
   auto &playerT =
       registry_.GetEntityByTag("player").GetComponent<TransformComponent>();
 
@@ -221,7 +223,7 @@ void PlayState::processInput() {
   }
 
   // Continuous movement via keyboard state snapshot
-  if (!registry_.EntityHasTag(registry_.GetEntityByTag("player"), "player"))
+  if (!registry_.DoesTagExist("player"))
     return;
 
   auto &vel =
@@ -261,7 +263,7 @@ void PlayState::update() {
   millisecondsPreviousFrame_ = SDL_GetTicks();
 
   // Clamp player within screen bounds
-  if (registry_.EntityHasTag(registry_.GetEntityByTag("player"), "player")) {
+  if (registry_.DoesTagExist("player")) {
     auto &t =
         registry_.GetEntityByTag("player").GetComponent<TransformComponent>();
     t.position.x = std::max(

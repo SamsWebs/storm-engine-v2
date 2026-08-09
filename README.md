@@ -2,7 +2,7 @@
 
 A lightweight, ECS-based 2D game engine built on SDL2 — made for game jams and personal projects.
 
-> **"v2" is the second-generation engine; the current release is v1.2.0.** The public API is considered stable for the 1.x line. See [CHANGELOG.md](CHANGELOG.md) for release notes.
+> **"v2" is the second-generation engine; the current release is v1.2.5.** The public API is considered stable for the 1.x line. See [CHANGELOG.md](CHANGELOG.md) for release notes.
 
 ![Storm Engine v2 platformer example](examples/platformer/screenshot.png)
 
@@ -18,7 +18,7 @@ A lightweight, ECS-based 2D game engine built on SDL2 — made for game jams and
 - **Virtual gamepad** for touch devices — d-pad + action-button layout, pure and spec'd (`<stormengine2/input/virtualGamepad.h>`), driven by `examples/android-platformer`
 - **UDP networking** — host/join LAN play: reliable + unreliable chunks, kick/ban/timeout, snapshot replication with per-client deltas and a prediction cache (`<stormengine2/net/net.h>`, see [docs/networking.md](docs/networking.md))
 - Built-in **tile map editor** with drag-to-paint, drag-to-erase, and layer support
-- Example games: platformer, shooter, strategy, puzzle, JRPG, sports, Android platformer
+- Example games: platformer, shooter, strategy, puzzle, JRPG, sports, Android platformer, Switch platformer, and networking demos (netchat, netrepl, netplay-checkers)
 - Platforms: Linux, Nintendo Switch (source builds), Android (source builds, verified on hardware); iOS possible via the same SDL layer
 
 ## Component type limit
@@ -105,7 +105,7 @@ cd examples/platformer
 make && make run
 ```
 
-Swap `platformer` for `shooter`, `strategy`, `puzzle`, `jrpg`, `sports`, or `checkers` to try the others. `checkers` is a graphical 2-player game: the host validates every move over the net module and the first two joiners are seated RED and BLACK (`host` starts it with `S`).
+Swap `platformer` for `shooter`, `strategy`, `puzzle`, `jrpg`, `sports`, or `netplay-checkers` to try the others. `netplay-checkers` is a graphical 2-player game: the host validates every move over the net module and the first two joiners are seated RED and BLACK (`host` starts it with `S`).
 
 Two examples are headless console demos of the networking module — no graphics, run from a terminal. `cd examples/netchat && make && ./bin/netchat host` opens a room; `./bin/netchat join 127.0.0.1 5000` joins it from another terminal. `examples/netrepl` is the same shape (`host` / `join`) and streams snapshot deltas. See each example's README for usage.
 
@@ -175,7 +175,15 @@ make && make run
 
 ## Windows / WSL
 
-The Makefile should work under WSL2 with the same `apt` prerequisites above. Native Windows builds are not officially supported yet — PRs welcome.
+Windows is supported via a MinGW-w64 cross-compile from Linux — no Windows toolchain needed. SDL2 and its satellites are cross-built from the same vendored sources the Android build uses (`vendor/android/`), so nothing is downloaded:
+
+```bash
+sudo apt install mingw-w64 cmake
+make -f Makefile.win         # build/win/libstormenginev2.dll + build/win/tests.exe
+make -f Makefile.win test    # run the spec suite under Wine
+```
+
+The library and the spec suite cross-build; the examples are not wired into the Windows build yet. WSL2 runs the plain Linux build above (`make -f Makefile.debian`) with the same `apt` prerequisites. Native Windows builds (a toolchain that runs in cmd/PowerShell) are not supported yet — PRs welcome.
 
 ## Nintendo Switch
 

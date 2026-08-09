@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+## [1.2.5] — 2026-08-09
+
+Documentation-only release — `README.md` had drifted from the codebase in four places. No engine source changed.
+
+### Fixed
+
+- **The README still advertised v1.2.0 as the current release.** Now says v1.2.4, matching the `v1.2.4` tag.
+- **The run instructions named a nonexistent `checkers` example.** The directory and binary are `netplay-checkers`; the swap list now points at it.
+- **The features list omitted examples.** netchat, netrepl, netplay-checkers and the Switch platformer are now listed alongside the desktop games.
+
+### Added
+
+- **The Windows section now documents the MinGW-w64 cross-build.** `make -f Makefile.win` produces `build/win/libstormenginev2.dll` and the spec suite (`tests.exe`, runnable under Wine); SDL2 and its satellites are cross-built from the vendored Android sources. The section previously claimed native Windows builds were unsupported. The examples are not wired into the Windows build yet.
+
+## [1.2.4] — 2026-08-09
+
 Correctness pass over the networking handshake, the editor and four examples, from a review of `main`. One wire-format change, described under **Changed**.
 
 ### Fixed

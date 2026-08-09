@@ -8,7 +8,7 @@ AddTileCommand::AddTileCommand(std::shared_ptr<MouseControl> &mouseControl)
 
 void AddTileCommand::Execute() {
   mTileId = mMouseControl->GetRecentTileId();
-  logger.Log("Tile ID: " + mTileId);
+  logger.Log("Tile ID: " + std::to_string(mTileId));
 }
 
 void AddTileCommand::Undo() {
@@ -36,7 +36,7 @@ void AddTileCommand::Undo() {
       }
 
       entity.Kill();
-      logger.Log("UNDO: Remove Tile: " + mTileId);
+      logger.Log("UNDO: Remove Tile: " + std::to_string(mTileId));
     }
   }
 }

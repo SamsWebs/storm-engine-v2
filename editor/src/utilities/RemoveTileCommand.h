@@ -15,6 +15,8 @@ class RemoveTileCommand : public ICommand {
 private:
   std::shared_ptr<class MouseControl> mMouseControl;
 
+  // Entity ids start at 0, so 0 cannot double as "unset".
+  static constexpr std::size_t kNoTile = (std::size_t)-1;
   std::size_t mTileId;
   bool mCollider, mAnimated;
 

@@ -13,7 +13,13 @@ void AnimationSystem::Update() {
     auto &animation = entity.GetComponent<AnimationComponent>();
     auto &sprite = entity.GetComponent<SpriteComponent>();
 
-    // Set the cuurent frame
+    // The animation panel writes numFrames straight through, so zero reaches
+    // here and the modulo below would raise SIGFPE and take the unsaved map
+    // with it. common/systems/animation.h guards the same case.
+    if (animation.numFrames <= 0)
+      continue;
+
+    // Set the current frame
     animation.currentFrame = ((SDL_GetTicks() - animation.startTime) *
                               animation.frameSpeedRate / 1000) %
                              animation.numFrames;

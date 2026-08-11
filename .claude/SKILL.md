@@ -12,9 +12,14 @@ date_added: "2026-08-03"
 
 # Storm! Engine v2
 
-> **Current release: v1.2.1** — public API stable for the 1.x line.
-> Unreleased work (this branch) is headed for v1.2.2 — see `CHANGELOG.md` `[Unreleased]`.
+> **Current release: v1.2.6** — public API stable for the 1.x line.
 > Repo: `github.com/WillSams/storm-engine-v2` · License: WTFPL
+>
+> Since v1.2.1: v1.2.2 added the safe accessors (`TryGetComponent`, `IsAlive`,
+> `DoesTagExist`), `VPadStyle`, and the MinGW-w64 cross-build; v1.2.4 changed
+> the `kNetControlClose` wire format (see **Networking Rules**) and made
+> `TileMapLoader` report failures; v1.2.5 was documentation only; v1.2.6 fixed
+> the build only — no API change. `CHANGELOG.md` is authoritative.
 
 ---
 
@@ -170,7 +175,7 @@ These are the biggest correctness traps — understand them before writing ECS c
 |-----------|--------|--------|
 | `TransformComponent` | `components/transform.h` | `position` (glm::vec2), `scale` (glm::vec2), `rotation` (double, degrees) |
 | `RigidBodyComponent` | `components/rigidBody.h` | `velocity` (glm::vec2, px/sec) |
-| `SpriteComponent` | `components/sprite.h` | `assetId`, `width`, `height`, `zIndex`, `isFixed`, `flip`, `srcRect`, `offset` |
+| `SpriteComponent` | `components/sprite.h` | `assetId`, `width`, `height`, `zIndex`, `isFixed`, `flip`, `srcRect`, `offset` | **`width`/`height` are the source rect** — the ctor builds `srcRect{srcRectX, srcRectY, width, height}`, so they must match the sheet cell; resize with `TransformComponent.scale`, not by passing on-screen dimensions. `srcRectX` defaults to `0`, so a transparent cell 0 makes a sprite silently invisible.
 | `AnimationComponent` | `components/animation.h` | ctor args: `numFrames`, `frameSpeedRate`, `vertical` (default `true`), `isLooped` (default `true`), `frameOffset`; also public: `currentFrame`, `startTime` (set to `SDL_GetTicks()` in the ctor), `lastFrame` (non-looped stop frame, 0 = use `numFrames - 1`) |
 | `BoxColliderComponent` | `components/boxCollider.h` | `width`, `height`, `offset` (glm::vec2) |
 
@@ -180,7 +185,7 @@ These are the biggest correctness traps — understand them before writing ECS c
 |--------|----------|-------------|
 | `MovementSystem` | Transform + RigidBody | Moves entities by `velocity * deltaTime` |
 | `RenderSystem` | Transform + Sprite | Draws sprites sorted by `zIndex`; applies the camera offset except to sprites with `isFixed` (HUD/screen-space), and honours `sprite.offset`, `transform.scale`, `transform.rotation` and `sprite.flip` |
-| `AnimationSystem` | Sprite + Animation | Advances sprite sheet frames (horizontal or vertical) |
+| `AnimationSystem` | Sprite + Animation | Advances sprite sheet frames. **`vertical == true` (the default) advances `srcRect.y`; `false` advances `srcRect.x`.** Mismatching the flag against the sheet's layout is silent — the sprite samples outside the texture and draws nothing, or sits on frame 0. `examples/platformer`'s `rabbit.png` is a vertical strip (37x1026) and passes `true`; the scaffold's sheet is horizontal and passes `false`. |
 | `CollisionSystem` | Transform + BoxCollider | AABB collision detection; kills entities with RigidBody on contact |
 | `RenderColliderSystem` | Transform + BoxCollider | Debug overlay: draws collider outlines in green |
 
@@ -406,6 +411,21 @@ const Map &tiles = loader.getMap();
 Each `Tile` has: `relativePosition`, `pixelSrcPosition`, `scale`, `zIndex`,
 `assetId`, `hasCollider`, `colliderW`, `colliderH`.
 
+**The constructor cannot fail loudly — check the map before using it.** Since
+v1.2.4 every failure (missing file, unreadable, no tiles parsed) is reported
+through `Logger::Err`, but the object still constructs and `getMap()` returns
+an empty `Map`. A successfully loaded empty map and a failed load are
+indistinguishable from the return value alone, so a game that skips the check
+renders a blank level with no crash and no obvious cause.
+
+```cpp
+TileMapLoader loader("assets/tilemaps/level.map", "", 32);
+if (loader.getMap().empty()) {
+    // Logger::Err already said why. Bail here rather than rendering nothing.
+    return false;
+}
+```
+
 ---
 
 ## XML Loader
@@ -474,6 +494,19 @@ These traps require tracing multiple files to discover:
   overwrites — copy anything you need past the callback.
 - **Single-threaded** — no `<thread>`/`<mutex>`/`<atomic>`. All callbacks fire
   synchronously on the thread calling `Poll()`/`Update()`.
+- **A clean disconnect is authenticated (v1.2.4+).** `kNetControlClose` carries
+  the sender's cookie pair ahead of the reason string; a close that does not
+  quote the right nonces is ignored. Before v1.2.4 a source-address match alone
+  was enough, so one spoofed datagram could kick any connected player. Slots
+  that are not yet online stay exempt — they hold no game state and have no
+  server nonce to quote. **This is a wire-format change:** a pre-1.2.3 peer's
+  clean disconnect is not parsed by a current server, and the connection is
+  instead reaped by the ~10 s timeout.
+- **Repeated `CONNECT_READY` is answered with a fresh ACCEPT (v1.2.4+).**
+  ACCEPT is the last datagram of the handshake and nothing acknowledges it, so
+  a single lost ACCEPT used to strand the client re-sending into silence while
+  the server had already counted it connected and fired `onConnect_`. Do not
+  build join logic that assumes ACCEPT arrives exactly once.
 - **Parsing is strict by design.** `NetVarIntUnpack` rejects non-canonical
   encodings, and `NetMessageReader::ReadString` fails unless the wire string
   carries its own terminator — hand-rolled packets that "decode fine" elsewhere
@@ -854,6 +887,130 @@ different engine capabilities and game-side patterns.
 - **Variable jump height** — game-side: track button hold time, modify `RigidBodyComponent.velocity.y`
 - **Tile collision** — `BoxColliderComponent` on tiles + entities; `CollisionSystem` kills on contact, so platformers typically need a custom collision system that resolves instead of killing
 
+All four are game-side state on the `PlayState`, not engine features. Members:
+
+```cpp
+bool   onGround_       = false;
+Uint32 leftGroundAt_   = 0;   // SDL ticks when we last left the ground
+Uint32 jumpBufferedAt_ = 0;   // SDL ticks of the last unconsumed jump press
+bool   jumpHeld_       = false;
+
+static constexpr Uint32 COYOTE_MS = 100;  // forgive a late press after an edge
+static constexpr Uint32 BUFFER_MS = 120;  // forgive an early press before landing
+static constexpr float  JUMP_V    = -520.0f;
+static constexpr float  GRAVITY   =  1400.0f;
+```
+
+Coyote time and jump buffering are the same trick in opposite directions —
+each remembers a timestamp and asks whether it is still recent:
+
+```cpp
+// processInput(): record the press, do not act on it here
+case SDL_KEYDOWN:
+    if (e.key.keysym.sym == SDLK_SPACE && !e.key.repeat) {
+        jumpBufferedAt_ = SDL_GetTicks();
+        jumpHeld_ = true;
+    }
+    break;
+case SDL_KEYUP:
+    if (e.key.keysym.sym == SDLK_SPACE) jumpHeld_ = false;
+    break;
+
+// update(), after registry_.Update() and before the movement system runs
+auto &rb = player_->GetComponent<RigidBodyComponent>();
+const Uint32 now = SDL_GetTicks();
+
+const bool canCoyote  = onGround_ || (now - leftGroundAt_)   <= COYOTE_MS;
+const bool wantsJump  = jumpBufferedAt_ && (now - jumpBufferedAt_) <= BUFFER_MS;
+
+if (wantsJump && canCoyote) {
+    rb.velocity.y   = JUMP_V;
+    jumpBufferedAt_ = 0;      // consume it, or one press fires every frame
+    onGround_       = false;
+    leftGroundAt_   = 0;      // and do not let coyote fire a second jump
+}
+
+// Variable height: cutting velocity on release gives a short hop, holding
+// gives the full arc. Only ever shorten an ascent.
+if (!jumpHeld_ && rb.velocity.y < 0.0f) {
+    rb.velocity.y *= 0.5f;
+}
+
+rb.velocity.y += GRAVITY * static_cast<float>(deltaTime);
+```
+
+`MovementSystem` integrates `velocity * deltaTime` and nothing else — there is
+no gravity, no ground, and no resolution in the engine. `CollisionSystem`
+detects AABB overlap and **kills** entities carrying a `RigidBodyComponent`,
+which is fatal for a platformer, so do not register it. Resolve against the
+tile grid yourself, one axis at a time — resolving both at once lets a corner
+push the player sideways off a flat floor:
+
+```cpp
+// solidGrid_[row][col] mirrors the tilemap; TILE_PX is tileSize * scale.
+bool PlayState::IsSolid(int col, int row) const {
+    if (row < 0 || row >= (int)solidGrid_.size())    return false;
+    if (col < 0 || col >= (int)solidGrid_[row].size()) return false;
+    return solidGrid_[row][col];
+}
+
+void PlayState::ResolvePlayer(float dt) {
+    auto &tf = player_->GetComponent<TransformComponent>();
+    auto &rb = player_->GetComponent<RigidBodyComponent>();
+
+    // --- X axis ---
+    tf.position.x += rb.velocity.x * dt;
+    int top    = (int)(tf.position.y) / TILE_PX;
+    int bottom = (int)(tf.position.y + PLAYER_H - 1) / TILE_PX;
+    if (rb.velocity.x > 0.0f) {
+        int side = (int)(tf.position.x + PLAYER_W - 1) / TILE_PX;
+        for (int r = top; r <= bottom; ++r)
+            if (IsSolid(side, r)) {
+                tf.position.x = side * TILE_PX - PLAYER_W;
+                rb.velocity.x = 0.0f;
+                break;
+            }
+    } else if (rb.velocity.x < 0.0f) {
+        int side = (int)(tf.position.x) / TILE_PX;
+        for (int r = top; r <= bottom; ++r)
+            if (IsSolid(side, r)) {
+                tf.position.x = (side + 1) * TILE_PX;
+                rb.velocity.x = 0.0f;
+                break;
+            }
+    }
+
+    // --- Y axis ---
+    tf.position.y += rb.velocity.y * dt;
+    int left  = (int)(tf.position.x) / TILE_PX;
+    int right = (int)(tf.position.x + PLAYER_W - 1) / TILE_PX;
+    const bool wasOnGround = onGround_;
+    onGround_ = false;
+    if (rb.velocity.y > 0.0f) {
+        int foot = (int)(tf.position.y + PLAYER_H - 1) / TILE_PX;
+        for (int c = left; c <= right; ++c)
+            if (IsSolid(c, foot)) {
+                tf.position.y = foot * TILE_PX - PLAYER_H;
+                rb.velocity.y = 0.0f;
+                onGround_ = true;
+                break;
+            }
+    } else if (rb.velocity.y < 0.0f) {
+        int head = (int)(tf.position.y) / TILE_PX;
+        for (int c = left; c <= right; ++c)
+            if (IsSolid(c, head)) {
+                tf.position.y = (head + 1) * TILE_PX;
+                rb.velocity.y = 0.0f;   // bonk: kill upward velocity
+                break;
+            }
+    }
+    if (wasOnGround && !onGround_) leftGroundAt_ = SDL_GetTicks();  // start coyote
+}
+```
+
+Because the player is moved by hand here, do **not** also register
+`MovementSystem` for it, or the position integrates twice.
+
 The engine's `platformer` example demonstrates the basic pattern: `TransformComponent` + `RigidBodyComponent` + `SpriteComponent` + `AnimationComponent` + `BoxColliderComponent`. The `nx-platformer` and `android-platformer` variants show the same game on Switch and Android.
 
 The `android-platformer` variant is not a pure port: it is the reference consumer of the engine's virtual gamepad. It builds the layout once from the logical window size (`MakeVPadLayout(w, h)` — Xbox lettering by default), feeds SDL touches through `EvalVPad` each frame, letterboxes with `SDL_RenderSetLogicalSize`, and handles orientation by overriding `setOrientationBis` in `PlatformerActivity` (it requests `SCREEN_ORIENTATION_FULL_SENSOR`, so the game follows the device through all four orientations even with the auto-rotate lock on; SDL overwrites the manifest's `screenOrientation` from native code, so the manifest alone cannot decide this). It also links `common/net/` (`GLOB_RECURSE` + the `INTERNET` permission).
@@ -865,6 +1022,71 @@ The `android-platformer` variant is not a pure port: it is the reference consume
 - **Scrolling background layers** — multiple `SpriteComponent` entities at different `zIndex` values, scroll at different rates for parallax (game-side)
 - **Collision as gameplay** — `CollisionSystem` kills on contact, which works for arcade-style "one hit = death" shooters
 
+This is the one genre where the built-in `CollisionSystem` is an asset rather
+than a problem: kill-on-contact *is* the rule you want.
+
+```cpp
+void PlayState::SpawnBullet() {
+    Entity b = registry_.CreateEntity();
+    b.Group("bullets");
+    auto &tf = player_->GetComponent<TransformComponent>();
+    b.AddComponent<TransformComponent>(tf.position + glm::vec2(24.0f, 8.0f),
+                                       glm::vec2(1.0f, 1.0f), 0.0);
+    b.AddComponent<RigidBodyComponent>(glm::vec2(600.0f, 0.0f));
+    b.AddComponent<SpriteComponent>("bullet", 8, 8, 2);
+    b.AddComponent<BoxColliderComponent>(8, 8);
+    // The entity is NOT live until the next registry_.Update(). Do not read it
+    // back this frame.
+}
+
+void PlayState::SpawnWave(Uint32 now) {
+    if (now - lastWaveAt_ < WAVE_INTERVAL_MS) return;
+    lastWaveAt_ = now;
+    for (int i = 0; i < 4; ++i) {
+        Entity e = registry_.CreateEntity();
+        e.Group("enemies");
+        e.AddComponent<TransformComponent>(
+            glm::vec2(windowWidth_ + 32.0f, 60.0f + i * 90.0f),
+            glm::vec2(1.0f, 1.0f), 0.0);
+        e.AddComponent<RigidBodyComponent>(glm::vec2(-90.0f, 0.0f));
+        e.AddComponent<SpriteComponent>("enemy", 32, 32, 2);
+        e.AddComponent<BoxColliderComponent>(32, 32);
+    }
+}
+```
+
+Culling off-screen entities is mandatory, not housekeeping: nothing reaps them,
+component storage is indexed by entity id, and memory per component type is
+O(highest id ever used). A shooter that never kills its bullets grows every
+pool forever.
+
+```cpp
+void PlayState::CullOffscreen() {
+    // DoesGroupExist first -- GetEntitiesByGroup on an unknown group returns an
+    // empty vector on v1.2.2+, but aborts on older builds.
+    if (!registry_.DoesGroupExist("bullets")) return;
+    // Copy the vector: Kill() mutates the group while you are iterating it.
+    auto bullets = registry_.GetEntitiesByGroup("bullets");
+    for (auto &b : bullets) {
+        const auto &tf = b.GetComponent<TransformComponent>();
+        if (tf.position.x > windowWidth_ + 64.0f) b.Kill();  // deferred
+    }
+}
+```
+
+Parallax is game-side. Scroll each layer by its own factor and wrap:
+
+```cpp
+void PlayState::ScrollBackground(float dt) {
+    static const float speed[3] = { 12.0f, 40.0f, 110.0f };  // far -> near
+    for (int i = 0; i < 3; ++i) {
+        auto &tf = layers_[i].GetComponent<TransformComponent>();
+        tf.position.x -= speed[i] * dt;
+        if (tf.position.x <= -windowWidth_) tf.position.x += windowWidth_;
+    }
+}
+```
+
 The engine's `shooter` example (Alien Attack) demonstrates this pattern.
 
 #### Puzzle (Grid-based / falling blocks)
@@ -875,6 +1097,82 @@ The engine's `shooter` example (Alien Attack) demonstrates this pattern.
 - **SDL_ttf for text** — score, level, next-piece preview. The `puzzle` example demonstrates SDL_ttf integration
 - **No physics needed** — blocks snap to grid; `RigidBodyComponent` and `CollisionSystem` are typically unused
 
+The board is a plain array — the ECS holds only what is *drawn*. Keeping the
+rules out of the ECS is what makes a puzzle game testable:
+
+```cpp
+static constexpr int COLS = 10, ROWS = 20, CELL = 24;
+
+// 0 = empty, otherwise a colour/shape id. This, not the registry, is the game.
+std::array<std::array<int, COLS>, ROWS> board_{};
+
+bool PlayState::Fits(const Piece &p, int atCol, int atRow) const {
+    for (const auto &c : p.cells) {          // cells are offsets from the origin
+        const int col = atCol + c.x, row = atRow + c.y;
+        if (col < 0 || col >= COLS || row >= ROWS) return false;
+        if (row >= 0 && board_[row][col] != 0)     return false;  // row<0 = above ceiling
+    }
+    return true;
+}
+
+int PlayState::ClearFullRows() {
+    int cleared = 0;
+    for (int row = ROWS - 1; row >= 0; --row) {
+        bool full = true;
+        for (int col = 0; col < COLS; ++col)
+            if (board_[row][col] == 0) { full = false; break; }
+        if (!full) continue;
+        for (int r = row; r > 0; --r) board_[r] = board_[r - 1];   // collapse down
+        board_[0].fill(0);
+        ++cleared;
+        ++row;                       // re-test this row -- it holds new contents
+    }
+    return cleared;
+}
+```
+
+**Reuse a fixed entity pool.** A tetromino lands roughly once a second and each
+one is 4 cells; creating and killing entities per lock burns entity ids forever
+(storage is indexed by id, so pools grow to the highest id ever issued) and
+adds `registry_.Update()` churn. Allocate `COLS * ROWS` entities once and move
+them:
+
+```cpp
+bool PlayState::onEnter() {
+    registry_.AddSystem<RenderSystem>();
+    cells_.reserve(COLS * ROWS);
+    for (int i = 0; i < COLS * ROWS; ++i) {
+        Entity e = registry_.CreateEntity();
+        e.AddComponent<TransformComponent>(glm::vec2(-CELL, -CELL),   // parked offscreen
+                                           glm::vec2(1.0f, 1.0f), 0.0);
+        e.AddComponent<SpriteComponent>("blocks", CELL, CELL, 1);
+        cells_.push_back(e);
+    }
+    registry_.Update();      // one flush: every cell joins RenderSystem here
+    return true;
+}
+
+// Each frame, park every cell then place only the occupied ones. No entity is
+// ever created or killed, so system membership never needs recomputing.
+void PlayState::SyncBoardToEntities() {
+    for (auto &e : cells_)
+        e.GetComponent<TransformComponent>().position = glm::vec2(-CELL, -CELL);
+
+    std::size_t next = 0;
+    for (int row = 0; row < ROWS; ++row)
+        for (int col = 0; col < COLS; ++col) {
+            if (board_[row][col] == 0 || next >= cells_.size()) continue;
+            auto &e = cells_[next++];
+            e.GetComponent<TransformComponent>().position =
+                glm::vec2(boardX_ + col * CELL, boardY_ + row * CELL);
+            // Pick the colour cell out of the sheet by hand -- srcRect is only
+            // driven by AnimationSystem, which these entities do not use.
+            e.GetComponent<SpriteComponent>().srcRect.x =
+                (board_[row][col] - 1) * CELL;
+        }
+}
+```
+
 The engine's `puzzle` example (Storm Tetris) demonstrates custom ECS components, entity reuse, and SDL_ttf rendering.
 
 #### JRPG (Tile-based RPG)
@@ -884,6 +1182,123 @@ The engine's `puzzle` example (Storm Tetris) demonstrates custom ECS components,
 - **Typewriter dialogue** — game-side text rendering with SDL_ttf, character-by-character reveal
 - **State transitions** — push a `DialogueState` over the `PlayState` for conversations; pop when done
 - **No real-time physics** — movement is grid-based or tile-based, not velocity-driven
+
+NPCs and the player carry game-side components — the engine ships neither. The
+`jrpg` example's are worth copying verbatim:
+
+```cpp
+enum class Direction { Up, Down, Left, Right };
+
+struct PlayerComponent {
+    float     moveSpeed   = 120.0f;
+    Direction facing      = Direction::Down;
+    bool      isMoving    = false;
+    int       walkFrame   = 0;        // 0-3 within the current direction's run
+    float     animTimer   = 0.0f;
+    float     animInterval = 0.15f;   // seconds per walk frame
+};
+
+struct NpcComponent {
+    std::string name;
+    std::string dialogue;
+    Direction   facing       = Direction::Down;
+    float       interactDist = 48.0f;  // pixels
+};
+```
+
+Both must be **default-constructible** — component pools are dense
+`std::vector<T>` indexed by entity id, so the engine value-initialises slots
+you never touched. Note these two alone spend 2 of your 32 process-wide
+component ids.
+
+Interaction is a proximity scan over a group. Do not use `CollisionSystem` for
+this — it kills on contact:
+
+```cpp
+// Returns the closest NPC in range, or nullopt. Pure query, no side effects.
+std::optional<Entity> PlayState::NpcInRange() const {
+    if (!registry_.DoesGroupExist("npcs")) return std::nullopt;
+
+    const auto &ptf = player_->GetComponent<TransformComponent>();
+    std::optional<Entity> best;
+    float bestDist = 0.0f;
+
+    for (auto &npc : registry_.GetEntitiesByGroup("npcs")) {
+        const auto &ntf = npc.GetComponent<TransformComponent>();
+        const auto &n   = npc.GetComponent<NpcComponent>();
+        const float d   = glm::distance(ptf.position, ntf.position);
+        if (d > n.interactDist) continue;
+        if (!best || d < bestDist) { best = npc; bestDist = d; }
+    }
+    return best;
+}
+```
+
+Dialogue is a **pushed** state, not a flag — that is what freezes the world for
+free, since `GameStateMachine` only forwards to the top of the stack:
+
+```cpp
+void PlayState::processInput() {
+    SDL_Event e;
+    while (SDL_PollEvent(&e)) {
+        if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_SPACE) {
+            if (auto npc = NpcInRange()) {
+                const auto &n = npc->GetComponent<NpcComponent>();
+                gameStateMachine_->pushState(
+                    new DialogueState(renderer_, font_, n.name, n.dialogue,
+                                      gameStateMachine_));
+                return;   // MUST return: pushState ran onEnter on the new top
+            }
+        }
+    }
+}
+```
+
+`PlayState` is not deleted by a push — it stays on the stack and `resume()` is
+called when the dialogue pops. Do not re-run `onEnter()` there; re-initialising
+would rebuild the world and leak the old entities.
+
+Typewriter reveal is a character count driven by elapsed time. Reveal-all on a
+second press is what players expect:
+
+```cpp
+void DialogueState::update() {
+    const Uint32 now = SDL_GetTicks();
+    revealed_ = std::min<std::size_t>(
+        text_.size(), (now - startedAt_) / MS_PER_CHAR);
+}
+
+void DialogueState::processInput() {
+    SDL_Event e;
+    while (SDL_PollEvent(&e)) {
+        if (e.type != SDL_KEYDOWN || e.key.keysym.sym != SDLK_SPACE) continue;
+        if (revealed_ < text_.size()) {
+            revealed_ = text_.size();          // first press: reveal all
+        } else {
+            gameStateMachine_->popState();     // second press: dismiss
+            return;                            // this state is now defunct
+        }
+    }
+}
+
+void DialogueState::render() {
+    // SDL_ttf renders a whole string; substr to the revealed prefix. Skip the
+    // blit entirely at length 0 -- TTF_RenderUTF8_Blended returns nullptr on an
+    // empty string and SDL_CreateTextureFromSurface(nullptr) is a crash.
+    if (revealed_ == 0) return;
+    const std::string shown = text_.substr(0, revealed_);
+    SDL_Surface *surf = TTF_RenderUTF8_Blended(font_, shown.c_str(), colour_);
+    if (!surf) return;
+    SDL_Texture *tex = SDL_CreateTextureFromSurface(renderer_, surf);
+    SDL_FreeSurface(surf);
+    if (!tex) return;
+    SDL_Rect dst{ boxX_, boxY_, 0, 0 };
+    SDL_QueryTexture(tex, nullptr, nullptr, &dst.w, &dst.h);
+    SDL_RenderCopy(renderer_, tex, nullptr, &dst);
+    SDL_DestroyTexture(tex);   // per-frame create/destroy: cache it if the
+                               // string is long or the box is always up
+}
+```
 
 The engine's `jrpg` example demonstrates tile-based world loading, NPC interaction, and typewriter dialogue.
 
@@ -916,6 +1331,106 @@ The engine's `strategy` example (Jungle Patrol) demonstrates tilemap loading, mu
 - **No prediction or rollback** — turn-based games don't need it; the cheapest correct networking approach
 - **ECS for board representation** — each piece is an entity with position and type components
 
+Define the wire protocol as an enum first. Both sides read the same first int,
+so a message the peer does not know is skipped rather than misparsed:
+
+```cpp
+enum : int32_t {
+    kMsgJoinRequest = 1,   // client -> host
+    kMsgSeatAssign  = 2,   // host -> client: your colour
+    kMsgMove        = 3,   // client -> host: proposed move
+    kMsgFullState   = 4,   // host -> all: authoritative board + turn
+    kMsgReject      = 5,   // host -> one client: illegal move, resync
+};
+```
+
+**The host is the only authority.** A client never applies its own move —
+it proposes, and waits for the state that comes back. This is what makes
+cheating and desync impossible rather than merely unlikely:
+
+```cpp
+void Match::SendMove(int fromCell, int toCell) {
+    NetMessageWriter w;
+    w.WriteInt(kMsgMove);
+    w.WriteInt(fromCell);
+    w.WriteInt(toCell);
+    client_.Send(w.Data(), w.Size(), /*vital=*/true);   // moves must not drop
+    // Deliberately no local board mutation here.
+}
+
+void Match::OnHostChunk(int clientId, const NetChunk &chunk) {
+    NetMessageReader r(chunk.data, chunk.size);
+    int32_t msg = 0;
+    if (!r.ReadInt(msg)) return;            // every Read* is checked
+
+    if (msg == kMsgMove) {
+        int32_t from = 0, to = 0;
+        if (!r.ReadInt(from) || !r.ReadInt(to)) return;
+        if (seatOf_[clientId] != turn_ || !IsLegal(from, to)) {
+            NetMessageWriter rej;
+            rej.WriteInt(kMsgReject);
+            server_.Send(clientId, rej.Data(), rej.Size(), true);
+            BroadcastFullState();           // resync the liar
+            return;
+        }
+        ApplyMove(from, to);
+        turn_ = (turn_ == kRed) ? kBlack : kRed;
+        BroadcastFullState();
+    }
+}
+```
+
+Full-state broadcast is the cheapest correct approach for turn-based play. It
+also solves late joiners for free — a new client's first state message *is* the
+whole game:
+
+```cpp
+void Match::BroadcastFullState() {
+    NetMessageWriter w;
+    w.WriteInt(kMsgFullState);
+    w.WriteInt(turn_);
+    w.WriteInt(static_cast<int32_t>(board_.size()));
+    for (int32_t cell : board_) w.WriteInt(cell);
+    // A vital Send is one datagram per client. At one broadcast per turn that
+    // is free; do not reach for this shape at 60 Hz.
+    server_.Broadcast(w.Data(), w.Size(), /*vital=*/true);
+}
+
+void Match::OnClientChunk(const NetChunk &chunk) {
+    NetMessageReader r(chunk.data, chunk.size);
+    int32_t msg = 0;
+    if (!r.ReadInt(msg) || msg != kMsgFullState) return;
+
+    int32_t turn = 0, count = 0;
+    if (!r.ReadInt(turn) || !r.ReadInt(count)) return;
+    if (count < 0 || count > kMaxCells) return;   // never trust a peer's length
+
+    std::vector<int32_t> next(static_cast<std::size_t>(count));
+    for (auto &cell : next)
+        if (!r.ReadInt(cell)) return;             // partial read: drop it whole
+
+    turn_  = turn;
+    board_ = std::move(next);
+    SyncBoardToEntities();                        // ECS mirrors state, never owns it
+}
+```
+
+Four rules this shape depends on, each of which bites otherwise:
+
+- **`chunk.data` points into per-connection scratch** that the next `Feed()`
+  overwrites. `NetMessageReader` consumes it inside the callback, which is safe.
+  Storing the pointer for later is not — copy the bytes if you must defer.
+- **Call `Update()` before `Poll()` every frame**, on both sides.
+  `NetConnection` caches its clock in `Update(nowMs)`; a Poll-only loop reads
+  RTT 0 and never times anyone out.
+- **Callbacks fire synchronously** on the thread calling `Poll()`. There is no
+  threading in the module, so no locking is needed — and no work may block.
+- **Seat on `CONNECT_READY`, not on `CONNECT`.** Since v1.2.4 a repeated
+  `CONNECT_READY` is answered with a fresh ACCEPT, so `onConnect_` can fire for
+  a client you have already seated. Make seating idempotent — key it on
+  `clientId` and ignore a second call, or you consume the seat the real second
+  player needed.
+
 The engine's `netplay-checkers` example demonstrates graphical, authoritative-netplay checkers with full-state sync.
 
 ---
@@ -947,6 +1462,16 @@ The engine's `netplay-checkers` example demonstrates graphical, authoritative-ne
 | Hand-build an `Entity(88)` and call methods on it | Every forwarder now null-checks `registry` and no-ops with a throttled log — it is not UB any more, but it still does nothing |
 
 ---
+
+## References
+
+Load these when the task calls for them rather than reading them up front.
+
+| File | Use it when |
+|------|-------------|
+| `references/new-game-scaffold/` | Starting a new standalone game. A complete compiling project: real Makefile (the in-repo examples' 2-line Makefile does **not** work outside `examples/`), the `Game` class and main loop the engine does not ship, and a `PlayState` demonstrating system-registration order, deferred flush, input ownership and render. Compiles against any 1.x install. Read its `README.md` first. |
+| `references/eval/` | Asking whether a model can actually build a game from this skill. Three task specs, a scoring harness (`run-eval.sh`), and recorded results. Read `eval/README.md` for the method; the failures it surfaces are what should become new rules here. |
+| `references/compile-errors.md` | A build fails. Real compiler and linker output mapped to cause and fix, including the stale-install signatures (`no member named 'DoesTagExist'`, `RenderSystem::Update` arity) and the runtime failures that look like build problems. |
 
 ## When to Use
 

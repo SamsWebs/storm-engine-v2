@@ -1,6 +1,75 @@
 # Changelog
 
-## [Unreleased]
+## [1.2.6] — 2026-08-11
+
+### Fixed
+
+- **`make -j` in an example or the editor could report success and produce no
+  binary.** `examples/examples.mk` and `editor/Makefile` declared
+  `all: clean $(TARGET)`. Prerequisites are unordered, so a parallel make ran
+  `clean` and the build concurrently: `clean`'s repo-wide `.o`/`.d`
+  find-delete could land mid-compile, and its `rm -f $(BIN_DIR)/*` could remove
+  the executable after the link. make exited 0 in every case, so the failure
+  was silent — `make -j12` in `examples/shooter` lost the race once in three
+  runs. Both now read `all: $(TARGET)`, matching `Makefile.debian` and
+  `examples/examples.win.mk`, which were already written without the clean.
+  Header tracking in `base.mk` has made the unconditional clean unnecessary
+  since `-MMD -MP` landed.
+
+- **Every example failed to link with `cannot find -lnfd`.** NFD is used by
+  exactly one file — the editor's `FileDialogWin.cpp` — and is vendored as a
+  header only (`vendor/nfd/nfd.h`), with no library shipped. It sat in
+  `base.mk`'s shared `LIB`, which `examples/examples.mk` and `editor/Makefile`
+  both inherit. `Makefile.debian` stripped it with a `filter-out`, so the
+  engine and the spec suite built fine and the breakage was invisible from the
+  repo root; every example was unbuildable on any machine without `libnfd`
+  installed. It now lives in an `EDITOR_LIB` variable that only the editor
+  links, and the redundant `filter-out` is gone.
+
+- **A from-source build failed to link on Debian and Ubuntu.** `base.mk` passed
+  `-llua`, and those distributions ship `liblua5.4.so` with no versionless
+  `liblua.so`, so the first link produced `/usr/bin/ld: cannot find -llua` — the
+  spec suite, and therefore the default goal, never got past `test-target`.
+  Nothing in `common/`, `specs/` or `editor/` includes a Lua header or
+  references a `lua_`/`luaL_` symbol: the editor's `.lua` project files are
+  parsed by hand and `FileLoader.cpp` only checks the extension, so the
+  interpreter was never actually linked for a reason. The flag is gone and
+  `liblua5.4-dev` has been dropped from the README prerequisites.
+
+### Added
+
+- **`examples/shooter` is a complete game.** The directory previously held a
+  set of unused placeholder assets and a stub. It is now *1945*, a vertically
+  scrolling shoot-'em-up with a three-state stack (menu, play, game over),
+  wave formations, a barrel roll with invulnerability frames, lives, an
+  immediate-mode HUD, and `SDL_GameController` support merged with the
+  keyboard. It exercises the parts of the engine the platformer does not:
+  high entity churn against the deferred lifecycle, one-shot (non-looping)
+  animations, and hand-rolled AABB collision — `CollisionSystem` is
+  deliberately unregistered, since it kills *both* entities on contact and
+  offers no hook for scoring. `README.md` in that directory explains each
+  choice.
+
+- **Artwork credit and licensing.** The shooter's sprites come from Ari
+  Feldman's **SpriteLib**, which is **CPL-1.0**, not public domain — its terms
+  travel with the files and differ from this repository's WTFPL. The license
+  is kept beside the artwork in `examples/shooter/assets/license.rtf` and must
+  stay with it. The source sheet is not usable as shipped (33px pitch with 1px
+  separators, no alpha), so a prepared sheet plus an `assets/SHEET.md` cell
+  index are included. The README gained an **Artwork** section covering this
+  and the platformer's CC0 tileset.
+
+- **`.hermes/environment.json`** defines the project's verification recipe —
+  engine build, the 319-case spec suite, and an example build as a link
+  canary — so `hermes verify` gates a coding agent's "done" claim on something
+  other than its own say-so.
+
+### Changed
+
+- **`.claude/SKILL.md` gained compile-verified genre sections** (platformer,
+  shooter, JRPG, netplay, puzzle) plus a new-game scaffold, an observed
+  compile-error table, and an evaluation harness under `.claude/references/`.
+  Every code block in the genre sections was built before being written down.
 
 ## [1.2.5] — 2026-08-09
 

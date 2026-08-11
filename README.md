@@ -2,7 +2,7 @@
 
 A lightweight, ECS-based 2D game engine built on SDL2 — made for game jams and personal projects.
 
-> **"v2" is the second-generation engine; the current release is v1.2.5.** The public API is considered stable for the 1.x line. See [CHANGELOG.md](CHANGELOG.md) for release notes.
+> **"v2" is the second-generation engine; the current release is v1.2.6.** The public API is considered stable for the 1.x line. See [CHANGELOG.md](CHANGELOG.md) for release notes.
 
 ![Storm Engine v2 platformer example](examples/platformer/screenshot.png)
 
@@ -18,7 +18,7 @@ A lightweight, ECS-based 2D game engine built on SDL2 — made for game jams and
 - **Virtual gamepad** for touch devices — d-pad + action-button layout, pure and spec'd (`<stormengine2/input/virtualGamepad.h>`), driven by `examples/android-platformer`
 - **UDP networking** — host/join LAN play: reliable + unreliable chunks, kick/ban/timeout, snapshot replication with per-client deltas and a prediction cache (`<stormengine2/net/net.h>`, see [docs/networking.md](docs/networking.md))
 - Built-in **tile map editor** with drag-to-paint, drag-to-erase, and layer support
-- Example games: platformer, shooter, strategy, puzzle, JRPG, sports, Android platformer, Switch platformer, and networking demos (netchat, netrepl, netplay-checkers)
+- Example games: platformer, shooter (*1945*, a vertical shoot-'em-up with menu, HUD and controller support), strategy, puzzle, JRPG, sports, Android platformer, Switch platformer, and networking demos (netchat, netrepl, netplay-checkers)
 - Platforms: Linux, Nintendo Switch (source builds), Android (source builds, verified on hardware); iOS possible via the same SDL layer
 
 ## Component type limit
@@ -69,7 +69,7 @@ Install SDL2 and its extensions, plus a few other dependencies:
 ```bash
 sudo apt update && sudo apt install -y \
     libsdl2-dev libsdl2-image-dev libsdl2-ttf-dev libsdl2-mixer-dev \
-    libglm-dev libtinyxml2-dev liblua5.4-dev libgtk-3-dev \
+    libglm-dev libtinyxml2-dev libgtk-3-dev \
     valgrind
 ```
 
@@ -280,4 +280,16 @@ Released under the [WTFPL](LICENSE.md) — do what you want with it.
 
 Inspired by the [SDL Game Development](https://www.packtpub.com/en-us/product/sdl-game-development-9781849696838) book by Shaun Mitchell and Gustavo Pezzi's [C++ Game Engine Programming course](https://pikuma.com/courses/cpp-2d-game-engine-development).
 
-[SDL2](https://wiki.libsdl.org/SDL2/Installation) · [GLM](https://github.com/g-truc/glm) · [Igloo](https://github.com/codewars/igloo) · [TinyXML2](https://github.com/leethomason/tinyxml2) · [ImGui](https://github.com/ocornut/imgui) · [Lua](https://www.lua.org/)
+[SDL2](https://wiki.libsdl.org/SDL2/Installation) · [GLM](https://github.com/g-truc/glm) · [Igloo](https://github.com/codewars/igloo) · [TinyXML2](https://github.com/leethomason/tinyxml2) · [ImGui](https://github.com/ocornut/imgui) · [NFD](https://github.com/mlabbe/nativefiledialog) (editor only)
+
+### Artwork
+
+The `shooter` example uses **SpriteLib**, © 1996–2017 [Ari Feldman](https://widgetworx.com/projects/sl.html),
+distributed under the **Common Public License 1.0** — free to use and
+redistribute, but not public domain, and its terms travel with the files. The
+license is kept beside the artwork in `examples/shooter/assets/license.rtf` and
+must stay with it. This differs from the rest of the repository, which is WTFPL.
+
+The `platformer` example's tileset is CC0 from
+[bee-m](https://bee-m.itch.io/simple-platformer-tileset-8x8-and-16x16); see
+`examples/platformer/assets/tilemaps/License.txt`.

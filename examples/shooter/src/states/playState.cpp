@@ -1,304 +1,536 @@
 #include "playState.h"
-#include <stormengine2/xmlLoader.h>
 
-const std::string PlayState::s_playID = "PLAY";
+#include "gameOverState.h"
+#include "../ui.h"
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Constructor / Destructor
-// ─────────────────────────────────────────────────────────────────────────────
+#include <algorithm>
+#include <cmath>
+#include <set>
+#include <string>
+#include <vector>
+
+namespace {
+
+constexpr float  PLAYER_SPEED     = 180.0f;
+constexpr float  ENEMY_SPEED      = 70.0f;
+constexpr float  BULLET_SPEED     = 300.0f;
+constexpr Uint32 FIRE_INTERVAL_MS = 167;    // ~6 shots a second
+constexpr Uint32 WAVE_INTERVAL_MS = 2000;
+constexpr Uint32 GET_READY_MS     = 1200;
+constexpr int    ROLL_FPS         = 24;     // 8 frames -> ~333 ms roll
+constexpr int    EXPLOSION_FPS    = 20;
+constexpr int    SPRITE           = 32;
+constexpr int    START_LIVES      = 3;
+
+// Marker components. Three custom types plus the five engine built-ins stay
+// well under MAX_COMPONENTS, which is 32 per BINARY rather than per Registry.
+struct PlayerComponent {};
+struct EnemyComponent {};
+struct BulletComponent {};
+
+struct AABB {
+    float x, y, w, h;
+};
+
+bool Overlaps(const AABB &a, const AABB &b) {
+    return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h &&
+           a.y + a.h > b.y;
+}
+
+} // namespace
+
+const std::string PlayState::s_playID = "PLAY_STATE";
 
 PlayState::PlayState(SDL_Renderer *renderer, int windowWidth, int windowHeight,
-                     bool isDebugging, AssetStore_Ptr assetStore,
-                     bool &isRunning)
-    : renderer_{renderer}, windowWidth_{windowWidth},
-      windowHeight_{windowHeight}, isDebugging_{isDebugging},
-      assetStore_{std::move(assetStore)}, isRunning_{isRunning} {
-  registry_.AddSystem<MovementSystem>();
-  registry_.AddSystem<RenderSystem>();
-  registry_.AddSystem<AnimationSystem>();
-  registry_.AddSystem<CollisionSystem>();
-  registry_.AddSystem<RenderColliderSystem>();
-
-  LoadAssets();
-  SpawnPlayer();
-
-  millisecondsPreviousFrame_ = SDL_GetTicks();
+                     bool isDebugging, AssetStore *assetStore,
+                     GameStateMachine *machine, Gamepad *gamepad, bool &isRunning)
+    : renderer_(renderer), windowWidth_(windowWidth),
+      windowHeight_(windowHeight), isDebugging_(isDebugging),
+      assetStore_(assetStore), machine_(machine), gamepad_(gamepad),
+      isRunning_(isRunning) {
+    lives_ = START_LIVES;
+    playerStart_ =
+        glm::vec2((windowWidth_ - SPRITE) / 2.0f, windowHeight_ - 100.0f);
 }
 
-PlayState::~PlayState() { onExit(); }
+PlayState::~PlayState() {}
 
+// Initialize in onEnter(), not the constructor. changeState() calls onEnter()
+// after pushing the state; clean() calls onExit() before deleting it.
 bool PlayState::onEnter() {
-  m_loadingComplete = true;
-  return true;
+    // Register systems BEFORE creating entities. AddSystem<T>() never scans
+    // existing entities, so a system added after the flush stays empty forever.
+    registry_.AddSystem<MovementSystem>();
+    registry_.AddSystem<RenderSystem>();
+    registry_.AddSystem<AnimationSystem>();
+
+    SpawnPlayer();
+    SpawnWave();
+
+    // Entity creation is deferred. changeState runs onEnter mid-update, so the
+    // same frame's render() would otherwise draw an empty world for one frame.
+    registry_.Update();
+
+    lastShotMs_ = SDL_GetTicks();
+    lastWaveMs_ = SDL_GetTicks();
+    millisecondsPreviousFrame_ = SDL_GetTicks();
+    return true;
 }
 
-bool PlayState::onExit() {
-  assetStore_->ClearAssets();
-  m_exiting = true;
-  return true;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Asset loading and initial entity setup
-// ─────────────────────────────────────────────────────────────────────────────
-
-void PlayState::LoadAssets() {
-  // Load textures defined in the PLAY state of attack.xml
-  LoadTexturesFromXml("./assets/attack.xml", "PLAY", "./assets/gfx/", renderer_,
-                      assetStore_.get(), &logger_);
-
-  // These assets aren't in attack.xml — load them directly
-  assetStore_->AddTexture(renderer_, "enemy2", "./assets/gfx/enemy1.png");
-  assetStore_->AddTexture(renderer_, "enemy3", "./assets/gfx/enemy3.png");
-  assetStore_->AddTexture(renderer_, "bullet", "./assets/gfx/bullet1.png");
-  assetStore_->AddTexture(renderer_, "explosion",
-                          "./assets/gfx/smallexplosion.png");
-  assetStore_->AddTexture(renderer_, "clouds", "./assets/gfx/clouds.png");
-}
+// onExit() must be idempotent -- it can run twice (state machine call, then
+// destructor). It does NOT clear the asset store: Game owns those textures and
+// the menu and game-over states still need them.
+bool PlayState::onExit() { return true; }
 
 void PlayState::SpawnPlayer() {
-  // Two tiled cloud layers that scroll left and wrap around
-  float cloudScaleX = (float)windowWidth_ / 640.0f;
-  float cloudScaleY = (float)windowHeight_ / 480.0f;
+    Entity player = registry_.CreateEntity();
+    player.Tag("player");
+    player.AddComponent<PlayerComponent>();
+    player.AddComponent<TransformComponent>(playerStart_, glm::vec2(1, 1), 0.0);
+    player.AddComponent<RigidBodyComponent>(glm::vec2(0, 0));
+    // Sheet row 0 col 0 is the level flying pose. The sheet's aircraft are
+    // drawn nose-DOWN, so the player -- which flies up the screen at the enemy
+    // -- has to be flipped.
+    player.AddComponent<SpriteComponent>("sheet", SPRITE, SPRITE, 1);
+    player.GetComponent<SpriteComponent>().flip = SDL_FLIP_VERTICAL;
+    // The 8 roll frames run ACROSS the sheet, so vertical = false. The engine
+    // default is true, which would walk srcRect DOWN into a different aircraft
+    // -- silently. Non-looped: the roll is started by resetting startTime and
+    // ends on the last frame.
+    player.AddComponent<AnimationComponent>(8, ROLL_FPS, false, false);
 
-  Entity clouds1 = registry_.CreateEntity();
-  clouds1.Tag("clouds1");
-  clouds1.AddComponent<TransformComponent>(
-      glm::vec2(0, 0), glm::vec2(cloudScaleX, cloudScaleY), 0.0);
-  clouds1.AddComponent<RigidBodyComponent>(glm::vec2(-20.0, 0.0));
-  clouds1.AddComponent<SpriteComponent>("clouds", 640, 480, 0);
-
-  Entity clouds2 = registry_.CreateEntity();
-  clouds2.Tag("clouds2");
-  clouds2.AddComponent<TransformComponent>(
-      glm::vec2(windowWidth_, 0), glm::vec2(cloudScaleX, cloudScaleY), 0.0);
-  clouds2.AddComponent<RigidBodyComponent>(glm::vec2(-20.0, 0.0));
-  clouds2.AddComponent<SpriteComponent>("clouds", 640, 480, 0);
-
-  // Spawn player and initial enemies from attack.xml PLAY state
-  {
-    XmlLoader xml("./assets/attack.xml");
-    if (!xml.IsValid()) {
-      logger_.Err("SpawnPlayer: failed to load attack.xml");
-    } else {
-      for (const auto &def : xml.GetObjects("PLAY")) {
-        if (def.type == "Player") {
-          Entity e = registry_.CreateEntity();
-          e.Tag("player");
-          e.AddComponent<TransformComponent>(glm::vec2(def.x, def.y),
-                                             glm::vec2(1.f, 1.f), 0.0);
-          e.AddComponent<RigidBodyComponent>(glm::vec2(0.f, 0.f));
-          e.AddComponent<SpriteComponent>(def.textureId, def.width, def.height,
-                                          def.zIndex > 0 ? def.zIndex : 2);
-          e.GetComponent<SpriteComponent>().flip = SDL_FLIP_HORIZONTAL;
-          if (def.numFrames > 1)
-            e.AddComponent<AnimationComponent>(def.numFrames, 10, false, true);
-
-        } else if (def.type == "Enemy") {
-          Entity e = registry_.CreateEntity();
-          e.Group("enemies");
-          e.AddComponent<TransformComponent>(glm::vec2(def.x, def.y),
-                                             glm::vec2(1.f, 1.f), 0.0);
-          e.AddComponent<RigidBodyComponent>(glm::vec2(-120.f, 0.f));
-          e.AddComponent<SpriteComponent>(def.textureId, def.width, def.height,
-                                          def.zIndex > 0 ? def.zIndex : 1);
-          if (def.numFrames > 1)
-            e.AddComponent<AnimationComponent>(def.numFrames, 10, false, true);
-          e.AddComponent<BoxColliderComponent>(def.width, def.height);
-
-        } else {
-          logger_.Log("SpawnPlayer: skipping unsupported type '" + def.type +
-                      "'");
-        }
-      }
-    }
-  }
-
-  registry_.Update();
+    player_ = player;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Entity spawning helpers
-// ─────────────────────────────────────────────────────────────────────────────
+void PlayState::SpawnEnemy(const glm::vec2 &pos) {
+    Entity enemy = registry_.CreateEntity();
+    enemy.Group("enemies");
+    enemy.AddComponent<EnemyComponent>();
+    enemy.AddComponent<TransformComponent>(pos, glm::vec2(1, 1), 0.0);
+    enemy.AddComponent<RigidBodyComponent>(glm::vec2(0, ENEMY_SPEED));
+    // Green fighter, sheet row 2 col 0.
+    enemy.AddComponent<SpriteComponent>("sheet", SPRITE, SPRITE, 1, false, 0,
+                                        2 * SPRITE);
+    // No flip: the sheet's aircraft are drawn nose-down already, which is the
+    // direction these fly.
+}
 
 void PlayState::SpawnBullet() {
-  if (!registry_.DoesTagExist("player"))
-    return;
-  auto &playerT =
-      registry_.GetEntityByTag("player").GetComponent<TransformComponent>();
-
-  Entity bullet = registry_.CreateEntity();
-  bullet.Group("bullets");
-  bullet.AddComponent<TransformComponent>(
-      glm::vec2(playerT.position.x + PLAYER_W,
-                playerT.position.y + PLAYER_H * 0.4f),
-      glm::vec2(1.5, 1.5), 0.0);
-  bullet.AddComponent<RigidBodyComponent>(glm::vec2(BULLET_SPEED, 0.0));
-  bullet.AddComponent<SpriteComponent>("bullet", BULLET_W, BULLET_H, 2);
-  bullet.AddComponent<BoxColliderComponent>(BULLET_W, BULLET_H);
-}
-
-void PlayState::SpawnEnemy() {
-  int type = rand() % 3;
-  int y = rand() % (windowHeight_ - 80) + 20;
-
-  Entity enemy = registry_.CreateEntity();
-  enemy.Group("enemies");
-
-  switch (type) {
-  case 0: // Green helicopter — animated, same size as player
-    enemy.AddComponent<TransformComponent>(glm::vec2(windowWidth_, y),
-                                           glm::vec2(1.0, 1.0), 0.0);
-    enemy.AddComponent<RigidBodyComponent>(glm::vec2(-ENEMY_SPEED, 0.0));
-    enemy.AddComponent<SpriteComponent>("enemy1", ENEMY1_W, ENEMY1_H, 1);
-    enemy.AddComponent<AnimationComponent>(ENEMY1_FRAMES, 10, false, true);
-    enemy.AddComponent<BoxColliderComponent>(ENEMY1_W, ENEMY1_H);
-    break;
-  case 1: // Small alien bug — scaled up so it's visible
-    enemy.AddComponent<TransformComponent>(glm::vec2(windowWidth_, y),
-                                           glm::vec2(2.0, 2.0), 0.0);
-    enemy.AddComponent<RigidBodyComponent>(glm::vec2(-ENEMY_SPEED * 1.3f, 0.0));
-    enemy.AddComponent<SpriteComponent>("enemy2", ENEMY2_W, ENEMY2_H, 1);
-    enemy.AddComponent<BoxColliderComponent>(ENEMY2_W, ENEMY2_H);
-    break;
-  case 2: // Animated bat — scaled up, slightly slower
-    enemy.AddComponent<TransformComponent>(glm::vec2(windowWidth_, y),
-                                           glm::vec2(2.0, 2.0), 0.0);
-    enemy.AddComponent<RigidBodyComponent>(glm::vec2(-ENEMY_SPEED * 0.8f, 0.0));
-    enemy.AddComponent<SpriteComponent>("enemy3", ENEMY3_W, ENEMY3_H, 1);
-    enemy.AddComponent<AnimationComponent>(ENEMY3_FRAMES, 6, false, true);
-    enemy.AddComponent<BoxColliderComponent>(ENEMY3_W, ENEMY3_H);
-    break;
-  }
-}
-
-void PlayState::DespawnOffscreen() {
-  // Wrap cloud layers so they tile seamlessly
-  for (const char *tag : {"clouds1", "clouds2"}) {
-    try {
-      auto &t =
-          registry_.GetEntityByTag(tag).GetComponent<TransformComponent>();
-      if (t.position.x <= -windowWidth_)
-        t.position.x += windowWidth_ * 2;
-    } catch (...) {
-    }
-  }
-
-  if (registry_.DoesGroupExist("bullets")) {
-    for (auto entity : registry_.GetEntitiesByGroup("bullets")) {
-      if (entity.GetComponent<TransformComponent>().position.x > windowWidth_)
-        entity.Kill();
-    }
-  }
-
-  if (registry_.DoesGroupExist("enemies")) {
-    for (auto entity : registry_.GetEntitiesByGroup("enemies")) {
-      if (entity.GetComponent<TransformComponent>().position.x < -200)
-        entity.Kill();
-    }
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// processInput
-// ─────────────────────────────────────────────────────────────────────────────
-
-void PlayState::processInput() {
-  SDL_Event sdlEvent;
-  while (SDL_PollEvent(&sdlEvent)) {
-    switch (sdlEvent.type) {
-    case SDL_QUIT:
-      isRunning_ = false;
-      return;
-    case SDL_KEYDOWN:
-      if (sdlEvent.key.keysym.sym == SDLK_ESCAPE) {
-        isRunning_ = false;
+    if (!player_) {
         return;
-      }
-      if (sdlEvent.key.keysym.sym == SDLK_d) {
-        isDebugging_ = !isDebugging_;
-      }
-      break;
     }
-  }
-
-  // Continuous movement via keyboard state snapshot
-  if (!registry_.DoesTagExist("player"))
-    return;
-
-  auto &vel =
-      registry_.GetEntityByTag("player").GetComponent<RigidBodyComponent>();
-  vel.velocity = glm::vec2(0.0, 0.0);
-
-  const Uint8 *keys = SDL_GetKeyboardState(NULL);
-  if (keys[SDL_SCANCODE_UP])
-    vel.velocity.y = -PLAYER_SPEED;
-  if (keys[SDL_SCANCODE_DOWN])
-    vel.velocity.y = PLAYER_SPEED;
-  if (keys[SDL_SCANCODE_LEFT])
-    vel.velocity.x = -PLAYER_SPEED;
-  if (keys[SDL_SCANCODE_RIGHT])
-    vel.velocity.x = PLAYER_SPEED;
-
-  if (keys[SDL_SCANCODE_SPACE]) {
-    int now = SDL_GetTicks();
-    if (now - lastBulletTime_ >= BULLET_COOLDOWN_MS) {
-      SpawnBullet();
-      lastBulletTime_ = now;
-    }
-  }
+    auto &tf = player_->GetComponent<TransformComponent>();
+    Entity bullet = registry_.CreateEntity();
+    bullet.Group("bullets");
+    bullet.AddComponent<BulletComponent>();
+    bullet.AddComponent<TransformComponent>(
+        glm::vec2(tf.position.x, tf.position.y - 16.0f), glm::vec2(1, 1), 0.0);
+    bullet.AddComponent<RigidBodyComponent>(glm::vec2(0, -BULLET_SPEED));
+    // Orange bullet pair, sheet row 5 col 0.
+    bullet.AddComponent<SpriteComponent>("sheet", SPRITE, SPRITE, 2, false, 0,
+                                         5 * SPRITE);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// update
-// ─────────────────────────────────────────────────────────────────────────────
+void PlayState::SpawnExplosion(glm::vec2 pos) {
+    Entity explosion = registry_.CreateEntity();
+    explosion.Group("explosions");
+    explosion.AddComponent<TransformComponent>(pos, glm::vec2(1, 1), 0.0);
+    // Small explosion runs sheet row 5, cols 2..7.
+    explosion.AddComponent<SpriteComponent>("sheet", SPRITE, SPRITE, 2, false,
+                                            2 * SPRITE, 5 * SPRITE);
+    // 6 frames across, one shot, starting at col 2 (frameOffset). isLooped =
+    // false stops on the last frame but does NOT remove the entity --
+    // CullOffscreenEntities kills it once the run finishes.
+    explosion.AddComponent<AnimationComponent>(6, EXPLOSION_FPS, false, false,
+                                               2);
+}
+
+// NOTE: pos is taken BY VALUE, not by const reference. Callers pass a
+// reference into the TransformComponent pool (et->position, pt.position), and
+// Registry::AddComponent resizes that same pool before constructing from the
+// forwarded argument -- a std::vector resize invalidates every reference into
+// it. Copying at the boundary makes the aliasing impossible.
+
+// A wave is a formation that holds its shape as it descends. The previous
+// version offset both x and y per enemy, which drew a diagonal staircase --
+// not a formation at all.
+void PlayState::SpawnWave() {
+    const Formation shape =
+        (waveCount_ % 2 == 0) ? Formation::Vee : Formation::LineAbreast;
+
+    const int   size    = 5 + static_cast<int>(waveCount_ % 2);   // 5 or 6
+    const float spacing = 44.0f;
+
+    // Deterministic, no rand(): the centre walks across the screen by wave
+    // index, so every run spawns identically.
+    const float span   = static_cast<float>(windowWidth_) - 2.0f * spacing;
+    const float centre = spacing + std::fmod(waveCount_ * 137.0f, span);
+    const float mid    = (size - 1) / 2.0f;
+
+    // Shift the WHOLE formation to fit on screen rather than clamping each
+    // aircraft. Per-aircraft clamping piles the outer wingmen onto the screen
+    // edge and destroys the shape -- which is exactly what a formation is.
+    const float halfSpan = mid * spacing;
+    const float minX     = 0.0f;
+    const float maxX     = static_cast<float>(windowWidth_ - SPRITE);
+    float       cx       = centre;
+    if (cx - halfSpan < minX) {
+        cx = minX + halfSpan;
+    }
+    if (cx + halfSpan > maxX) {
+        cx = maxX - halfSpan;
+    }
+
+    for (int i = 0; i < size; ++i) {
+        const float offset = static_cast<float>(i) - mid;
+        const float x      = cx + offset * spacing;
+
+        // Vee: the leader is lowest, wingmen step back symmetrically on both
+        // sides. LineAbreast: one rank, all at the same height.
+        float y = -static_cast<float>(SPRITE);
+        if (shape == Formation::Vee) {
+            y -= std::fabs(offset) * spacing;
+        }
+
+        SpawnEnemy(glm::vec2(x, y));
+    }
+    ++waveCount_;
+}
+
+bool PlayState::PlayerInvulnerable(Uint32 now) const {
+    return rolling_ || now < getReadyUntil_;
+}
+
+void PlayState::LoseLife() {
+    if (!player_ || leaving_) {
+        return;
+    }
+    --lives_;
+    logger_.Log("Hit! lives remaining: " + std::to_string(lives_));
+
+    if (lives_ <= 0) {
+        leaving_ = true;
+        machine_->changeState(new GameOverState(
+            renderer_, windowWidth_, windowHeight_, isDebugging_, assetStore_,
+            machine_, gamepad_, isRunning_, score_,
+            static_cast<int>(waveCount_)));
+        return;   // caller must not touch this state afterwards
+    }
+
+    auto &tf    = player_->GetComponent<TransformComponent>();
+    tf.position = playerStart_;
+    auto &rb    = player_->GetComponent<RigidBodyComponent>();
+    rb.velocity = glm::vec2(0, 0);
+    rolling_    = false;
+    // Brief grace period so the player is not immediately killed again by the
+    // same formation, and the GET READY! banner has time to be read.
+    getReadyUntil_ = SDL_GetTicks() + GET_READY_MS;
+}
+
+// The active state owns ALL event polling. Never call SDL_PollEvent in both
+// Game::ProcessInput and a state's processInput -- the queue is shared.
+void PlayState::processInput() {
+    SDL_Event event;
+    while (SDL_PollEvent(&event)) {
+        gamepad_->HandleEvent(event);   // device add/remove only
+        switch (event.type) {
+        case SDL_QUIT:
+            isRunning_ = false;
+            return;
+        case SDL_KEYDOWN:
+            if (event.key.keysym.sym == SDLK_ESCAPE) {
+                isRunning_ = false;
+                return;
+            }
+            if (event.key.keysym.sym == SDLK_LEFT)  moveLeft_  = true;
+            if (event.key.keysym.sym == SDLK_RIGHT) moveRight_ = true;
+            if (event.key.keysym.sym == SDLK_UP)    moveUp_    = true;
+            if (event.key.keysym.sym == SDLK_DOWN)  moveDown_  = true;
+            if (event.key.keysym.sym == SDLK_SPACE) spaceHeld_ = true;
+            if (event.key.keysym.sym == SDLK_z && !event.key.repeat) {
+                rollPressed_ = true;
+            }
+            break;
+        case SDL_KEYUP:
+            if (event.key.keysym.sym == SDLK_LEFT)  moveLeft_  = false;
+            if (event.key.keysym.sym == SDLK_RIGHT) moveRight_ = false;
+            if (event.key.keysym.sym == SDLK_UP)    moveUp_    = false;
+            if (event.key.keysym.sym == SDLK_DOWN)  moveDown_  = false;
+            if (event.key.keysym.sym == SDLK_SPACE) spaceHeld_ = false;
+            break;
+        default:
+            break;
+        }
+    }
+}
 
 void PlayState::update() {
-  int timeToWait =
-      MILLISECS_PER_FRAME - (SDL_GetTicks() - millisecondsPreviousFrame_);
-  if (timeToWait > 0 && timeToWait <= MILLISECS_PER_FRAME)
-    SDL_Delay(timeToWait);
+    // Variable dt with a 60 FPS cap. Nothing enforces a minimum frame rate.
+    int wait = MILLISECS_PER_FRAME - (SDL_GetTicks() - millisecondsPreviousFrame_);
+    if (wait > 0 && wait <= MILLISECS_PER_FRAME) {
+        SDL_Delay(wait);
+    }
+    const double deltaTime =
+        (SDL_GetTicks() - millisecondsPreviousFrame_) / 1000.0;
+    millisecondsPreviousFrame_ = SDL_GetTicks();
+    const Uint32 now = SDL_GetTicks();
 
-  double deltaTime = (SDL_GetTicks() - millisecondsPreviousFrame_) / 1000.0;
-  millisecondsPreviousFrame_ = SDL_GetTicks();
+    // A changeState is queued; this object is off the stack and its deletion
+    // is pending. Do no more work.
+    if (leaving_) {
+        return;
+    }
 
-  // Clamp player within screen bounds
-  if (registry_.DoesTagExist("player")) {
-    auto &t =
-        registry_.GetEntityByTag("player").GetComponent<TransformComponent>();
-    t.position.x = std::max(
-        0.0f, std::min(t.position.x, (float)(windowWidth_ - PLAYER_W)));
-    t.position.y = std::max(
-        0.0f, std::min(t.position.y, (float)(windowHeight_ - PLAYER_H)));
-  }
+    // Flush deferred entity adds/kills FIRST, before running any system.
+    registry_.Update();
 
-  // Periodic enemy spawning
-  int now = SDL_GetTicks();
-  if (now - lastEnemySpawn_ >= ENEMY_SPAWN_MS) {
-    SpawnEnemy();
-    lastEnemySpawn_ = now;
-  }
+    // Sample the controller once per frame. Polled rather than accumulated
+    // from events, so a pad unplugged mid-hold cannot latch a direction on.
+    gamepad_->Update();
+    if (gamepad_->PressedBack()) {
+        isRunning_ = false;
+        return;
+    }
 
-  DespawnOffscreen();
+    // Keyboard and controller are merged: either drives the game, and neither
+    // disables the other.
+    const bool left  = moveLeft_  || gamepad_->Left();
+    const bool right = moveRight_ || gamepad_->Right();
+    const bool up    = moveUp_    || gamepad_->Up();
+    const bool down  = moveDown_  || gamepad_->Down();
+    const bool fire  = spaceHeld_ || gamepad_->Fire();          // A / RT, held
+    const bool roll  = rollPressed_ || gamepad_->PressedB() ||
+                       gamepad_->PressedX();                    // B / X, edge
 
-  registry_.Update();
-  registry_.GetSystem<MovementSystem>().Update(deltaTime);
-  registry_.GetSystem<AnimationSystem>().Update();
-  registry_.GetSystem<CollisionSystem>().Update();
+    if (player_) {
+        auto &rb = player_->GetComponent<RigidBodyComponent>();
+        rb.velocity.x = (right ? PLAYER_SPEED : 0.0f) -
+                        (left ? PLAYER_SPEED : 0.0f);
+        rb.velocity.y = (down ? PLAYER_SPEED : 0.0f) -
+                        (up ? PLAYER_SPEED : 0.0f);
+
+        auto &anim = player_->GetComponent<AnimationComponent>();
+        if (roll && !rolling_) {
+            rolling_       = true;
+            anim.startTime = static_cast<int>(now);
+        }
+        rollPressed_ = false;
+        if (!rolling_) {
+            // Pin to frame 0 (the level flying pose) while not rolling.
+            anim.startTime = static_cast<int>(now);
+        }
+
+        if (fire && now - lastShotMs_ >= FIRE_INTERVAL_MS) {
+            SpawnBullet();
+            lastShotMs_ = now;
+        }
+    }
+
+    registry_.GetSystem<MovementSystem>().Update(deltaTime);
+    registry_.GetSystem<AnimationSystem>().Update();
+
+    if (player_) {
+        auto &tf = player_->GetComponent<TransformComponent>();
+        tf.position.x =
+            std::max(0.0f, std::min(static_cast<float>(windowWidth_ - SPRITE),
+                                    tf.position.x));
+        tf.position.y =
+            std::max(0.0f, std::min(static_cast<float>(windowHeight_ - SPRITE),
+                                    tf.position.y));
+
+        auto &anim = player_->GetComponent<AnimationComponent>();
+        if (rolling_ && anim.currentFrame >= anim.numFrames - 1) {
+            rolling_ = false;
+        }
+    }
+
+    if (now - lastWaveMs_ >= WAVE_INTERVAL_MS) {
+        SpawnWave();
+        lastWaveMs_ = now;
+    }
+
+    CullOffscreenEntities();
+    CheckCollisions();
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// render
-// ─────────────────────────────────────────────────────────────────────────────
+void PlayState::CullOffscreenEntities() {
+    // Copy-then-iterate wherever the body might Kill(): a kill is deferred, so
+    // a killed entity stays in its group until the next registry_.Update().
+    if (registry_.DoesGroupExist("bullets")) {
+        for (auto &b : registry_.GetEntitiesByGroup("bullets")) {
+            auto *tf = registry_.TryGetComponent<TransformComponent>(b);
+            if (tf && tf->position.y < -static_cast<float>(SPRITE)) {
+                b.Kill();
+            }
+        }
+    }
+
+    if (registry_.DoesGroupExist("enemies")) {
+        for (auto &e : registry_.GetEntitiesByGroup("enemies")) {
+            auto *tf = registry_.TryGetComponent<TransformComponent>(e);
+            if (tf && tf->position.y > windowHeight_ + SPRITE) {
+                e.Kill();
+            }
+        }
+    }
+
+    // isLooped = false stops the animation on its last frame; it does not
+    // remove the entity. Without this the corpses accumulate invisibly.
+    if (registry_.DoesGroupExist("explosions")) {
+        for (auto &x : registry_.GetEntitiesByGroup("explosions")) {
+            auto *anim = registry_.TryGetComponent<AnimationComponent>(x);
+            if (anim && anim->currentFrame >= anim->numFrames - 1) {
+                x.Kill();
+            }
+        }
+    }
+}
+
+// Hand-rolled AABB checks. CollisionSystem is wrong here twice over: it kills
+// BOTH entities on contact -- deleting the player on any enemy touch -- and it
+// offers no hook for scoring or spawning an explosion.
+void PlayState::CheckCollisions() {
+    if (!player_ || leaving_) {
+        return;
+    }
+    const Uint32 now = SDL_GetTicks();
+
+    auto &pt = player_->GetComponent<TransformComponent>();
+    const AABB playerBox{pt.position.x + 6.0f, pt.position.y + 6.0f, 20.0f,
+                         20.0f};
+
+    std::vector<Entity> bullets = registry_.DoesGroupExist("bullets")
+                                      ? registry_.GetEntitiesByGroup("bullets")
+                                      : std::vector<Entity>{};
+    std::vector<Entity> enemies = registry_.DoesGroupExist("enemies")
+                                      ? registry_.GetEntitiesByGroup("enemies")
+                                      : std::vector<Entity>{};
+
+    // A killed entity stays in these snapshots -- and in its group -- until the
+    // next registry_.Update(). Track what has died this frame by id so a second
+    // bullet cannot hit the same enemy and score it twice.
+    //
+    // The previous version guarded against that by breaking out of the whole
+    // bullet loop after the first hit, which silently capped the game at one
+    // kill per frame: fire fast enough into a dense formation and bullets
+    // passed straight through.
+    std::set<int> deadEnemies;
+    std::set<int> spentBullets;
+
+    for (auto &b : bullets) {
+        if (spentBullets.count(b.GetId())) {
+            continue;
+        }
+        auto *bt = registry_.TryGetComponent<TransformComponent>(b);
+        if (!bt) {
+            continue;
+        }
+        const AABB bulletBox{bt->position.x + 11.0f, bt->position.y + 8.0f,
+                             10.0f, 16.0f};
+
+        for (auto &e : enemies) {
+            if (deadEnemies.count(e.GetId())) {
+                continue;
+            }
+            auto *et = registry_.TryGetComponent<TransformComponent>(e);
+            if (!et) {
+                continue;
+            }
+            const AABB enemyBox{et->position.x, et->position.y,
+                                static_cast<float>(SPRITE),
+                                static_cast<float>(SPRITE)};
+            if (!Overlaps(bulletBox, enemyBox)) {
+                continue;
+            }
+
+            SpawnExplosion(et->position);
+            e.Kill();
+            b.Kill();
+            deadEnemies.insert(e.GetId());
+            spentBullets.insert(b.GetId());
+            score_ += 100;
+            logger_.Log("Score: " + std::to_string(score_));
+            break;   // one bullet kills one enemy
+        }
+    }
+
+    if (PlayerInvulnerable(now)) {
+        return;
+    }
+    for (auto &e : enemies) {
+        if (deadEnemies.count(e.GetId())) {
+            continue;
+        }
+        auto *et = registry_.TryGetComponent<TransformComponent>(e);
+        if (!et) {
+            continue;
+        }
+        const AABB enemyBox{et->position.x, et->position.y,
+                            static_cast<float>(SPRITE),
+                            static_cast<float>(SPRITE)};
+        if (Overlaps(playerBox, enemyBox)) {
+            SpawnExplosion(pt.position);
+            LoseLife();
+            return;   // LoseLife may have queued a changeState
+        }
+    }
+}
+
+void PlayState::RenderHud() {
+    SDL_Texture *digits = assetStore_->GetTexture("digits");
+    const float  s      = 1.5f;
+
+    // SCORE: <number>
+    SDL_Texture *scoreLabel = assetStore_->GetTexture("scoreLabel");
+    int lw = 0, lh = 0;
+    if (scoreLabel) {
+        SDL_QueryTexture(scoreLabel, nullptr, nullptr, &lw, &lh);
+    }
+    ui::DrawTexture(renderer_, scoreLabel, 12, 10, s);
+    ui::DrawNumber(renderer_, digits, score_,
+                   12 + static_cast<int>(lw * s) + 8, 12, s);
+
+    // WAVE: <number>
+    SDL_Texture *waveLabel = assetStore_->GetTexture("waveLabel");
+    int ww = 0, wh = 0;
+    if (waveLabel) {
+        SDL_QueryTexture(waveLabel, nullptr, nullptr, &ww, &wh);
+    }
+    ui::DrawTexture(renderer_, waveLabel, 12, 40, s);
+    ui::DrawNumber(renderer_, digits, static_cast<int>(waveCount_),
+                   12 + static_cast<int>(ww * s) + 8, 40, s);
+
+    // Lives, top-right, as small player fighters. There is no separate life
+    // icon on the sheet -- the small planes in that row touch each other and
+    // cannot be cleanly separated -- so this is sheet cell (0,0) at half size.
+    SDL_Texture *sheet = assetStore_->GetTexture("sheet");
+    const int    icon  = 20;
+    for (int i = 0; i < lives_; ++i) {
+        ui::DrawSheetCell(renderer_, sheet, 0, 0,
+                          windowWidth_ - 12 - (i + 1) * (icon + 4), 12, icon);
+    }
+
+    // GET READY! while the post-death grace period runs.
+    if (SDL_GetTicks() < getReadyUntil_) {
+        ui::DrawTextureCentred(renderer_, assetStore_->GetTexture("getReady"),
+                               windowWidth_ / 2, windowHeight_ / 2 - 40, 3.0f);
+    }
+}
 
 void PlayState::render() {
-  SDL_SetRenderDrawColor(renderer_, 100, 140, 200, 255);
-  SDL_RenderClear(renderer_);
+    // Same sky blue as the menu and the 1945 logo.
+    SDL_SetRenderDrawColor(renderer_, 0, 99, 191, 255);
+    SDL_RenderClear(renderer_);
 
-  registry_.GetSystem<RenderSystem>().Update(renderer_, *assetStore_);
+    registry_.GetSystem<RenderSystem>().Update(renderer_, *assetStore_);
 
-  if (isDebugging_)
-    registry_.GetSystem<RenderColliderSystem>().Update(renderer_);
+    // No debug collider overlay: RenderColliderSystem is not registered, and
+    // GetSystem on an unregistered system goes through std::map::at -- it
+    // would throw here and abort under the Switch build's -fno-exceptions.
+    // Nothing in this game carries a BoxColliderComponent anyway; collision is
+    // hand-rolled AABB in CheckCollisions.
 
-  SDL_RenderPresent(renderer_);
+    RenderHud();
+
+    SDL_RenderPresent(renderer_);
 }

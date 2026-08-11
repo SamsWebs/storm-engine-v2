@@ -45,9 +45,6 @@ install:
 	cp -r ./common/* $(INSTALL_INCLUDE_DIR)
 	find $(INSTALL_INCLUDE_DIR) \( -name '*.o' -o -name '*.d' -o -name '*.cpp' \) -delete
 
-# NFD is editor-only — strip it from both library and test builds
-LIB := $(filter-out -lnfd,$(LIB))
-
 test: test-target run-test
 
 TESTSRCS  	:= $(shell find specs -name '*.cpp')

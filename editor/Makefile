@@ -8,7 +8,11 @@ SRCS	+= $(wildcard src/**/*.cpp)
 SRCS	+= $(wildcard src/*.cpp)
 OBJS 	= $(SRCS:.cpp=.o)
 
-all: clean $(TARGET)
+# See the note in examples/examples.mk: `all: clean $(TARGET)` orders nothing,
+# so under -j clean races the build and can delete objects mid-compile or the
+# binary after the link, while make still exits 0. Header tracking in base.mk
+# makes the unconditional clean unnecessary anyway.
+all: $(TARGET)
 
 include ../base.mk
 
@@ -25,5 +29,5 @@ run:
 
 $(TARGET) : $(OBJS)
 	mkdir -p $(BIN_DIR)
-	$(CC) $^ $(LIB) -lstormenginev2 -o $@
+	$(CC) $^ $(LIB) $(EDITOR_LIB) -lstormenginev2 -o $@
 	/usr/bin/time -f "Compilation completed in : %E" $(TARGET)

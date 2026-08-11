@@ -1,0 +1,20 @@
+{
+  "name": "Storm! Engine v2",
+  "kind": "make",
+  "bootstrap": [],
+  "build": [
+    "make -f Makefile.debian target -j$(nproc)"
+  ],
+  "test": [
+    "make -f Makefile.debian test -j$(nproc)",
+    "cd examples/shooter && make -j$(nproc)"
+  ],
+  "start": null,
+  "port": null,
+  "readinessPath": "/",
+  "evidence": [
+    "bin/libstormenginev2.so",
+    "bin/tests",
+    "examples/shooter/bin/1945"
+  ]
+}

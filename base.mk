@@ -22,8 +22,20 @@ ROOT_DIR := $(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
 # Makefile.win to keep in sync, for a path with no caller. Change Windows
 # flags in Makefile.win and examples/examples.win.mk instead.
 CC = g++
+# -llua was dropped: nothing in common/, specs/ or editor/ includes a Lua
+# header or references a lua_/luaL_ symbol. The editor's .lua project files are
+# parsed by hand (editor/src/utilities/FileLoader.cpp checks the extension
+# only), so the interpreter was never linked for a reason. It also does not
+# build on Debian/Ubuntu, which ship liblua5.4.so but no versionless liblua.so.
 LIB = -L/usr/local/lib -Wl,-rpath=/usr/local/lib -lSDL2 -lSDL2_image -lSDL2_ttf -lSDL2_mixer \
-	-lz -ltinyxml2 -llua -ldl -lnfd $(shell pkg-config --libs gtk+-3.0)
+	-lz -ltinyxml2 -ldl $(shell pkg-config --libs gtk+-3.0)
+
+# NFD (Native File Dialog) is used by exactly one file -- the editor's
+# FileDialogWin.cpp -- and is vendored as a header only (vendor/nfd/nfd.h) with
+# no library shipped. Keeping it in the shared LIB made every example fail to
+# link with "cannot find -lnfd" on any machine without libnfd installed, even
+# though no example references NFD. Only the editor links it.
+EDITOR_LIB = -lnfd
 INCLUDE = -I/usr/local/include -I$(ROOT_DIR)/vendor
 
 # Build profile. The default is the local-dev one — unoptimized with debug

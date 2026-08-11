@@ -1,37 +1,49 @@
 #pragma once
 
 #include <SDL2/SDL.h>
-#include <SDL2/SDL_image.h>
 
 #include <stormengine2/assetStore.h>
 #include <stormengine2/gameStateMachine.h>
 #include <stormengine2/logger.h>
 
-#include "states/playState.h"
+#include "gamepad.h"
 
+// The engine ships no Game class, no main loop and no window management --
+// only GameStateMachine. Every game writes this file.
+//
+// Note the ownership change from the scaffold: the AssetStore is NOT moved
+// into the first state. Three states share the same textures, and a state that
+// owned the store would clear it on exit and leave the next state blank. Game
+// owns it for the whole run and hands out a raw pointer.
 class Game {
 public:
+    // Which state the game opens on. Anything but Menu is a testing shortcut.
+    enum class StartState { Menu, Play, GameOver };
+
     Game();
     ~Game();
 
-    void Initialize();
+    void Initialize(StartState start = StartState::Menu);
     void ProcessInput();
     void Update();
     void Render();
-    void Run();
+    void Run(StartState start = StartState::Menu);
     void Destroy();
 
 private:
-    bool isRunning   = false;
-    bool isDebugging = false;
+    void LoadAssets();
 
-    SDL_Window   *window   = nullptr;
-    SDL_Renderer *renderer = nullptr;
+    bool isRunning_   = false;
+    bool isDebugging_ = false;
 
-    GameStateMachine gameStateMachine;
-    Logger_Ptr       logger;
-    AssetStore_Ptr   assetStore;
+    SDL_Window   *window_   = nullptr;
+    SDL_Renderer *renderer_ = nullptr;
 
-    int windowWidth  = 0;
-    int windowHeight = 0;
+    GameStateMachine gameStateMachine_;
+    Gamepad          gamepad_;
+    Logger_Ptr       logger_;
+    AssetStore_Ptr   assetStore_;
+
+    int windowWidth_  = 800;
+    int windowHeight_ = 600;
 };

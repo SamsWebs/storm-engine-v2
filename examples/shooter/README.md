@@ -1,6 +1,6 @@
-# Storm Shooter — Alien Attack
+# Example Shooter - 1945
 
-A side-scrolling shoot-em-up built as a storm-engine-v2 example. Demonstrates the engine's built-in movement, animation, collision, and render systems working together, plus scrolling background layers, bullet spawning, and periodic enemy waves.
+A vertically scrolling shoot-'em-up in the shape of Capcom's *1942*, built as a Storm! Engine v2 example. Demonstrates a three-state stack (menu, play, game over), high entity churn with deferred lifecycle, one-shot animations, an immediate-mode HUD, and physical game-controller input.
 
 ![Storm Engine v2 shooter example](screenshot.png)
 
@@ -9,80 +9,66 @@ A side-scrolling shoot-em-up built as a storm-engine-v2 example. Demonstrates th
 From the `examples/shooter/` directory:
 
 ```bash
-make        # build and launch
-make run    # launch without rebuilding
+make        # build
+make run    # launch
 ```
 
-The binary is written to `bin/alienattack`.
+The binary is written to `bin/1945`.
+
+An optional first argument selects the starting state, which is useful when
+working on one screen without driving the menu each time:
+
+```bash
+./bin/1945            # menu (normal)
+./bin/1945 play       # straight into the game
+./bin/1945 gameover   # straight to the game-over screen
+```
 
 ## How to Play
 
-| Input | Action |
+Fly up the screen, shoot the formations coming down, and roll to slip through the ones you cannot outrun.
+
+| Keyboard | Controller | Action |
+|---|---|---|
+| `←` `→` `↑` `↓` | Left stick / D-pad | Move |
+| `Space` | `A` or right trigger | Fire (hold) |
+| `Z` | `B` or `X` | Roll — plays the 8-frame barrel roll and grants invulnerability for its duration |
+| `Enter` | `A` / `Start` | Confirm on the menu and game-over screens |
+| `ESC` | `Back` | Quit |
+
+Three lives, shown top-right. Losing one resets you to the start position and shows **GET READY!** with a brief grace period. At zero lives the game-over screen appears and returns to the menu.
+
+Keyboard and controller are merged, so either drives the game and neither disables the other. A pad plugged in before launch is picked up at startup; one plugged in later is picked up from `SDL_CONTROLLERDEVICEADDED`.
+
+## What this example demonstrates
+
+| Area | Where to look |
 |---|---|
-| `↑` / `↓` / `←` / `→` | Move the player helicopter |
-| `Space` | Fire a bullet (250 ms cooldown) |
-| `D` | Toggle debug collider outlines |
-| `ESC` | Quit |
+| **Three-state stack** | `menuState`, `playState`, `gameOverState`. `changeState` is followed immediately by `return` — the state is off the stack and its deletion is pending. |
+| **Shared `AssetStore`** | `Game` owns it for the whole run and hands out a raw pointer. The scaffold's pattern of moving it into the first state would have cleared the textures the moment that state exited, leaving the next screen blank. |
+| **Deferred entity lifecycle** | A killed entity stays alive, and stays in its group, until the next `registry_.Update()`. `CheckCollisions` tracks ids killed this frame in a `std::set` so a second bullet cannot score the same enemy twice. |
+| **Entity churn** | Bullets, enemies and explosions are created and destroyed continuously. Component storage is a dense vector indexed by entity id, so everything is culled off-screen or on animation end; ids recycle and the pools stay flat. |
+| **One-shot animations** | `AnimationComponent(n, fps, false, /*isLooped=*/false)` stops on the last frame but does **not** remove the entity. Explosions kill themselves; the roll returns the player to frame 0. |
+| **Hand-rolled AABB** | `CollisionSystem` is deliberately not registered: it kills *both* entities on contact, which would delete the player, and offers no hook for scoring or spawning an explosion. |
+| **Immediate-mode HUD** | `ui.h`. Score, labels and centred messages are `SDL_RenderCopy` calls in `render()`, not entities — a glyph entity per frame would burn ids forever and buy nothing. |
+| **Controller input** | `gamepad.h`. `SDL_GameController` rather than `SDL_Joystick`, so any recognised pad maps onto the Xbox model and reports buttons by meaning. State is polled per frame, never accumulated, so a disconnect mid-hold cannot latch a direction on. |
 
-Enemies spawn from the right edge every 2.5 seconds and scroll left. Shoot them before they pass off the left edge.
+## Assets
 
-## Enemy Types
+Artwork is from **SpriteLib**, © 1996–2017 [Ari Feldman](https://widgetworx.com/projects/sl.html)
+— specifically the *1945* set from `shooter/1945.png`.
 
-| Type | Sprite | Speed | Notes |
-|---|---|---|---|
-| Green helicopter | `helicopter2.png` | Normal | Animated, 5-frame strip, same size as player |
-| Alien bug | `enemy1.png` | Fast (1.3×) | Static sprite, scaled up 2× |
-| Bat | `enemy3.png` | Slow (0.8×) | Animated, 2-frame strip, scaled up 2× |
+SpriteLib is distributed under the **Common Public License 1.0**. It is free to use and redistribute, but it is **not** public domain and its terms travel with the files: the full license is kept alongside the artwork in [`assets/license.rtf`](assets/license.rtf) and must stay with it. Note this differs from the rest of the repository, which is WTFPL.
 
-## Engine Concepts Demonstrated
+The original source sheet is not usable as shipped and was prepared before use:
 
-### Built-in Systems Used
+- Cells sit on a **33px pitch with 1px grey separators** starting at (4,4), not a clean 32px grid from the origin.
+- There is **no alpha channel** — every sprite sits on opaque blue `(0,67,171)`.
 
-| System | Purpose |
-|---|---|
-| `MovementSystem` | Applies `RigidBodyComponent` velocity to `TransformComponent` position each frame |
-| `AnimationSystem` | Steps through horizontal sprite sheet frames using `AnimationComponent` |
-| `CollisionSystem` | Detects overlapping `BoxColliderComponent` pairs |
-| `RenderSystem` | Draws all entities with `TransformComponent` + `SpriteComponent`, sorted by z-index |
-| `RenderColliderSystem` | Draws `BoxColliderComponent` outlines (debug mode, toggle with `D`) |
+`assets/gfx/sheet.png` is the result: separators removed, re-packed to a clean 32px pitch, and the background colour-keyed to transparent. The UI text is not on that grid at all, so it was cut into the discrete `assets/gfx/ui_*.png` images. [`assets/SHEET.md`](assets/SHEET.md) indexes every cell and UI file, including the digit metrics and the sprite-facing note.
 
-### Scrolling Background
+`assets/gfx/icon.png` is the window icon, set with `SDL_SetWindowIcon` at
+startup. It is the player fighter (sheet cell 0,0) flipped nose-up, trimmed to
+the sprite's bounds and centred at 64x64. Being derived from the same artwork,
+it carries the same CPL-1.0 terms.
 
-Two cloud entities are spawned side by side, each covering the full screen. Both move left at the same velocity via `RigidBodyComponent`. When a layer scrolls completely off the left edge it is repositioned one full screen-width to the right, creating seamless infinite parallax.
-
-### Sprite Flipping
-
-The player helicopter sprite faces left by default. `SpriteComponent.flip` is set to `SDL_FLIP_HORIZONTAL` after the component is added so it faces the oncoming enemies — a common pattern when your source art points the wrong way.
-
-### Entity Groups and Tags
-
-- Player is tagged `"player"` so it can be retrieved by name for input and bounds-clamping.
-- Cloud layers are tagged `"clouds1"` / `"clouds2"` for individual wrap-around resets.
-- Bullets are grouped `"bullets"` and enemies `"enemies"` so off-screen despawning can iterate each group without touching unrelated entities.
-
-### State Machine
-
-The game uses `GameStateMachine` with a single `PlayState`. All SDL event polling happens exclusively inside `PlayState::processInput()` — the `Game` loop passes straight through — so events are never consumed before the active state sees them.
-
-## Project Structure
-
-```text
-shooter/
-├── Makefile
-├── README.md
-├── assets/
-│   └── gfx/
-│       ├── helicopter.png    ← player  (640×55, 5-frame strip)
-│       ├── helicopter2.png   ← enemy 1 (640×55, 5-frame strip)
-│       ├── enemy1.png        ← enemy 2 alien bug  (38×34)
-│       ├── enemy3.png        ← enemy 3 bat        (104×35, 2-frame strip)
-│       ├── bullet1.png       ← player bullet       (11×11)
-│       ├── clouds.png        ← scrolling sky       (640×480)
-│       └── smallexplosion.png
-└── src/
-    ├── main.cpp
-    ├── game.h / game.cpp
-    └── states/
-        ├── playState.h
-        └── playState.cpp
-```

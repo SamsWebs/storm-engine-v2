@@ -1,6 +1,6 @@
 # Storm JRPG
 
-A top-down RPG built as a storm-engine-v2 example. Demonstrates tile-based world loading, NPC interaction, and Final Fantasy-style typewriter dialogue — all without modifying the engine.
+A top-down RPG built as a storm-engine-v2 example. Demonstrates tile-based world loading, NPC interaction, and Final Fantasy-style typewriter dialogue - all without modifying the engine.
 
 ![Storm Engine v2 JRPG example](screenshot.png)
 
@@ -45,7 +45,7 @@ for (const auto &tile : loader.getMap()) {
 }
 ```
 
-> **Why 8?** The GCD of the common world X values in the map file (72, 24, 48, 16, …) is 8. Using `tileSize=16` would cause integer truncation — e.g. 72 / 16 = 4, 4 × 16 = 64 ≠ 72. Using 8 preserves all coordinates exactly.
+> **Why 8?** The GCD of the common world X values in the map file (72, 24, 48, 16, …) is 8. Using `tileSize=16` would cause integer truncation - e.g. 72 / 16 = 4, 4 × 16 = 64 ≠ 72. Using 8 preserves all coordinates exactly.
 
 Source tiles are 32×32 px from two tileset PNGs (`Buildings-Tileset.png`, `Outside-Tileset.png`).
 
@@ -57,13 +57,13 @@ Solid tiles are listed in `jrpg_colliders.map` in a simple space-separated forma
 collider worldX worldY scaleX scaleY colW colH offX offY
 ```
 
-`LoadColliders()` parses this at startup into a `std::vector<SDL_Rect>`, one 32×32 rect per entry. Collision is tested in `CollidesWithLevel()` using a small "feet box" at the bottom of the player sprite — this keeps the player sprite visually above obstacles rather than stopping at their centre.
+`LoadColliders()` parses this at startup into a `std::vector<SDL_Rect>`, one 32×32 rect per entry. Collision is tested in `CollidesWithLevel()` using a small "feet box" at the bottom of the player sprite - this keeps the player sprite visually above obstacles rather than stopping at their centre.
 
 ```cpp
-// Feet box — lower 16px, inset 4px on each side
+// Feet box - lower 16px, inset 4px on each side
 SDL_Rect feetBox = { x + 4, y + PLAYER_FRAME_H - 16, PLAYER_FRAME_W - 8, 16 };
 
-// Separate X / Y passes — allows wall sliding
+// Separate X / Y passes - allows wall sliding
 SDL_Rect testX = { feetBox.x + vx * dt, feetBox.y, feetBox.w, feetBox.h };
 if (!CollidesWithLevel(testX)) transform.position.x += vx * dt;
 

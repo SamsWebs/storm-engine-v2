@@ -1,6 +1,6 @@
 # Storm Tetris
 
-A Tetris-style puzzle game built as a storm-engine-v2 example. Demonstrates custom ECS components and systems, entity reuse, deferred entity lifecycle, and SDL_ttf rendering — all wired together through the engine's Registry.
+A Tetris-style puzzle game built as a storm-engine-v2 example. Demonstrates custom ECS components and systems, entity reuse, deferred entity lifecycle, and SDL_ttf rendering - all wired together through the engine's Registry.
 
 ![Storm Engine v2 puzzle example](screenshot.png)
 
@@ -26,7 +26,7 @@ The binary is written to `bin/tetris`.
 | `P` | Pause / unpause |
 | `ESC` | Quit |
 
-Left/right movement supports **delayed auto-shift (DAS)** — hold the key and the piece starts repeating after a short initial delay.
+Left/right movement supports **delayed auto-shift (DAS)** - hold the key and the piece starts repeating after a short initial delay.
 
 ### Scoring
 
@@ -59,19 +59,19 @@ This keeps the ECS data (board position) cleanly separated from the rendering da
 
 ### Engine Systems Used
 
-- **`RenderSystem`** — draws all entities with `TransformComponent` + `SpriteComponent`, sorted by z-index (ghost pieces at 1 → locked/active blocks at 2)
+- **`RenderSystem`** - draws all entities with `TransformComponent` + `SpriteComponent`, sorted by z-index (ghost pieces at 1 → locked/active blocks at 2)
 
 ### Entity Lifecycle Patterns
 
 Two important patterns are shown:
 
-**Entity reuse on lock** — when a piece locks, its 4 active entities are not destroyed. Their `TetrisCellComponent.isActive` flag is cleared and they become permanent locked-cell entities. Only the 4 ghost entities are killed.
+**Entity reuse on lock** - when a piece locks, its 4 active entities are not destroyed. Their `TetrisCellComponent.isActive` flag is cleared and they become permanent locked-cell entities. Only the 4 ghost entities are killed.
 
-**Deferred destroy on line clear** — when a full row is detected, matching locked-cell entities are killed via `entity.Kill()`. The registry does not remove them immediately; `registry_.Update()` is called at the end of `update()` to flush all pending creations and destructions before the next `TetrisSyncSystem::Update()` runs.
+**Deferred destroy on line clear** - when a full row is detected, matching locked-cell entities are killed via `entity.Kill()`. The registry does not remove them immediately; `registry_.Update()` is called at the end of `update()` to flush all pending creations and destructions before the next `TetrisSyncSystem::Update()` runs.
 
 ### State Machine
 
-The game uses `GameStateMachine` with a single `PlayState`. Input events are polled exclusively inside `PlayState::processInput()` — the `Game` loop passes straight through — so SDL events are never consumed before the active state can see them.
+The game uses `GameStateMachine` with a single `PlayState`. Input events are polled exclusively inside `PlayState::processInput()` - the `Game` loop passes straight through - so SDL events are never consumed before the active state can see them.
 
 ## Project Structure
 

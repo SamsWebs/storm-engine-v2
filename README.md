@@ -1,6 +1,6 @@
 # Storm! Engine v2
 
-A lightweight, ECS-based 2D game engine built on SDL2 — made for game jams and personal projects.
+A lightweight, ECS-based 2D game engine built on SDL2 - made for game jams and personal projects.
 
 > **"v2" is the second-generation engine; the current release is v1.2.6.** The public API is considered stable for the 1.x line. See [CHANGELOG.md](CHANGELOG.md) for release notes.
 
@@ -8,17 +8,17 @@ A lightweight, ECS-based 2D game engine built on SDL2 — made for game jams and
 
 ## Features
 
-- **Entity-Component-System (ECS)** architecture — up to 32 component types per binary ([see below](#component-type-limit))
+- **Entity-Component-System (ECS)** architecture - up to 32 component types per binary ([see below](#component-type-limit))
 - **Sprite rendering** with camera, z-index sorting, and flip support
-- **Tilemap support** — load maps painted with the built-in tile editor (`.map` format, auto-detected)
+- **Tilemap support** - load maps painted with the built-in tile editor (`.map` format, auto-detected)
 - **Box collider** components with debug overlay
 - **Asset store** for textures
 - **Game state machine** for managing scenes
 - **Logger** utility
-- **Virtual gamepad** for touch devices — d-pad + action-button layout, pure and spec'd (`<stormengine2/input/virtualGamepad.h>`), driven by `examples/android-platformer`
-- **UDP networking** — host/join LAN play: reliable + unreliable chunks, kick/ban/timeout, snapshot replication with per-client deltas and a prediction cache (`<stormengine2/net/net.h>`, see [docs/networking.md](docs/networking.md))
+- **Virtual gamepad** for touch devices - d-pad + action-button layout, pure and spec'd (`<stormengine2/input/virtualGamepad.h>`), driven by `examples/android-platformer`
+- **UDP networking** - host/join LAN play: reliable + unreliable chunks, kick/ban/timeout, snapshot replication with per-client deltas and a prediction cache (`<stormengine2/net/net.h>`, see [docs/networking.md](docs/networking.md))
 - Built-in **tile map editor** with drag-to-paint, drag-to-erase, and layer support
-- Example games: platformer, shooter (*1945*, a vertical shoot-'em-up with menu, HUD and controller support), strategy (*Realms*, a *Dragon Force*-style campaign map with pushed side-on battles — artwork downloaded separately, see below), puzzle, JRPG, sports, Android platformer, Switch platformer, and networking demos (netchat, netrepl, netplay-checkers)
+- Example games: platformer, shooter (*1945*, a vertical shoot-'em-up with menu, HUD and controller support), strategy (*Realms*, a *Dragon Force*-style campaign map with pushed side-on battles - artwork downloaded separately, see below), puzzle, JRPG, sports, Android platformer, Switch platformer, and networking demos (netchat, netrepl, netplay-checkers)
 - Platforms: Linux, Nintendo Switch (source builds), Android (source builds, verified on hardware); iOS possible via the same SDL layer
 
 ## Component type limit
@@ -32,15 +32,15 @@ using Signature = std::bitset<MAX_COMPONENTS>;
 
 Two things about that number are easy to get wrong:
 
-**It is per binary, not per `Registry`.** Type ids come from a single process-wide counter, handed out on first use of each distinct `Component<T>`. Every `Registry` you create draws from the same pool of 32, so splitting your world across several registries — one per game state, as the examples do — does not buy you more types. The five components the engine ships (`TransformComponent`, `RigidBodyComponent`, `SpriteComponent`, `BoxColliderComponent`, `AnimationComponent`) count against your budget as soon as you use them, leaving 27 for the game.
+**It is per binary, not per `Registry`.** Type ids come from a single process-wide counter, handed out on first use of each distinct `Component<T>`. Every `Registry` you create draws from the same pool of 32, so splitting your world across several registries - one per game state, as the examples do - does not buy you more types. The five components the engine ships (`TransformComponent`, `RigidBodyComponent`, `SpriteComponent`, `BoxColliderComponent`, `AnimationComponent`) count against your budget as soon as you use them, leaving 27 for the game.
 
-**It counts types, not instances.** Ten thousand entities carrying `TransformComponent` use one id. Component types are cheap to instance and expensive to *declare*, so prefer widening an existing component over adding a new one — a `kind` enum inside one component costs nothing, a new struct costs a permanent 1/32.
+**It counts types, not instances.** Ten thousand entities carrying `TransformComponent` use one id. Component types are cheap to instance and expensive to *declare*, so prefer widening an existing component over adding a new one - a `kind` enum inside one component costs nothing, a new struct costs a permanent 1/32.
 
 Declaring a 33rd type is reported on the error log and the type is ignored; it does not throw, so it will not abort the Switch build. But a system whose requirement was dropped this way ends up matching **every** entity rather than none, so treat overflow as a bug to fix, not a degraded mode to ship. Count your types before you get close.
 
 Raising the cap means editing `MAX_COMPONENTS` and rebuilding **everything** that includes `ecs.h`. Anything less is undefined behaviour: `Signature` is `std::bitset<MAX_COMPONENTS>`, so two translation units compiled with different values disagree about what type `Signature` *is*.
 
-Note that this mismatch is silent up to 64. `sizeof(std::bitset<N>)` is 8 bytes for every `N` from 1 to 64 and 16 bytes from 65, so bumping 32 → 64 changes no struct layout and no size check will catch a stale object file — a game built against a 32-component header linked to a 64-component `.so` will simply misbehave. If you raise it, rebuild the library, the editor, and every game against the same header in one go.
+Note that this mismatch is silent up to 64. `sizeof(std::bitset<N>)` is 8 bytes for every `N` from 1 to 64 and 16 bytes from 65, so bumping 32 → 64 changes no struct layout and no size check will catch a stale object file - a game built against a 32-component header linked to a 64-component `.so` will simply misbehave. If you raise it, rebuild the library, the editor, and every game against the same header in one go.
 
 ## Installation
 
@@ -107,13 +107,13 @@ make && make run
 
 Swap `platformer` for `shooter`, `strategy`, `puzzle`, `jrpg`, `sports`, or `netplay-checkers` to try the others. `netplay-checkers` is a graphical 2-player game: the host validates every move over the net module and the first two joiners are seated RED and BLACK (`host` starts it with `S`).
 
-Two examples are headless console demos of the networking module — no graphics, run from a terminal. `cd examples/netchat && make && ./bin/netchat host` opens a room; `./bin/netchat join 127.0.0.1 5000` joins it from another terminal. `examples/netrepl` is the same shape (`host` / `join`) and streams snapshot deltas. See each example's README for usage.
+Two examples are headless console demos of the networking module - no graphics, run from a terminal. `cd examples/netchat && make && ./bin/netchat host` opens a room; `./bin/netchat join 127.0.0.1 5000` joins it from another terminal. `examples/netrepl` is the same shape (`host` / `join`) and streams snapshot deltas. See each example's README for usage.
 
 ### How each example loads its world
 
-Each example demonstrates a different approach to managing game resources — pick whichever matches your project's needs:
+Each example demonstrates a different approach to managing game resources - pick whichever matches your project's needs:
 
-#### Platformer / Strategy — tile editor + `.map` file
+#### Platformer / Strategy - tile editor + `.map` file
 
 The level is painted in the built-in tile editor and saved as a `.map` file. At runtime, `TileMapLoader` reads the file and spawns tile entities automatically. This is the most data-driven approach for tilemap games and the best starting point if you want to design levels visually.
 
@@ -122,11 +122,11 @@ editor/ → paint level → saves level.map
 examples/platformer/ → TileMapLoader reads level.map at runtime
 ```
 
-#### Sports / Puzzle — everything in code
+#### Sports / Puzzle - everything in code
 
-No external level files. Entities, positions, sizes, and game rules are all defined directly in the game state. Simple and self-contained — a good starting point for understanding the ECS pipeline without any file I/O in the way.
+No external level files. Entities, positions, sizes, and game rules are all defined directly in the game state. Simple and self-contained - a good starting point for understanding the ECS pipeline without any file I/O in the way.
 
-#### Shooter — XML data via `XmlLoader`
+#### Shooter - XML data via `XmlLoader`
 
 Textures and initial entities are described in an XML file (`assets/attack.xml`). The engine's `XmlLoader` parses the file, and `LoadTexturesFromXml` (a helper in `<stormengine2/xmlLoader.h>`) loads them into the asset store. Entity spawning logic then reads the parsed data and creates ECS entities from it.
 
@@ -135,9 +135,9 @@ assets/attack.xml → XmlLoader → LoadTexturesFromXml → AssetStore
                               → XmlObjectDef list → ECS entities
 ```
 
-This approach keeps your texture IDs and initial object placement out of code and in data files — useful when designers or tools are generating the XML.
+This approach keeps your texture IDs and initial object placement out of code and in data files - useful when designers or tools are generating the XML.
 
-#### JRPG — tile editor `.map` + custom colliders map
+#### JRPG - tile editor `.map` + custom colliders map
 
 The world is painted in the tile editor (`jrpg.map`). A second file, `jrpg_colliders.map`, lists solid tiles using a simple `collider worldX worldY ...` format. At runtime, `TileMapLoader` spawns tile entities (using `tileSize=8` to preserve exact editor pixel coordinates), and a custom parser reads the colliders file into a list of `SDL_Rect` obstacles used for AABB collision.
 
@@ -147,18 +147,18 @@ examples/jrpg/ → TileMapLoader reads jrpg.map
               → custom parser reads jrpg_colliders.map → SDL_Rect list
 ```
 
-NPC interaction and Final Fantasy-style typewriter dialogue are handled via `NpcComponent` and `DialogueState` — no external scripting required.
+NPC interaction and Final Fantasy-style typewriter dialogue are handled via `NpcComponent` and `DialogueState` - no external scripting required.
 
 | Example | Resource approach | Key engine type |
 |---|---|---|
 | **Platformer** | `.map` file from the tile editor | `TileMapLoader` |
 | **Strategy** | `.map` file from the tile editor | `TileMapLoader` |
-| **Sports** | Hard-coded in the game state | — |
-| **Puzzle** | Hard-coded in the game state | — |
+| **Sports** | Hard-coded in the game state | - |
+| **Puzzle** | Hard-coded in the game state | - |
 | **Shooter** | XML file via tinyxml2 | `XmlLoader`, `LoadTexturesFromXml` |
 | **JRPG** | `.map` + custom colliders map | `TileMapLoader`, custom parser |
-| **Netchat** | Console demo — none | `NetServer`, `NetClient`, `NetMessageWriter` |
-| **Netrepl** | Console demo — none | `NetSnapshot`, `NetSnapshotDelta` |
+| **Netchat** | Console demo - none | `NetServer`, `NetClient`, `NetMessageWriter` |
+| **Netrepl** | Console demo - none | `NetSnapshot`, `NetSnapshotDelta` |
 | **Checkers** | Hard-coded in the game state | `NetServer`, `NetClient`, `NetMessageWriter`, `RenderSystem` |
 
 ## Using the Tile Editor
@@ -168,14 +168,14 @@ cd editor
 make && make run
 ```
 
-- **Left-click / drag** — paint tiles
-- **Right-click / drag** — erase tiles
-- **D** — toggle collider debug overlay
+- **Left-click / drag** - paint tiles
+- **Right-click / drag** - erase tiles
+- **D** - toggle collider debug overlay
 - The editor saves `.map` files that `TileMapLoader` can load directly in your game
 
 ## Windows / WSL
 
-Windows is supported via a MinGW-w64 cross-compile from Linux — no Windows toolchain needed. SDL2 and its satellites are cross-built from the same vendored sources the Android build uses (`vendor/android/`), so nothing is downloaded:
+Windows is supported via a MinGW-w64 cross-compile from Linux - no Windows toolchain needed. SDL2 and its satellites are cross-built from the same vendored sources the Android build uses (`vendor/android/`), so nothing is downloaded:
 
 ```bash
 sudo apt install mingw-w64 cmake
@@ -183,7 +183,7 @@ make -f Makefile.win         # build/win/libstormenginev2.dll + build/win/tests.
 make -f Makefile.win test    # run the spec suite under Wine
 ```
 
-The library and the spec suite cross-build; the examples are not wired into the Windows build yet. WSL2 runs the plain Linux build above (`make -f Makefile.debian`) with the same `apt` prerequisites. Native Windows builds (a toolchain that runs in cmd/PowerShell) are not supported yet — PRs welcome.
+The library and the spec suite cross-build; the examples are not wired into the Windows build yet. WSL2 runs the plain Linux build above (`make -f Makefile.debian`) with the same `apt` prerequisites. Native Windows builds (a toolchain that runs in cmd/PowerShell) are not supported yet - PRs welcome.
 
 ## Nintendo Switch
 
@@ -218,10 +218,10 @@ Copy the `.nro` to `switch/` on your SD card to run on real hardware via the Hom
 
 ### Using Storm Engine in your own Switch project
 
-There are no pre-built Switch packages — the engine is compiled directly into your game. Use `examples/nx-platformer` as your starting point:
+There are no pre-built Switch packages - the engine is compiled directly into your game. Use `examples/nx-platformer` as your starting point:
 
 1. Copy `examples/nx-platformer` to your new project
-2. The `include/stormengine2` symlink points to `common/` — keep it or copy the sources in directly
+2. The `include/stormengine2` symlink points to `common/` - keep it or copy the sources in directly
 3. Add your own game states, components, and assets under `src/` and `romfs/`
 4. Build with `make` as above
 
@@ -233,7 +233,7 @@ Gradle + CMake + NDK, hosted by SDL's `SDLActivity`. Verified on real hardware
 
 ### Prerequisites
 
-- Java 17, Android cmdline-tools, NDK, and CMake — full install commands in
+- Java 17, Android cmdline-tools, NDK, and CMake - full install commands in
   [`examples/android-platformer/README.md`](examples/android-platformer/README.md)
 - The pinned dependency submodules:
 
@@ -263,18 +263,18 @@ creation), and the build gotchas (shared vs. static SDL, the
 
 ### Using Storm Engine in your own Android project
 
-Like the Switch, there are no pre-built Android packages — the engine compiles
+Like the Switch, there are no pre-built Android packages - the engine compiles
 into your app. Use `examples/android-platformer` as your starting point:
 
 1. Copy `examples/android-platformer` to your new project
-2. The `include/stormengine2` symlink points to `common/` — keep it or copy the sources in
+2. The `include/stormengine2` symlink points to `common/` - keep it or copy the sources in
 3. Change the `applicationId`/package name, add your states under `src/`, point
    the `assets.srcDirs` at your asset folder
 4. Build with `./gradlew` as above
 
 ## License
 
-Released under the [WTFPL](LICENSE.md) — do what you want with it.
+Released under the [WTFPL](LICENSE.md) - do what you want with it.
 
 ## Credits
 
@@ -285,7 +285,7 @@ Inspired by the [SDL Game Development](https://www.packtpub.com/en-us/product/sd
 ### Artwork
 
 The `shooter` example uses **SpriteLib**, © 1996–2017 [Ari Feldman](https://widgetworx.com/projects/sl.html),
-distributed under the **Common Public License 1.0** — free to use and
+distributed under the **Common Public License 1.0** - free to use and
 redistribute, but not public domain, and its terms travel with the files. The
 license is kept beside the artwork in `examples/shooter/assets/license.rtf` and
 must stay with it. This differs from the rest of the repository, which is WTFPL.

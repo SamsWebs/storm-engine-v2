@@ -1,6 +1,6 @@
 # Storm Platformer
 
-A scrolling 2-D platformer built as a storm-engine-v2 example. Demonstrates tilemap loading with `TileMapLoader`, tile-based physics with gravity and AABB resolution, and a horizontally scrolling camera — all without modifying the engine.
+A scrolling 2-D platformer built as a storm-engine-v2 example. Demonstrates tilemap loading with `TileMapLoader`, tile-based physics with gravity and AABB resolution, and a horizontally scrolling camera - all without modifying the engine.
 
 ![Storm Engine v2 platformer example](screenshot.png)
 
@@ -25,7 +25,7 @@ The binary is written to `bin/platformer`.
 | `D` | Toggle debug collider outlines |
 | `ESC` | Quit |
 
-The level is 2000 px wide (50 tiles × 40 px each). Platforms are arranged at four heights — jump between them to explore. Falling off the bottom respawns the player at the start.
+The level is 2000 px wide (50 tiles × 40 px each). Platforms are arranged at four heights - jump between them to explore. Falling off the bottom respawns the player at the start.
 
 ## Engine Concepts Demonstrated
 
@@ -43,11 +43,11 @@ The platformer map (`platformer.map`) uses three tile indices:
 
 | Index | srcX | srcY | Colour | Purpose |
 |---|---|---|---|---|
-| 8 | 128 | 0 | transparent | Sky / air — skipped entirely, background colour shows through |
+| 8 | 128 | 0 | transparent | Sky / air - skipped entirely, background colour shows through |
 | 0 | 0 | 0 | grass-top + brown body | Ground surface row and platforms |
 | 91 | 16 | 144 | solid warm brown | Underground fill rows below the surface |
 
-`SpawnTiles()` iterates `loader.getMap()`, skips sky tiles, and treats **everything else as solid** — no need to enumerate every solid tile variant:
+`SpawnTiles()` iterates `loader.getMap()`, skips sky tiles, and treats **everything else as solid** - no need to enumerate every solid tile variant:
 
 ```cpp
 TileMapLoader loader("./assets/tilemaps/platformer.map",
@@ -76,12 +76,12 @@ for (const auto &tile : loader.getMap()) {
 
 ### Tile-Based Physics
 
-The engine's built-in `CollisionSystem` destroys both colliding entities — not suitable for player-vs-tile interaction. Instead, `PlayState` keeps a `solidGrid_[row][col]` boolean mirror of the map and resolves collisions directly in `ResolvePlayer()`.
+The engine's built-in `CollisionSystem` destroys both colliding entities - not suitable for player-vs-tile interaction. Instead, `PlayState` keeps a `solidGrid_[row][col]` boolean mirror of the map and resolves collisions directly in `ResolvePlayer()`.
 
 The algorithm runs two separate passes each frame:
 
-1. **Horizontal** — move the player by `vx * dt`, then check the two leading-edge corner cells. If either is solid, snap the player flush to the tile boundary.
-2. **Vertical** — move the player by `velocity.y * dt` (gravity accumulates when airborne), then check the two leading-edge corner cells. Landing on a tile top sets `isOnGround = true` and zeroes vertical velocity; hitting a ceiling zeroes upward velocity.
+1. **Horizontal** - move the player by `vx * dt`, then check the two leading-edge corner cells. If either is solid, snap the player flush to the tile boundary.
+2. **Vertical** - move the player by `velocity.y * dt` (gravity accumulates when airborne), then check the two leading-edge corner cells. Landing on a tile top sets `isOnGround = true` and zeroes vertical velocity; hitting a ceiling zeroes upward velocity.
 
 ```cpp
 // Vertical resolve (downward case)
@@ -122,7 +122,7 @@ Because the built-in `RenderSystem` draws at raw world positions, `render()` byp
 
 ### State Machine
 
-`Game` uses `GameStateMachine` with a single `PlayState`. All SDL event polling lives exclusively in `PlayState::processInput()` — the `Game` loop is a pure passthrough. All setup (asset loading, tile spawning, player creation) happens in the `PlayState` constructor; `onEnter()` only sets `m_loadingComplete = true`.
+`Game` uses `GameStateMachine` with a single `PlayState`. All SDL event polling lives exclusively in `PlayState::processInput()` - the `Game` loop is a pure passthrough. All setup (asset loading, tile spawning, player creation) happens in the `PlayState` constructor; `onEnter()` only sets `m_loadingComplete = true`.
 
 ## Project Structure
 

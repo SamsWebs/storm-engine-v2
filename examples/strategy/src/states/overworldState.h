@@ -44,6 +44,11 @@ private:
     static constexpr int MARCH_DAYS = 3;
     static constexpr Uint32 DAY_MS = 1400;   // one day per 1.4s
 
+    // Most real time a single frame may contribute to the day timer. Without a
+    // ceiling, any stall in the event loop is spent all at once and every
+    // marching army arrives simultaneously.
+    static constexpr Uint32 MAX_DELTA_MS = 100;
+
     void SpawnTerrain();
     void SpawnCastles();
     void RefreshCastleSprite(int castle);
@@ -56,6 +61,7 @@ private:
     void CycleDestination(int delta);
     void RebuildDestinations();
     bool CampaignOver() const;
+    bool MaybeEndCampaign();
     void RenderHud();
 
     glm::vec2 CastlePixel(int castle) const;

@@ -28,6 +28,11 @@ enum class Troop { Warrior, Archer, Spearman };
 constexpr int kCastleCount = 6;
 constexpr int kGeneralCount = 6;
 
+// The largest troop count any general starts with, from Campaign::Reset. HUD
+// bars normalise against this so a full bar means "as strong as anyone began";
+// keep it in step if the opening armies change.
+constexpr int kMaxStartTroops = 50;
+
 // Multiplier applied to `attacker`'s damage when fighting `defender`.
 // Warrior > Archer > Spearman > Warrior.
 inline float Counter(Troop attacker, Troop defender) {

@@ -53,6 +53,12 @@ private:
         std::vector<Entity> soldiers;
     };
 
+    // The player is always Blue. Orders follow the colour, not the
+    // attacker/defender role, so that defending a castle does not hand the
+    // command bar to the enemy.
+    Side &PlayerSide();
+    Side &AiSide();
+
     void SpawnSoldiers(Side &s, bool facingRight);
     void SetAnimation(Side &s, const char *suffix, int frames, bool looped);
     void ResolveTick();

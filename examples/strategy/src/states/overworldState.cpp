@@ -687,10 +687,13 @@ void OverworldState::update() {
         isRunning_ = false;
         return;
     }
-    if (gamepad_->PressedLeft()) {
+    // LB/RB pick the general, the d-pad picks where it goes. Left/right on the
+    // d-pad stays wired to the same thing as LB/RB so the pad matches the
+    // keyboard, where the arrow keys are all there is.
+    if (gamepad_->PressedLB() || gamepad_->PressedLeft()) {
         CycleSelection(-1);
     }
-    if (gamepad_->PressedRight()) {
+    if (gamepad_->PressedRB() || gamepad_->PressedRight()) {
         CycleSelection(1);
     }
     if (gamepad_->PressedUp()) {

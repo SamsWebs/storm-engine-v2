@@ -27,7 +27,7 @@ artist gets the traffic — which is the right outcome for work this good.
    what the game loads; the paths on the left are where they sit in the
    download.
 
-This is the complete list — the game loads exactly these eleven files and
+This is the complete list — the game loads exactly these fourteen files and
 nothing else.
 
 ```
@@ -46,6 +46,10 @@ Buildings/Yellow Buildings/Castle.png        ->  gfx/buildings/neutral/Castle.pn
 
 Terrain/Tileset/Tilemap_color1.png           ->  gfx/terrain/tilemap.png
 Terrain/Tileset/Water Background color.png   ->  gfx/terrain/water.png
+
+Terrain/Resources/Wood/Trees/Tree3.png       ->  gfx/deco/tree.png
+Terrain/Decorations/Bushes/Bushe1.png        ->  gfx/deco/bush.png
+Terrain/Decorations/Rocks/Rock1.png          ->  gfx/deco/rock.png
 
 Particle FX/Explosion_01.png                 ->  gfx/fx/explosion.png
 ```

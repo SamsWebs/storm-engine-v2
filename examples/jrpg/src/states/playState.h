@@ -36,9 +36,12 @@ constexpr int LOADER_CELL_PX   = 8;   // relativePosition * LOADER_CELL_PX = wor
 constexpr int TILE_SRC_W       = 32;  // source tile width in the tileset PNG
 constexpr int TILE_SRC_H       = 32;  // source tile height in the tileset PNG
 
-// ─── Level bounds (from editor canvas 1248×448) ───────────────────────────────
+// ─── Level bounds ────────────────────────────────────────────────────────────
 constexpr float LEVEL_W = 1248.0f;
-constexpr float LEVEL_H = 448.0f;
+constexpr float LEVEL_H = 640.0f;   // must be >= the 600px window: the camera
+                                    // clamps to LEVEL_H - windowHeight_, so a
+                                    // shorter level pins y at 0 and leaves a
+                                    // strip the map can never reach.
 
 // ─────────────────────────────────────────────────────────────────────────────
 struct DialogueState {

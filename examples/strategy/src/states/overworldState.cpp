@@ -28,6 +28,39 @@ constexpr int   kCastleH     = 256;
 constexpr float kArmyScale = 0.30f;
 constexpr int   kUnitFrame = 192;
 
+// Draw order. Explicit constants rather than literals scattered through the
+// spawners: RenderSystem sorts on these, and two things sharing a zIndex sort
+// against each other unpredictably (the sort is not stable), so every layer
+// that can overlap another needs its own number.
+enum ZIndex {
+    kZWater  = 0,
+    kZGround = 1,
+    kZScrub  = 2,   // rocks and bushes, flat on the ground
+    kZTree   = 3,   // tall, but still under anything the player must see
+    kZCastle = 4,
+    kZArmy   = 5,
+};
+
+// Decoration keep-out. Nothing is placed within kClearCastle of a castle centre
+// or kClearRoad of a road, so scenery never sits under a castle sprite or under
+// a marching army -- the marker lerps straight between castle centres, so the
+// roads are exactly those segments.
+constexpr float kClearCastle = 116.0f;
+constexpr float kClearRoad   = 46.0f;
+constexpr float kClearDeco   = 92.0f;   // scenery to scenery
+
+// Distance from point p to segment ab. Used for the road keep-out.
+float DistanceToSegment(glm::vec2 p, glm::vec2 a, glm::vec2 b) {
+    const glm::vec2 ab = b - a;
+    const float len2 = ab.x * ab.x + ab.y * ab.y;
+    if (len2 <= 0.0001f) {
+        return glm::length(p - a);
+    }
+    float t = ((p.x - a.x) * ab.x + (p.y - a.y) * ab.y) / len2;
+    t = std::min(std::max(t, 0.0f), 1.0f);
+    return glm::length(p - (a + ab * t));
+}
+
 const char *CastleAsset(world::Owner o) {
     switch (o) {
     case world::Owner::Blue: return "castle_blue";
@@ -70,6 +103,7 @@ bool OverworldState::onEnter() {
     registry_.AddSystem<AnimationSystem>();
 
     SpawnTerrain();
+    SpawnDecorations();
     SpawnCastles();
 
     // Entity creation is deferred until Registry::Update(). Without this flush
@@ -109,7 +143,7 @@ void OverworldState::SpawnTerrain() {
             Entity water = registry_.CreateEntity();
             water.AddComponent<TransformComponent>(
                 glm::vec2(x * TILE, y * TILE), glm::vec2(1.0f, 1.0f), 0.0);
-            water.AddComponent<SpriteComponent>("water", 64, 64, /*zIndex=*/0,
+            water.AddComponent<SpriteComponent>("water", 64, 64, kZWater,
                                                 false, 0, 0);
         }
     }
@@ -120,10 +154,124 @@ void OverworldState::SpawnTerrain() {
             glm::vec2(tile.relativePosition.x * TILE,
                       tile.relativePosition.y * TILE),
             glm::vec2(1.0f, 1.0f), 0.0);
-        e.AddComponent<SpriteComponent>("tilemap", TILE, TILE, /*zIndex=*/1,
+        e.AddComponent<SpriteComponent>("tilemap", TILE, TILE, kZGround,
                                         false, tile.pixelSrcPosition.x,
                                         tile.pixelSrcPosition.y);
     }
+}
+
+// Scatters trees, bushes and rocks over the open ground.
+//
+// Deterministic on purpose. The placement comes from a fixed-seed LCG rather
+// than rand(), so the map looks the same on every run and in every screenshot;
+// a decoration that wanders between runs makes any visual regression
+// impossible to spot. It is also seeded here rather than authored as a table so
+// that moving a castle re-flows the scenery around it instead of leaving a tree
+// standing in the courtyard.
+void OverworldState::SpawnDecorations() {
+    struct Kind {
+        const char *asset;
+        int   frame;     // source frame size, square
+        int   frames;    // 1 = static
+        float scale;
+        int   zIndex;
+    };
+    // Tree3.png is 1536x192 (8 frames of 192), Bushe1.png is 1024x128 (8 frames
+    // of 128), Rock1.png is a single 64x64 tile.
+    static const Kind kKinds[] = {
+        {"tree", 192, 8, 0.52f, kZTree},
+        {"bush", 128, 8, 0.55f, kZScrub},
+        {"rock",  64, 1, 0.85f, kZScrub},
+    };
+
+    // Castle centres, and the road segments armies actually travel.
+    glm::vec2 centres[world::kCastleCount];
+    for (int i = 0; i < world::kCastleCount; ++i) {
+        centres[i] = CastlePixel(i) + glm::vec2(kCastleW * kCastleScale / 2.0f,
+                                                kCastleH * kCastleScale / 2.0f);
+    }
+
+    // Numerical Recipes' LCG constants; any decent pair would do. The seed is
+    // arbitrary but fixed.
+    Uint32 rng = 0x5eed1234u;
+    auto next = [&rng]() {
+        rng = rng * 1664525u + 1013904223u;
+        return rng >> 16;   // high bits: the low ones cycle far too regularly
+    };
+
+    int placed = 0;
+    int trees  = 0;
+    std::vector<glm::vec2> taken;
+
+    // Bounded attempts, not "loop until placed": with a full keep-out set there
+    // may simply be no room left, and a while-until-N loop would spin forever.
+    for (int attempt = 0; attempt < 400 && placed < DECO_COUNT; ++attempt) {
+        // Inside the coastline: the outer ring of land carries the shoreline
+        // tiles, and a tree half-off the beach reads as a mistake.
+        const int tx = 2 + static_cast<int>(next() % (MAP_W - 4));
+        const int ty = 2 + static_cast<int>(next() % (MAP_H - 4));
+        const glm::vec2 centre((tx + 0.5f) * TILE, (ty + 0.5f) * TILE);
+
+        bool blocked = false;
+        for (int i = 0; i < world::kCastleCount && !blocked; ++i) {
+            if (glm::length(centre - centres[i]) < kClearCastle) {
+                blocked = true;
+            }
+            for (int j = i + 1; j < world::kCastleCount && !blocked; ++j) {
+                if (campaign_->Adjacent(i, j) &&
+                    DistanceToSegment(centre, centres[i], centres[j]) <
+                        kClearRoad) {
+                    blocked = true;
+                }
+            }
+        }
+        // Keep scenery off other scenery. The keep-outs above leave only the
+        // band between the castle rows genuinely open, so without a spacing
+        // rule everything lands in the middle and reads as an orchard rather
+        // than as countryside.
+        for (const auto &t : taken) {
+            if (glm::length(centre - t) < kClearDeco) {
+                blocked = true;
+                break;
+            }
+        }
+        if (blocked) {
+            continue;
+        }
+
+        // Trees are the loudest thing on an otherwise flat map, so they are
+        // capped rather than left to the dice; past the cap this rolls scrub
+        // only. Index 0 is the tree, 1 and 2 are the bush and the rock.
+        const int pick = (trees >= MAX_TREES) ? 1 + static_cast<int>(next() % 2)
+                                              : static_cast<int>(next() % 3);
+        const Kind &k = kKinds[pick];
+        if (pick == 0) {
+            ++trees;
+        }
+        const float drawn = k.frame * k.scale;
+
+        Entity e = registry_.CreateEntity();
+        e.AddComponent<TransformComponent>(
+            centre - glm::vec2(drawn / 2.0f), glm::vec2(k.scale, k.scale), 0.0);
+        e.AddComponent<SpriteComponent>(k.asset, k.frame, k.frame, k.zIndex,
+                                        false, 0, 0);
+        if (k.frames > 1) {
+            e.AddComponent<AnimationComponent>(k.frames, 6, /*vertical=*/false,
+                                               /*isLooped=*/true);
+            // Stagger the phase. AnimationComponent stamps startTime in its
+            // constructor, so everything spawned in this one frame would
+            // otherwise sway in perfect unison, which reads as a glitch rather
+            // than as wind.
+            if (auto *anim = e.TryGetComponent<AnimationComponent>()) {
+                anim->startTime -= next() % 2000;
+            }
+        }
+        taken.push_back(centre);
+        ++placed;
+    }
+
+    logger_.Log("Scattered " + std::to_string(placed) + " decorations (" +
+                std::to_string(trees) + " trees)");
 }
 
 glm::vec2 OverworldState::CastlePixel(int castle) const {
@@ -139,7 +287,7 @@ void OverworldState::SpawnCastles() {
         e.AddComponent<TransformComponent>(
             CastlePixel(i), glm::vec2(kCastleScale, kCastleScale), 0.0);
         e.AddComponent<SpriteComponent>(CastleAsset(campaign_->castles[i].owner),
-                                        kCastleW, kCastleH, /*zIndex=*/2, false,
+                                        kCastleW, kCastleH, kZCastle, false,
                                         0, 0);
         castleEntities_[i] = e;
     }
@@ -199,7 +347,7 @@ void OverworldState::SyncArmyMarkers() {
                 GeneralPixel(i), glm::vec2(kArmyScale, kArmyScale), 0.0);
             e.AddComponent<SpriteComponent>(RunAsset(g.side, g.troop),
                                             kUnitFrame, kUnitFrame,
-                                            /*zIndex=*/3, false, 0, 0);
+                                            kZArmy, false, 0, 0);
             e.AddComponent<AnimationComponent>(RunFrames(g.troop), 10,
                                                /*vertical=*/false,
                                                /*isLooped=*/true);

@@ -44,10 +44,23 @@ GRASS = (0, 0)          # plain
 GRASS_TUFT = (32, 0)    # same grass with a few blades
 FENCE = (160, 64)       # picket pair, already used along the plaza's south side
 
-PLAZA_EDGE_R = (64, 64)  # cobbled border, mirrored from the left edge (0,64)
-PLAZA_RIGHT = 368        # origin of the fill's last column
-PLAZA_TOP = 96
-PLAZA_BOTTOM = 304
+# The cobbled patch is a 3x3 autotile once you read it at a true 32px pitch.
+# Verified by compositing the nine tiles and looking at the result: the border
+# runs unbroken round the outside and the diamond interior joins across cells.
+#
+# Note B is (16,96). The map used (16,112) as its bottom edge, which puts the
+# border band at the *top* of that tile -- fine when stamps overlap by half,
+# wrong on a clean grid.
+STONE = {
+    (-1, -1): (0, 32),  (0, -1): (16, 32),  (1, -1): (64, 32),
+    (-1,  0): (0, 64),  (0,  0): (16, 48),  (1,  0): (64, 64),
+    (-1,  1): (0, 96),  (0,  1): (16, 96),  (1,  1): (64, 96),
+}
+
+# Every source cell inside that patch. Anything drawn from here is stone and
+# gets re-laid; everything else on layers 1+ is left where the artist put it.
+STONE_SRCS = {(x, y) for x in (0, 16, 32, 48, 64)
+              for y in (32, 48, 64, 80, 96, 112)}
 
 # (srcX, srcY, axis, value) -- stamps of this tile on this line are the run.
 # Identified by histogramming the map: each is a single prop repeated along one
@@ -86,6 +99,7 @@ def main():
     shutil.copy(MAP, MAP.with_suffix(".map.bak"))
 
     kept, dropped_ground, dropped_wall = [], 0, 0
+    stone_cells = set()
     for line in lines:
         f = line.split()
         if len(f) < 13:
@@ -99,6 +113,23 @@ def main():
             continue
         if is_wall(src, wx, wy):
             dropped_wall += 1
+            continue
+        # Idempotence: drop the perimeter fence this script itself lays, so
+        # re-running does not stack a second row on top of the first. Fence
+        # elsewhere on the map is the artist's and is kept.
+        if src == FENCE and wy in (0, LEVEL_H - TILE):
+            continue
+        if f[1] == "Outside-Tileset" and src in STONE_SRCS:
+            # Mark every 32px cell this stamp touches, not just the one holding
+            # its origin. The stamps are 32px wide but were placed every 16px,
+            # so a stamp at an odd step straddles two cells; taking only the
+            # origin's cell under-covers, and the region came out pocked with
+            # holes and shed a detached corner. Rounding to the nearest cell has
+            # the same fault. Over-covering can push a boundary out by at most
+            # one cell, which is invisible on a solid region.
+            for gx in {wx // TILE, (wx + TILE - 1) // TILE}:
+                for gy in {wy // TILE, (wy + TILE - 1) // TILE}:
+                    stone_cells.add((gx, gy))
             continue
         kept.append(line.rstrip())
 
@@ -121,24 +152,30 @@ def main():
         fence.append(emit(FENCE, 1, rx * TILE, 0))
         fence.append(emit(FENCE, 1, rx * TILE, (rows - 1) * TILE))
 
-    # The plaza already has a cobbled border along its top (16,32), bottom
-    # (16,112) and left (0,64) -- only the right was left as a flat cut through
-    # the fill. 64,64 is the same border mirrored; drawn on layer 2 so it covers
-    # the fill's last column rather than needing that column removed.
-    #
-    # The plaza is stamped at a 16px pitch with 32px tiles, so its stamps
-    # overlap by half; PLAZA_RIGHT is the last fill column's origin, not the
-    # plaza's right-hand pixel.
-    rim = [emit(PLAZA_EDGE_R, 2, PLAZA_RIGHT, y)
-           for y in range(PLAZA_TOP, PLAZA_BOTTOM + 1, 16)]
+    # Re-lay every stone region on the 32px grid, picking each cell's tile from
+    # which of its four neighbours are also stone. The regions keep whatever
+    # shape they were painted in -- this only fixes how they are drawn.
+    stone = []
+    for (cx, cy) in sorted(stone_cells):
+        left = -1 if (cx - 1, cy) not in stone_cells else 0
+        right = 1 if (cx + 1, cy) not in stone_cells else 0
+        up = -1 if (cx, cy - 1) not in stone_cells else 0
+        down = 1 if (cx, cy + 1) not in stone_cells else 0
+        # A cell with stone on both sides is interior on that axis; one open
+        # side picks that border, and both open (a one-cell-wide neck) falls
+        # back to interior rather than drawing two borders in one tile.
+        ex = left if right == 0 else (right if left == 0 else 0)
+        ey = up if down == 0 else (down if up == 0 else 0)
+        stone.append(emit(STONE[(ex, ey)], 1, cx * TILE, cy * TILE))
 
-    out = ground + fence + rim + kept
+    out = ground + fence + stone + kept
     MAP.write_text("\n".join(out) + "\n")
 
     print(f"ground   : {dropped_ground} freehand stamps -> {len(ground)} on a "
           f"{cols}x{rows} grid")
     print(f"walls    : {dropped_wall} prop stamps removed")
     print(f"fence    : {len(fence)} added along the top and bottom edges")
+    print(f"stone    : {len(stone_cells)} cells re-laid on the 32px grid")
     print(f"untouched: {len(kept)} tiles on layers 1+")
     print(f"total    : {len(lines)} -> {len(out)} lines")
 

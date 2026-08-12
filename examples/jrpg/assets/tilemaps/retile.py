@@ -65,12 +65,29 @@ STONE_SRCS = {(x, y) for x in (0, 16, 32, 48, 64)
 # (srcX, srcY, axis, value) -- stamps of this tile on this line are the run.
 # Identified by histogramming the map: each is a single prop repeated along one
 # edge, which is what makes them read as a wall of barrels rather than scenery.
-# The shop. Two copies of the roof's bottom-right corner (64,64) sit at x=160,
-# one tile past the roof's own footprint -- the roof spans x 0..160, so they
-# hang off its edge as a red step with nothing above them. The facade also
-# carries no signage at all, on a building whose occupant says "step inside and
-# browse my wares".
-BUILDING_STRAYS = {((64, 64), 160, 192), ((64, 64), 160, 208)}
+# The shop's roof stopped one column short of its own walls. Measured off the
+# map: every roof row's rightmost tile sat at x=128, every facade row's at
+# x=160, so the east end of the building stood uncovered.
+#
+# The two bottom-cap tiles that did sit at x=160 were not strays -- they were
+# the one roof row that already reached the facade. Squaring the roof off by
+# deleting them left it short; bringing the rest of the roof east to meet them
+# is the actual fix. Each row's right cap moves to x=160, and x=128 becomes a
+# middle tile.
+ROOF_EAST_X = 160
+ROOF_ROWS = {            # worldY: (right-cap src, middle src)
+    64:  ((64, 0),  (32, 0)),      # ridge
+    96:  ((64, 32), (32, 32)),     # body
+    112: ((64, 32), (32, 32)),
+    128: ((64, 32), (32, 32)),
+    144: ((64, 32), (32, 32)),
+    160: ((64, 32), (32, 32)),
+    192: ((64, 64), (32, 64)),     # eave
+}
+ROOF_CAPS = {cap for cap, _ in ROOF_ROWS.values()}
+
+# The facade carried no signage at all, on a building whose occupant opens with
+# "step inside and browse my wares".
 SHOP_SIGN = (0, 160)     # "STORE"; the sheet also has HEALTH, a cross, a padlock
 SHOP_SIGN_AT = (64, 224)   # on the wall band, clear of the roof edge above
 
@@ -107,7 +124,7 @@ def main():
     lines = MAP.read_text().splitlines()
     shutil.copy(MAP, MAP.with_suffix(".map.bak"))
 
-    kept, dropped_ground, dropped_wall, dropped_stray = [], 0, 0, 0
+    kept, dropped_ground, dropped_wall, roof_extended = [], 0, 0, 0
     stone_cells = set()
     for line in lines:
         f = line.split()
@@ -129,11 +146,20 @@ def main():
         if src == FENCE and wy in (0, LEVEL_H - TILE):
             continue
         if f[1] == "Buildings-Tileset":
-            if (src, wx, wy) in BUILDING_STRAYS:
-                dropped_stray += 1
-                continue
             if src == SHOP_SIGN:
                 continue          # re-emitted below, so re-runs do not stack
+            if src in ROOF_CAPS and wy in ROOF_ROWS:
+                cap, mid = ROOF_ROWS[wy]
+                if src != cap:
+                    kept.append(line.rstrip())
+                    continue
+                if wx >= ROOF_EAST_X:
+                    continue      # re-emitted at the true east edge below
+                # The old right cap becomes an ordinary middle tile; the cap
+                # itself is laid at ROOF_EAST_X below.
+                kept.append(emit(mid, z, wx, wy, "Buildings-Tileset"))
+                roof_extended += 1
+                continue
             kept.append(line.rstrip())
             continue
         if f[1] == "Outside-Tileset" and src in STONE_SRCS:
@@ -185,11 +211,15 @@ def main():
         ey = up if down == 0 else (down if up == 0 else 0)
         stone.append(emit(STONE[(ex, ey)], 1, cx * TILE, cy * TILE))
 
+    # Roof's east column, bringing it out to the facade's own right edge.
+    roof = [emit(cap, 2, ROOF_EAST_X, y, "Buildings-Tileset")
+            for y, (cap, _) in sorted(ROOF_ROWS.items())]
+
     # Shopfront sign, on layer 3 so it sits over the facade it is fixed to.
     sign = [emit(SHOP_SIGN, 3, SHOP_SIGN_AT[0], SHOP_SIGN_AT[1],
                  "Buildings-Tileset")]
 
-    out = ground + fence + stone + kept + sign
+    out = ground + fence + stone + kept + roof + sign
     MAP.write_text("\n".join(out) + "\n")
 
     print(f"ground   : {dropped_ground} freehand stamps -> {len(ground)} on a "
@@ -197,7 +227,8 @@ def main():
     print(f"walls    : {dropped_wall} prop stamps removed")
     print(f"fence    : {len(fence)} added along the top and bottom edges")
     print(f"stone    : {len(stone_cells)} cells re-laid on the 32px grid")
-    print(f"building : {dropped_stray} stray roof tiles removed, shop sign added")
+    print(f"building : roof extended east ({roof_extended} caps -> middles, "
+          f"{len(ROOF_ROWS)} laid at x={ROOF_EAST_X}), shop sign added")
     print(f"untouched: {len(kept)} tiles on layers 1+")
     print(f"total    : {len(lines)} -> {len(out)} lines")
 

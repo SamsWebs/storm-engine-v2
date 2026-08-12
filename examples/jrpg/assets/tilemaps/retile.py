@@ -65,7 +65,11 @@ STONE = {
 
 # Every source cell inside that patch. Anything drawn from here is stone and
 # gets re-laid; everything else on layers 1+ is left where the artist put it.
-STONE_SRCS = {(x, y) for x in (0, 16, 32, 48, 64)
+# x goes to 80: the patch spans src x 0..96, and a stamp taken from its right
+# edge at x=80 was falling outside this set, surviving as a 32x32 crop that
+# straddles the patch border and the left third of the white INFO sign next to
+# it -- a nonsense sprite that no regeneration could clear.
+STONE_SRCS = {(x, y) for x in (0, 16, 32, 48, 64, 80)
               for y in (32, 48, 64, 80, 96, 112)}
 
 # (srcX, srcY, axis, value) -- stamps of this tile on this line are the run.

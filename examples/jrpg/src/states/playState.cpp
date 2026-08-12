@@ -19,9 +19,15 @@ PlayState::PlayState(SDL_Renderer *renderer, int windowWidth, int windowHeight,
       isDebugging_{isDebugging}, assetStore_{std::move(assetStore)},
       isRunning_{isRunning}
 {
-    TTF_Init();
+    if (TTF_Init() != 0) {
+        logger_.Err("PlayState: TTF_Init failed — " + std::string(TTF_GetError()));
+        assetsLoaded_ = false;
+    }
     font_ = TTF_OpenFont("./assets/fonts/font.ttf", 18);
-    if (!font_) logger_.Err("PlayState: failed to load font — " + std::string(TTF_GetError()));
+    if (!font_) {
+        logger_.Err("PlayState: failed to load font — " + std::string(TTF_GetError()));
+        assetsLoaded_ = false;
+    }
 
     registry_.AddSystem<RenderSystem>();
     registry_.AddSystem<RenderColliderSystem>();
@@ -51,6 +57,9 @@ bool PlayState::onEnter() {
 
 bool PlayState::onExit() {
     if (font_) { TTF_CloseFont(font_); font_ = nullptr; }
+    // Matches the TTF_Init in the constructor. Without it SDL_ttf is still up
+    // when SDL_Quit runs, which leaves the font cache and FreeType allocated.
+    TTF_Quit();
     assetStore_->ClearAssets();
     m_exiting = true;
     return true;
@@ -61,12 +70,23 @@ bool PlayState::onExit() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 void PlayState::LoadAssets() {
-    assetStore_->AddTexture(renderer_, "Buildings-Tileset",
-                            "./assets/gfx/Buildings-Tileset.png");
-    assetStore_->AddTexture(renderer_, "Outside-Tileset",
-                            "./assets/gfx/Outside-Tileset.png");
-    assetStore_->AddTexture(renderer_, "NPC-Sprite-Sheet",
-                            "./assets/gfx/NPC-Sprite-Sheet.png");
+    // Every miss here used to be silent: AddTexture logs and adds nothing,
+    // GetTexture then returns nullptr, and RenderWorld skips the draw. The
+    // result was an empty green window that exited 0. All three sheets are
+    // required, so a miss is recorded and Game refuses to start.
+    struct Asset { const char *id; const char *path; };
+    static const Asset kAssets[] = {
+        {"Buildings-Tileset", "./assets/gfx/Buildings-Tileset.png"},
+        {"Outside-Tileset",   "./assets/gfx/Outside-Tileset.png"},
+        {"NPC-Sprite-Sheet",  "./assets/gfx/NPC-Sprite-Sheet.png"},
+    };
+    for (const auto &a : kAssets) {
+        assetStore_->AddTexture(renderer_, a.id, a.path);
+        if (!assetStore_->GetTexture(a.id)) {
+            logger_.Err(std::string("PlayState: missing ") + a.path);
+            assetsLoaded_ = false;
+        }
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -134,11 +154,16 @@ void PlayState::LoadColliders() {
 void PlayState::SpawnPlayer() {
     Entity player = registry_.CreateEntity();
     player.Tag("player");
+    // On the plaza in front of the shop, not inside it. The old (100,200) put
+    // the 32x64 sprite at y 200..264, squarely inside the wall band the shop
+    // occupies at y 192..272 -- the player spawned embedded in the storefront.
+    // Feet box here is x 104..128, y 328..344: clear of the shop (solid to
+    // y=304) and of the fence run that starts at y=352.
     player.AddComponent<TransformComponent>(
-        glm::vec2(100.0f, 200.0f), glm::vec2(1.0f, 1.0f), 0.0);
+        glm::vec2(100.0f, 280.0f), glm::vec2(1.0f, 1.0f), 0.0);
     // Start facing down (idle-down = frame 1, srcX = 32)
     player.AddComponent<SpriteComponent>(
-        "NPC-Sprite-Sheet", PLAYER_FRAME_W, PLAYER_FRAME_H, 5,
+        "NPC-Sprite-Sheet", PLAYER_FRAME_W, PLAYER_FRAME_H, CHARACTER_Z,
         false, 1 * PLAYER_FRAME_W, 0);
     player.AddComponent<PlayerComponent>();
 }
@@ -160,7 +185,7 @@ void PlayState::SpawnNPC(float x, float y, const std::string &name,
     npc.AddComponent<TransformComponent>(
         glm::vec2(x, y), glm::vec2(1.0f, 1.0f), 0.0);
     npc.AddComponent<SpriteComponent>(
-        "NPC-Sprite-Sheet", PLAYER_FRAME_W, PLAYER_FRAME_H, 4,
+        "NPC-Sprite-Sheet", PLAYER_FRAME_W, PLAYER_FRAME_H, CHARACTER_Z,
         false, idleFrame * PLAYER_FRAME_W, 0);
     npc.AddComponent<NpcComponent>(NpcComponent{name, dialogue, facing});
     // NPC tinting happens per-draw in RenderWorld (the sheet is shared with
@@ -175,7 +200,10 @@ void PlayState::processInput() {
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
         if (event.type == SDL_QUIT) { isRunning_ = false; return; }
-        if (event.type == SDL_KEYDOWN) {
+        // Ignore auto-repeat. These are all edge actions -- toggling the debug
+        // overlay, advancing dialogue -- and the repeat stream made them strobe
+        // for as long as the key was held.
+        if (event.type == SDL_KEYDOWN && !event.key.repeat) {
             switch (event.key.keysym.sym) {
             case SDLK_ESCAPE: isRunning_ = false; return;
             case SDLK_F1:    isDebugging_ = !isDebugging_; break;
@@ -420,9 +448,20 @@ void PlayState::render() {
 void PlayState::RenderWorld() {
     // Collect all entities with Sprite + Transform, sort by zIndex, render with camera offset
     auto entities = registry_.GetSystem<RenderSystem>().GetSystemEntities();
+    // zIndex first, then the feet line. zIndex alone is a spawn-time constant
+    // -- player 5, NPC 4, tiles <= 3 -- so the player drew in front of every
+    // NPC unconditionally, however far up the screen the other one stood. In a
+    // top-down world the character lower on the screen is nearer the camera, so
+    // position.y + height breaks the tie inside a layer.
     std::sort(entities.begin(), entities.end(), [](const Entity &a, const Entity &b) {
-        return a.GetComponent<SpriteComponent>().zIndex <
-               b.GetComponent<SpriteComponent>().zIndex;
+        const auto &sa = a.GetComponent<SpriteComponent>();
+        const auto &sb = b.GetComponent<SpriteComponent>();
+        if (sa.zIndex != sb.zIndex) {
+            return sa.zIndex < sb.zIndex;
+        }
+        const float fa = a.GetComponent<TransformComponent>().position.y + sa.height;
+        const float fb = b.GetComponent<TransformComponent>().position.y + sb.height;
+        return fa < fb;
     });
 
     for (auto &e : entities) {
@@ -500,6 +539,12 @@ void PlayState::RenderDialogueBox() {
                  windowWidth_ - 190, boxY + boxH - 24,
                  {200, 200, 200, 255});
     }
+
+    // Put the blend mode back. It is renderer-wide state, not scoped to this
+    // function, so leaving it on BLEND meant every later draw -- notably the
+    // F1 collider overlay, which sets its own alpha -- rendered differently
+    // after the first line of dialogue than before it.
+    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
 }
 
 // Renders at the font's fixed point size (18) — the font is opened once in the

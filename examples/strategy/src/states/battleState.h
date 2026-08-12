@@ -66,6 +66,9 @@ private:
     void SpawnHitEffect(glm::vec2 pos);
     void CullFinishedEffects();
     void IssueCommand(Command c);
+    void ConfirmRetreat();
+    void CancelRetreat();
+    void RenderRetreatPrompt();
     void Finish(world::Owner winner);
     void RenderHud();
 
@@ -102,6 +105,17 @@ private:
     // Battle runs: closing -> melee -> over.
     bool   closed_      = false;   // the lines have met
     bool   over_        = false;
+
+    // Retreat is the one order that cannot be undone -- it concedes the castle
+    // the moment it lands -- so it asks first. While this is set the battle is
+    // modal: damage resolution pauses and every other order is ignored.
+    //
+    // It is a flag rather than a pushed state on purpose. GameStateMachine
+    // renders only m_gameStates.back(), so a modal pushed on top of the battle
+    // would draw over a blank screen with the fight gone; an overlay has to be
+    // drawn by the state it belongs to.
+    bool   confirmRetreat_ = false;
+    Uint32 pausedAtMs_     = 0;
     bool   popped_      = false;
     world::Owner winner_ = world::Owner::Neutral;
 

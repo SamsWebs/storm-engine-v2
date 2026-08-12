@@ -40,6 +40,8 @@ Six castles, three generals a side. Take all six.
 | `↑` `↓` | D-pad up/down, or left stick | Cycle that general's destination — a yellow ring marks it |
 | `Enter` | `A` / `Start` | March |
 | `1` `2` `3` `4` | `A` `B` `X` `Y` | Battle orders: charge, hold, volley, retreat |
+| `Enter` / `Y` | `A` / `Start` | Confirm the retreat prompt |
+| `ESC` / `N` / `4` | `B` / `Back` | Cancel the retreat prompt |
 | `ESC` | `Back` | Quit, from any screen |
 
 Any pad SDL recognises works: the game talks to `SDL_GameController` rather than `SDL_Joystick`, so a DualShock or a generic USB pad lands on the same buttons through SDL's mapping database with no special cases. A pad plugged in before launch is opened at startup; one plugged in later arrives on `SDL_CONTROLLERDEVICEADDED`.
@@ -47,6 +49,8 @@ Any pad SDL recognises works: the game talks to `SDL_GameController` rather than
 The day counter advances on its own, so the map never sits still waiting for input. Enemy generals march on their own schedule. An army reaching an undefended enemy castle takes it outright; one that meets a defending general starts a battle.
 
 Troops counter each other in a triangle — **warrior beats archer beats spearman beats warrior**, at 1.5x. Orders modify your own side for a few seconds: **charge** raises damage dealt and taken, **hold** lowers both, **volley** is strong but only for archers, and **retreat** concedes the castle immediately.
+
+Retreat asks before it lands. Every other order wears off in a few seconds; that one ends the battle and hands over the castle, so it opens a confirmation and pauses the fighting until you answer. While the prompt is up nothing else responds — a stray order key cannot slip through, and `ESC` cancels the prompt instead of quitting, so `ESC` is never the key that loses a castle.
 
 ## What this example demonstrates
 
@@ -60,6 +64,7 @@ Troops counter each other in a triangle — **warrior beats archer beats spearma
 | **One-shot animations must self-cull** | `AnimationSystem` clamps a non-looping animation to `numFrames - 1` and leaves the entity alone. Testing `currentFrame >= numFrames` therefore **never** fires; `battleState.cpp` tests `>= numFrames - 1` and kills the entity itself. Getting this wrong leaks an entity per hit for the whole battle. |
 | **Popping the last state** | An empty state machine is not an exit. `Game::Run` keeps looping on `isRunning_` while `processInput`/`update`/`render` all return immediately, so nothing calls `SDL_PollEvent` — the window stops responding and the process spins at 100% CPU, unkillable by anything short of `SIGKILL`. `BattleState` checks the stack depth before popping, which matters only for `./bin/realms battle`. |
 | **Deterministic scatter** | `SpawnDecorations` places scenery from a fixed-seed LCG, not `rand()`, so the map is identical on every run — decorations that wander make a visual regression impossible to spot. Keep-out radii around the castles and around the road segments (the straight lines army markers lerp along) mean moving a castle re-flows the scenery instead of leaving a tree in the courtyard. It logs how many it actually placed, which is usually fewer than asked for. |
+| **A modal that is not a state** | The retreat prompt in `battleState.cpp` is a flag and an overlay, not a pushed state. `render()` draws only the top of the stack, so a modal pushed above the battle would appear over a blank screen with the fight gone — an overlay has to be drawn by the state it belongs to. Cancelling also credits back the wall-clock time the prompt was up, because the command and outcome deadlines are absolute `SDL_GetTicks` values: without it, a long deliberation silently expires the standing order and cuts the outcome banner short. |
 | **Controller input** | `gamepad.h`. `SDL_GameController`, so any recognised pad reports buttons by *meaning* rather than by index. State is polled once per frame and never accumulated from events, so a disconnect mid-hold cannot latch a direction on. Every binding is edge-triggered — a menu driven by held state scrolls once per frame. |
 | **Hand-rolled AABB, again** | `CollisionSystem` is deliberately not registered. It kills *both* entities on contact, which is wrong for everything here. |
 | **Immediate-mode HUD** | `ui.h`. Bars are drawn as rects rather than blitted: Tiny Swords' `SmallBar_Base` is a three-slice asset with gaps inside one image, so stretching it as a single texture produces a broken bar. |

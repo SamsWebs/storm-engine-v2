@@ -36,6 +36,36 @@
   Documented in `examples/strategy/README.md`, and `.claude/SKILL.md` now states
   the correct test.
 
+- **`examples/jrpg` had no working collision and no way to report failure.**
+  The only building in the level carried two 32x32 rects against a 192x240
+  footprint, so the player walked through the shopfront and stood on the roof,
+  and the spawn point was itself inside the wall. Three of the four perimeter
+  walls could never be touched: the feet box is 24x16 at `pos+(4,48)` and `pos`
+  is clamped, so it only ever occupies x 4..1244, y 48..640, and the walls sat
+  outside that band. `LoadColliders` also read the width and height from the
+  file and discarded them, so a wall had to be spelled out one block at a time.
+
+  Separately, `Game::Initialize` returned void on all three failure paths and
+  `main` returned 0 unconditionally, so an SDL, window or renderer failure
+  looked like a clean run. A missing tileset was quieter still - `AddTexture`
+  logs and adds nothing, `GetTexture` then returns null and the draw is skipped
+  - giving an empty green window and a zero exit. Both now report and exit
+  non-zero, and the renderer falls back to software when accelerated+vsync is
+  unavailable.
+
+  Also fixed there: the render sort keyed only on `zIndex`, so characters never
+  occluded by depth; `RenderDialogueBox` left the renderer in
+  `SDL_BLENDMODE_BLEND`, which is renderer-wide state; `TTF_Init` had no
+  matching `TTF_Quit`; and `event.key.repeat` was unfiltered, so holding the
+  interact or debug key strobed it.
+
+- **The JRPG map is generated rather than hand-painted.** Its ground layer was
+  32px stamps on an 8px grid, so it had gaps the renderer's clear colour showed
+  through, and props were repeated along the edges as walls. The paving was
+  stamped at a 16px pitch with 32px tiles, so its pattern never completed.
+  `examples/jrpg/assets/tilemaps/retile.py` now rebuilds the map, is idempotent,
+  and is the only supported way to change it.
+
 ## [1.2.6] - 2026-08-11
 
 ### Fixed

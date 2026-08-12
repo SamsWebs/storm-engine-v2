@@ -302,3 +302,15 @@ the pack is downloaded once, following
 `examples/strategy/assets/README.md`. Running it without the art prints the
 download URL and exits. Crediting Pixel Frog is optional under those terms and
 done here anyway.
+
+The `jrpg` example uses **PokeHD JRPG 32x32** by
+[Monedita](https://monedita.itch.io/pokehd-jrpg-32x32).
+
+> **That pack states no licence.** Its page gives no terms for use,
+> redistribution, credit or commercial use, which makes it the only artwork here
+> whose terms are unknown - the three packs above all say something explicit.
+> The files are committed, which assumes a permission the page does not actually
+> grant. Worth settling with the author before this repository is treated as a
+> source to redistribute from; the alternative is the `strategy` example's
+> model, where the pack is downloaded rather than shipped. See
+> `examples/jrpg/assets/README.md`.

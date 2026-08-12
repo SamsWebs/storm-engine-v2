@@ -8,16 +8,22 @@ Game::Game() {
 
 Game::~Game() { logger->Log("Game destructor called"); }
 
-void Game::Initialize() {
+bool Game::Initialize() {
     if (SDL_Init(SDL_INIT_EVERYTHING) != 0) {
-        logger->Err("Error initializing SDL.");
-        return;
+        // SDL_GetError() on every failure path: AssetStore and TileMapLoader
+        // both report it, and "Error initializing SDL." on its own tells the
+        // user nothing they can act on.
+        logger->Err(std::string("Error initializing SDL: ") + SDL_GetError());
+        return false;
     }
 
     window = SDL_CreateWindow("Storm JRPG",
                               SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
                               windowWidth, windowHeight, 0);
-    if (!window) { logger->Err("Error creating SDL window."); return; }
+    if (!window) {
+        logger->Err(std::string("Error creating SDL window: ") + SDL_GetError());
+        return false;
+    }
 
     // Window icon: the player's idle-down frame, head and torso, cut from the
     // sprite sheet. SDL_SetWindowIcon copies the surface, so it is freed
@@ -31,23 +37,45 @@ void Game::Initialize() {
         logger->Err("Missing ./assets/gfx/icon.png -- run from the game root.");
     }
 
-    renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
-    if (!renderer) { logger->Err("Error creating SDL renderer."); return; }
+    renderer = SDL_CreateRenderer(
+        window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+    if (!renderer) {
+        // Fall back to whatever SDL can give us, as netplay-checkers does.
+        // Accelerated+vsync is unavailable on plenty of remote sessions and
+        // headless-ish setups, and a 2D game like this runs fine on software.
+        logger->Err(std::string("Accelerated renderer unavailable (")
+                    + SDL_GetError() + "); falling back to software.");
+        renderer = SDL_CreateRenderer(window, -1, 0);
+    }
+    if (!renderer) {
+        logger->Err(std::string("Error creating SDL renderer: ") + SDL_GetError());
+        return false;
+    }
 
-    gameStateMachine.changeState(
-        new PlayState(renderer, windowWidth, windowHeight, isDebugging,
-                      std::move(assetStore), isRunning));
+    auto *play = new PlayState(renderer, windowWidth, windowHeight, isDebugging,
+                               std::move(assetStore), isRunning);
+    // PlayState reports which asset it could not load. Without this the game
+    // opened on an empty green field and exited 0, which reads as success.
+    if (!play->AssetsLoaded()) {
+        delete play;
+        return false;
+    }
+    gameStateMachine.changeState(play);
 
     isRunning = true;
+    return true;
 }
 
-void Game::Run() {
-    Initialize();
+bool Game::Run() {
+    if (!Initialize()) {
+        return false;
+    }
     while (isRunning) {
         ProcessInput();
         Update();
         Render();
     }
+    return true;
 }
 
 void Game::ProcessInput() { gameStateMachine.processInput(); }

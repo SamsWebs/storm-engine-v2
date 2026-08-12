@@ -14,11 +14,11 @@ public:
     Game();
     ~Game();
 
-    void Initialize();
+    bool Initialize();
     void ProcessInput();
     void Update();
     void Render();
-    void Run();
+    bool Run();
     void Destroy();
 
 private:

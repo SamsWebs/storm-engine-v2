@@ -1035,7 +1035,7 @@ tiles Buildings-Tileset 32 32 0 0 2 0 64 1 1 0 0
 tiles Buildings-Tileset 32 32 32 0 2 32 64 1 1 0 0
 tiles Buildings-Tileset 32 32 32 0 2 64 64 1 1 0 0
 tiles Buildings-Tileset 32 32 32 0 2 96 64 1 1 0 0
-tiles Buildings-Tileset 32 32 64 0 2 128 64 1 1 0 0
+tiles Buildings-Tileset 32 32 32 0 2 128 64 1 1 0 0
 tiles Buildings-Tileset 32 32 0 96 2 0 224 1 1 0 0
 tiles Buildings-Tileset 32 32 0 32 2 0 96 1 1 0 0
 tiles Buildings-Tileset 32 32 0 32 2 0 112 1 1 0 0
@@ -1049,15 +1049,15 @@ tiles Buildings-Tileset 32 32 32 64 2 64 192 1 1 0 0
 tiles Buildings-Tileset 32 32 32 64 2 80 192 1 1 0 0
 tiles Buildings-Tileset 32 32 32 64 2 96 192 1 1 0 0
 tiles Buildings-Tileset 32 32 32 64 2 112 192 1 1 0 0
-tiles Buildings-Tileset 32 32 64 32 2 128 96 1 1 0 0
-tiles Buildings-Tileset 32 32 64 32 2 128 112 1 1 0 0
-tiles Buildings-Tileset 32 32 64 32 2 128 128 1 1 0 0
-tiles Buildings-Tileset 32 32 64 32 2 128 144 1 1 0 0
-tiles Buildings-Tileset 32 32 64 32 2 128 160 1 1 0 0
+tiles Buildings-Tileset 32 32 32 32 2 128 96 1 1 0 0
+tiles Buildings-Tileset 32 32 32 32 2 128 112 1 1 0 0
+tiles Buildings-Tileset 32 32 32 32 2 128 128 1 1 0 0
+tiles Buildings-Tileset 32 32 32 32 2 128 144 1 1 0 0
+tiles Buildings-Tileset 32 32 32 32 2 128 160 1 1 0 0
 tiles Buildings-Tileset 32 32 0 32 2 0 160 1 1 0 0
 tiles Buildings-Tileset 32 32 32 32 2 32 160 1 1 0 0
 tiles Buildings-Tileset 32 32 32 32 2 48 144 1 1 0 0
-tiles Buildings-Tileset 32 32 64 64 2 128 192 1 1 0 0
+tiles Buildings-Tileset 32 32 32 64 2 128 192 1 1 0 0
 tiles Buildings-Tileset 32 32 32 32 2 16 144 1 1 0 0
 tiles Buildings-Tileset 32 32 32 32 2 32 144 1 1 0 0
 tiles Buildings-Tileset 32 32 32 32 2 32 112 1 1 0 0
@@ -1089,6 +1089,7 @@ tiles Buildings-Tileset 32 32 96 96 2 64 240 1 1 0 0
 tiles Buildings-Tileset 32 32 160 96 2 128 240 1 1 0 0
 tiles Buildings-Tileset 32 32 224 128 2 160 272 1 1 0 0
 tiles Buildings-Tileset 32 32 224 96 2 160 240 1 1 0 0
+tiles Buildings-Tileset 32 32 64 64 2 160 208 1 1 0 0
 tiles Buildings-Tileset 32 32 64 96 2 64 224 1 1 0 0
 tiles Buildings-Tileset 32 32 64 96 2 128 224 1 1 0 0
 tiles Buildings-Tileset 32 32 224 96 2 160 224 1 1 0 0
@@ -1097,4 +1098,11 @@ tiles Outside-Tileset 32 32 224 96 2 1232 16 1 1 0 0
 tiles Outside-Tileset 32 32 96 128 2 0 384 1 1 0 0
 tiles Outside-Tileset 32 32 96 128 2 0 32 1 1 0 0
 tiles Outside-Tileset 32 32 96 96 3 960 336 1 1 1 0 0 0 0 0
+tiles Buildings-Tileset 32 32 64 0 2 160 64 1 1 0 0
+tiles Buildings-Tileset 32 32 64 32 2 160 96 1 1 0 0
+tiles Buildings-Tileset 32 32 64 32 2 160 112 1 1 0 0
+tiles Buildings-Tileset 32 32 64 32 2 160 128 1 1 0 0
+tiles Buildings-Tileset 32 32 64 32 2 160 144 1 1 0 0
+tiles Buildings-Tileset 32 32 64 32 2 160 160 1 1 0 0
+tiles Buildings-Tileset 32 32 64 64 2 160 192 1 1 0 0
 tiles Buildings-Tileset 32 32 0 160 3 64 224 1 1 0 0

@@ -65,6 +65,15 @@ STONE_SRCS = {(x, y) for x in (0, 16, 32, 48, 64)
 # (srcX, srcY, axis, value) -- stamps of this tile on this line are the run.
 # Identified by histogramming the map: each is a single prop repeated along one
 # edge, which is what makes them read as a wall of barrels rather than scenery.
+# The shop. Two copies of the roof's bottom-right corner (64,64) sit at x=160,
+# one tile past the roof's own footprint -- the roof spans x 0..160, so they
+# hang off its edge as a red step with nothing above them. The facade also
+# carries no signage at all, on a building whose occupant says "step inside and
+# browse my wares".
+BUILDING_STRAYS = {((64, 64), 160, 192), ((64, 64), 160, 208)}
+SHOP_SIGN = (0, 160)     # "STORE"; the sheet also has HEALTH, a cross, a padlock
+SHOP_SIGN_AT = (64, 224)   # on the wall band, clear of the roof edge above
+
 WALL_RUNS = [
     ((192, 96),  "y", lambda v: v == 0),        # top: 74 x two barrels
     ((160, 128), "y", lambda v: v >= 416),      # bottom: 85 x four barrels
@@ -89,8 +98,8 @@ def is_wall(src, wx, wy):
     return False
 
 
-def emit(src, z, wx, wy):
-    return (f"tiles Outside-Tileset {TILE} {TILE} {src[0]} {src[1]} {z} "
+def emit(src, z, wx, wy, sheet="Outside-Tileset"):
+    return (f"tiles {sheet} {TILE} {TILE} {src[0]} {src[1]} {z} "
             f"{wx} {wy} 1 1 0 0")
 
 
@@ -98,7 +107,7 @@ def main():
     lines = MAP.read_text().splitlines()
     shutil.copy(MAP, MAP.with_suffix(".map.bak"))
 
-    kept, dropped_ground, dropped_wall = [], 0, 0
+    kept, dropped_ground, dropped_wall, dropped_stray = [], 0, 0, 0
     stone_cells = set()
     for line in lines:
         f = line.split()
@@ -118,6 +127,14 @@ def main():
         # re-running does not stack a second row on top of the first. Fence
         # elsewhere on the map is the artist's and is kept.
         if src == FENCE and wy in (0, LEVEL_H - TILE):
+            continue
+        if f[1] == "Buildings-Tileset":
+            if (src, wx, wy) in BUILDING_STRAYS:
+                dropped_stray += 1
+                continue
+            if src == SHOP_SIGN:
+                continue          # re-emitted below, so re-runs do not stack
+            kept.append(line.rstrip())
             continue
         if f[1] == "Outside-Tileset" and src in STONE_SRCS:
             # Mark every 32px cell this stamp touches, not just the one holding
@@ -168,7 +185,11 @@ def main():
         ey = up if down == 0 else (down if up == 0 else 0)
         stone.append(emit(STONE[(ex, ey)], 1, cx * TILE, cy * TILE))
 
-    out = ground + fence + stone + kept
+    # Shopfront sign, on layer 3 so it sits over the facade it is fixed to.
+    sign = [emit(SHOP_SIGN, 3, SHOP_SIGN_AT[0], SHOP_SIGN_AT[1],
+                 "Buildings-Tileset")]
+
+    out = ground + fence + stone + kept + sign
     MAP.write_text("\n".join(out) + "\n")
 
     print(f"ground   : {dropped_ground} freehand stamps -> {len(ground)} on a "
@@ -176,6 +197,7 @@ def main():
     print(f"walls    : {dropped_wall} prop stamps removed")
     print(f"fence    : {len(fence)} added along the top and bottom edges")
     print(f"stone    : {len(stone_cells)} cells re-laid on the 32px grid")
+    print(f"building : {dropped_stray} stray roof tiles removed, shop sign added")
     print(f"untouched: {len(kept)} tiles on layers 1+")
     print(f"total    : {len(lines)} -> {len(out)} lines")
 

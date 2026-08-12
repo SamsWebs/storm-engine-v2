@@ -19,6 +19,18 @@ void Game::Initialize() {
                               windowWidth, windowHeight, 0);
     if (!window) { logger->Err("Error creating SDL window."); return; }
 
+    // Window icon: the player's idle-down frame, head and torso, cut from the
+    // sprite sheet. SDL_SetWindowIcon copies the surface, so it is freed
+    // straight away -- holding it would leak. Loaded through SDL_image rather
+    // than the AssetStore, which deals in textures and cannot return a surface.
+    if (SDL_Surface *icon = IMG_Load("./assets/gfx/icon.png")) {
+        SDL_SetWindowIcon(window, icon);
+        SDL_FreeSurface(icon);
+    } else {
+        // Not fatal -- the game runs fine with the window manager's default.
+        logger->Err("Missing ./assets/gfx/icon.png -- run from the game root.");
+    }
+
     renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
     if (!renderer) { logger->Err("Error creating SDL renderer."); return; }
 

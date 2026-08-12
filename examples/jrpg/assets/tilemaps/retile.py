@@ -44,17 +44,23 @@ GRASS = (0, 0)          # plain
 GRASS_TUFT = (32, 0)    # same grass with a few blades
 FENCE = (160, 64)       # picket pair, already used along the plaza's south side
 
-# The cobbled patch is a 3x3 autotile once you read it at a true 32px pitch.
-# Verified by compositing the nine tiles and looking at the result: the border
-# runs unbroken round the outside and the diamond interior joins across cells.
+# The cobbled patch is a 3x3 autotile read at a true 32px pitch: the whole ring
+# and the centre all sit on src coordinates that are multiples of 32.
 #
-# Note B is (16,96). The map used (16,112) as its bottom edge, which puts the
-# border band at the *top* of that tile -- fine when stamps overlap by half,
-# wrong on a clean grid.
+# Every entry must share that phase. An earlier version took the centre column
+# from x=16 -- (16,32), (16,48), (16,96) -- which self-tiles perfectly (the
+# interior art is 32px-periodic, so crop(16,48) == crop(48,48) exactly) and so
+# looked right in isolation. It is not the same art as the phase-0 centre
+# though: crop(16,48) and crop(32,64) differ in 464 of their 1024 pixels. Laid
+# inside a phase-0 border ring the interior lattice lands half a diamond out,
+# and every cell of the top row and both edge columns is cut into triangles.
+#
+# The tell is that it is only visible where interior meets border, so a
+# composite of the interior alone -- or a hurried look at a small one -- passes.
 STONE = {
-    (-1, -1): (0, 32),  (0, -1): (16, 32),  (1, -1): (64, 32),
-    (-1,  0): (0, 64),  (0,  0): (16, 48),  (1,  0): (64, 64),
-    (-1,  1): (0, 96),  (0,  1): (16, 96),  (1,  1): (64, 96),
+    (-1, -1): (0, 32),  (0, -1): (32, 32),  (1, -1): (64, 32),
+    (-1,  0): (0, 64),  (0,  0): (32, 64),  (1,  0): (64, 64),
+    (-1,  1): (0, 96),  (0,  1): (32, 96),  (1,  1): (64, 96),
 }
 
 # Every source cell inside that patch. Anything drawn from here is stone and
@@ -148,13 +154,18 @@ def main():
         if f[1] == "Buildings-Tileset":
             if src == SHOP_SIGN:
                 continue          # re-emitted below, so re-runs do not stack
+            # Any cap already at or past the east edge goes, whatever row it is
+            # on. Gating this on `wy in ROOF_ROWS` left a duplicate eave cap at
+            # (160,208) -- the map was painted at a 16px pitch, so a stamp can
+            # sit half a row off the rows this script knows about, and that one
+            # survived every regeneration.
+            if src in ROOF_CAPS and wx >= ROOF_EAST_X:
+                continue          # re-emitted at the proper rows below
             if src in ROOF_CAPS and wy in ROOF_ROWS:
                 cap, mid = ROOF_ROWS[wy]
                 if src != cap:
                     kept.append(line.rstrip())
                     continue
-                if wx >= ROOF_EAST_X:
-                    continue      # re-emitted at the true east edge below
                 # The old right cap becomes an ordinary middle tile; the cap
                 # itself is laid at ROOF_EAST_X below.
                 kept.append(emit(mid, z, wx, wy, "Buildings-Tileset"))

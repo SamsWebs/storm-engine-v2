@@ -832,6 +832,25 @@ General 2D game dev principles, mapped to how Storm Engine v2 implements them.
 
 **Animation principles:** squash and stretch for impact, anticipation before action, follow-through after action. The engine handles frame cycling; the game supplies the sprite sheet art.
 
+> **A non-looping animation never reports itself finished, and never removes its
+> entity.** `AnimationSystem` clamps it with
+> `currentFrame = min(max(frame, 0), min(lastFrame, numFrames - 1))`, so
+> `currentFrame` **cannot reach `numFrames`** — the obvious
+> `currentFrame >= numFrames` test is dead code and the effect lives forever.
+> Test `currentFrame >= numFrames - 1` and kill the entity yourself:
+>
+> ```cpp
+> // Explosions, hit sparks, anything one-shot. Without this the entity count
+> // climbs for the lifetime of the state.
+> auto finished = [](Entity &e) {
+>     const auto *a = e.TryGetComponent<AnimationComponent>();
+>     return !a || a->currentFrame >= a->numFrames - 1;
+> };
+> for (auto &e : effects) { if (finished(e)) e.Kill(); }
+> effects.erase(std::remove_if(effects.begin(), effects.end(), finished),
+>               effects.end());
+> ```
+
 ### Tilemap Design
 
 | Principle | Storm Engine v2 implementation |

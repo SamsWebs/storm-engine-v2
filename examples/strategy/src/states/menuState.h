@@ -10,13 +10,12 @@
 
 #include <string>
 
-class GameOverState : public GameState {
+class MenuState : public GameState {
 public:
-    GameOverState(SDL_Renderer *renderer, int windowWidth, int windowHeight,
-                  bool isDebugging, AssetStore *assetStore,
-                  GameStateMachine *machine, Gamepad *gamepad,
-                  world::Campaign *campaign, world::Owner winner,
-                  bool &isRunning);
+    MenuState(SDL_Renderer *renderer, int windowWidth, int windowHeight,
+              bool isDebugging, AssetStore *assetStore,
+              GameStateMachine *machine, Gamepad *gamepad,
+              world::Campaign *campaign, bool &isRunning);
 
     void processInput() override;
     void update() override;
@@ -24,13 +23,11 @@ public:
     bool onEnter() override;
     bool onExit() override;
 
-    std::string getStateID() const override { return s_gameOverID; }
+    std::string getStateID() const override { return s_menuID; }
 
 private:
-    static const std::string s_gameOverID;
-    static constexpr Uint32 AUTO_RETURN_MS = 8000;
-
-    void ReturnToMenu();
+    static const std::string s_menuID;
+    static constexpr int MENU_COUNT = 2;
 
     SDL_Renderer     *renderer_;
     int               windowWidth_;
@@ -40,10 +37,10 @@ private:
     GameStateMachine *machine_;
     Gamepad          *gamepad_;
     world::Campaign  *campaign_;
-    world::Owner      winner_;
     bool             &isRunning_;
     Logger            logger_;
 
+    int    selected_ = 0;
+    bool   leaving_  = false;   // a changeState is already queued
     Uint32 enteredMs_ = 0;
-    bool   leaving_   = false;
 };

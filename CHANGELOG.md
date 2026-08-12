@@ -1,5 +1,41 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- **`examples/strategy` is a complete game.** The directory previously held a
+  modern-military helicopter demo in 485 lines. It is now *Realms*, a
+  *Dragon Force*-style strategy game: a top-down campaign map of six castles
+  where generals march on a day timer, and a side-on mass battle that resolves
+  when two armies meet, with a troop-counter triangle and four battle orders.
+
+  It is the first example to **push** a state rather than replace one. The
+  overworld calls `pushState`, so it stays alive underneath the battle with its
+  `Registry`, entities and day counter intact, and picks up in `resume()` —
+  which fires instead of `onEnter()` on `popState`. The campaign model lives
+  above both states, in `Game`, so the battle never holds a pointer into a state
+  that may be mid-teardown.
+
+  **Its artwork is not in this repository.** The sprites are Tiny Swords by
+  Pixel Frog, free to use but explicitly not redistributable, so the example
+  ships code only and the pack is fetched once by the user; running without it
+  prints the download URL and exits rather than opening a black window. This is
+  the only example that does not run from a fresh clone, and the trade is
+  deliberate — the traffic goes to the artist. See
+  `examples/strategy/assets/README.md`.
+
+### Fixed
+
+- **A one-shot animation could never be detected as finished.**
+  `AnimationSystem` clamps a non-looping animation with
+  `currentFrame = min(max(frame, 0), min(last, numFrames - 1))`, so
+  `currentFrame` never reaches `numFrames` and the obvious
+  `currentFrame >= numFrames` test never fires. Any caller culling one-shot
+  effects that way leaks an entity per effect for the lifetime of the state.
+  Documented in `examples/strategy/README.md`, and `.claude/SKILL.md` now states
+  the correct test.
+
 ## [1.2.6] — 2026-08-11
 
 ### Fixed

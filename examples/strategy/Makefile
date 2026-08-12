@@ -1,5 +1,3 @@
-#!/bin/bash
-
-NAME = tanks
+NAME = realms
 
 include ../examples.mk

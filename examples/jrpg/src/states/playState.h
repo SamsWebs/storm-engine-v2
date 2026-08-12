@@ -28,6 +28,11 @@
 constexpr int PLAYER_FRAME_W = 32;
 constexpr int PLAYER_FRAME_H = 64;
 
+// Player and NPCs share a layer so the render sort's feet-line tie-break
+// decides which of them is in front, rather than a fixed spawn-time constant.
+// Tiles in the map are all zIndex <= 3.
+constexpr int CHARACTER_Z    = 4;
+
 // ─── Tile constants ────────────────────────────────────────────────────────────
 // The editor uses a 16px grid; passing tileSize=8 to TileMapLoader preserves
 // the exact pixel coordinates from the map file (GCD of common worldX values).
@@ -64,6 +69,11 @@ public:
     void processInput() override;
     void update()       override;
     void render()       override;
+    // False when a required texture, the font, or SDL_ttf failed to load.
+    // Game checks this and refuses to start rather than opening an empty
+    // window and exiting 0.
+    bool AssetsLoaded() const { return assetsLoaded_; }
+
     bool onEnter()      override;
     bool onExit()       override;
     std::string getStateID() const override { return s_playID; }
@@ -97,6 +107,7 @@ private:
     bool           isDebugging_;
     AssetStore_Ptr assetStore_;
     Logger         logger_;
+    bool           assetsLoaded_ = true;
     bool          &isRunning_;
 
     Registry       registry_;

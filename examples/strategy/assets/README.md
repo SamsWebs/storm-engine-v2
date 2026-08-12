@@ -27,41 +27,37 @@ artist gets the traffic — which is the right outcome for work this good.
    what the game loads; the paths on the left are where they sit in the
    download.
 
+This is the complete list — the game loads exactly these eleven files and
+nothing else.
+
 ```
-Tiny Swords (Free Pack)/                    ->  examples/strategy/assets/
+Tiny Swords (Free Pack)/                     ->  examples/strategy/assets/
 
-Units/Blue Units/Warrior/Warrior_Idle.png   ->  gfx/units/blue/Warrior_Idle.png
-Units/Blue Units/Warrior/Warrior_Run.png    ->  gfx/units/blue/Warrior_Run.png
-Units/Blue Units/Warrior/Warrior_Attack1.png -> gfx/units/blue/Warrior_Attack1.png
-Units/Blue Units/Archer/Archer_Idle.png     ->  gfx/units/blue/Archer_Idle.png
-Units/Blue Units/Archer/Archer_Run.png      ->  gfx/units/blue/Archer_Run.png
-Units/Blue Units/Archer/Archer_Shoot.png    ->  gfx/units/blue/Archer_Shoot.png
-Units/Blue Units/Archer/Arrow.png           ->  gfx/units/blue/Arrow.png
+Units/Blue Units/Warrior/Warrior_Run.png     ->  gfx/units/blue/Warrior_Run.png
+Units/Blue Units/Warrior/Warrior_Attack1.png ->  gfx/units/blue/Warrior_Attack1.png
+Units/Blue Units/Archer/Archer_Run.png       ->  gfx/units/blue/Archer_Run.png
+Units/Blue Units/Archer/Archer_Shoot.png     ->  gfx/units/blue/Archer_Shoot.png
 
-Units/Red Units/...  (the same six files)   ->  gfx/units/red/...
+Units/Red Units/...  (the same four files)   ->  gfx/units/red/...
 
-Buildings/Blue Buildings/Castle.png         ->  gfx/buildings/blue/Castle.png
-Buildings/Blue Buildings/Tower.png          ->  gfx/buildings/blue/Tower.png
-Buildings/Red Buildings/Castle.png          ->  gfx/buildings/red/Castle.png
-Buildings/Red Buildings/Tower.png           ->  gfx/buildings/red/Tower.png
-Buildings/Yellow Buildings/Castle.png       ->  gfx/buildings/neutral/Castle.png
-Buildings/Yellow Buildings/Tower.png        ->  gfx/buildings/neutral/Tower.png
+Buildings/Blue Buildings/Castle.png          ->  gfx/buildings/blue/Castle.png
+Buildings/Red Buildings/Castle.png           ->  gfx/buildings/red/Castle.png
+Buildings/Yellow Buildings/Castle.png        ->  gfx/buildings/neutral/Castle.png
 
-Terrain/Tileset/Tilemap_color1.png          ->  gfx/terrain/tilemap.png
-Terrain/Tileset/Water Background color.png  ->  gfx/terrain/water.png
-Terrain/Tileset/Water Foam.png              ->  gfx/terrain/foam.png
+Terrain/Tileset/Tilemap_color1.png           ->  gfx/terrain/tilemap.png
+Terrain/Tileset/Water Background color.png   ->  gfx/terrain/water.png
 
-Particle FX/Explosion_01.png                ->  gfx/fx/explosion.png
-Particle FX/Dust_01.png                     ->  gfx/fx/dust.png
+Particle FX/Explosion_01.png                 ->  gfx/fx/explosion.png
 ```
 
 Yellow stands in for the neutral castles; any unused colour works.
 
-If a file is missing the game says so and exits rather than opening a black
-window — `Game::LoadAssets` checks for `gfx/units/blue/Warrior_Idle.png` before
-loading anything, because both of the engine's failure paths here are quiet
-(`AssetStore::AddTexture` logs and continues, and `GetTexture` returns `nullptr`
-at the point of use).
+A missing file is fatal and reported, never a black window. `Game::LoadAssets`
+checks for `gfx/units/blue/Warrior_Run.png` before loading anything, then
+refuses to start if any texture failed — both of the engine's failure paths here
+are otherwise quiet (`AssetStore::AddTexture` logs and continues, and
+`GetTexture` returns `nullptr` at the point of use). The process exits non-zero,
+so `make run` and CI see the failure too.
 
 ## What *is* committed
 

@@ -21,6 +21,12 @@ constexpr int   kRowCount     = 2;
 // Frame counts, measured from the Tiny Swords free pack. Getting one of these
 // wrong does not fail loudly -- AnimationSystem just walks off the end of the
 // strip and draws empty space -- so they are named rather than inlined.
+// Wrap-safe "now is at or past deadline". `now >= deadline` on two Uint32s
+// inverts across the ~49-day SDL_GetTicks wrap; the signed difference does not.
+bool Expired(Uint32 now, Uint32 deadline) {
+    return static_cast<Sint32>(now - deadline) >= 0;
+}
+
 int FrameCount(world::Troop troop, const char *action) {
     const bool archer = (troop == world::Troop::Archer);
     if (std::string(action) == "idle")   return archer ? 6 : 8;
@@ -143,9 +149,20 @@ void BattleState::SetAnimation(Side &s, const char *action, int frames,
     }
 }
 
-// Hides soldiers as the troop count falls, so sixteen sprites read as a
-// hundred men thinning out. The entities are not killed: the count can only
-// fall, but keeping them alive means no churn and no id recycling mid-battle.
+// Thins the rank as the troop count falls, so eight sprites a side read as an
+// army being ground down.
+//
+// Casualties are KILLED, not hidden. An earlier version pushed their zIndex to
+// -100 on the theory that it would tuck them behind the background: it does not.
+// RenderSystem sorts by zIndex and then draws every entity it holds, and the
+// battle's background is an SDL_RenderClear plus a band rect issued *before* the
+// registry renders -- there is no backdrop entity to hide behind, so a -100
+// sprite simply drew first and stayed fully visible. Both armies showed all
+// eight men no matter how few troops were left.
+//
+// Killing is deferred to the next Registry::Update(), so the entity is still in
+// the render system for the remainder of this frame. That is fine: the count
+// only ever falls, so nothing needs it back.
 void BattleState::SyncSoldierCount(Side &s) {
     const int alive =
         (s.startTroops <= 0)
@@ -153,15 +170,10 @@ void BattleState::SyncSoldierCount(Side &s) {
             : static_cast<int>(std::ceil(VISIBLE_PER_SIDE *
                                          (static_cast<float>(s.troops) /
                                           s.startTroops)));
-    for (int i = 0; i < static_cast<int>(s.soldiers.size()); ++i) {
-        auto *sprite = s.soldiers[i].TryGetComponent<SpriteComponent>();
-        if (!sprite) {
-            continue;
-        }
-        // zIndex -1 puts it behind the water clear; simplest way to hide a
-        // sprite without a visibility flag the engine does not have.
-        const bool visible = i < alive;
-        sprite->zIndex = visible ? (i % kRowCount) + 1 : -100;
+
+    while (static_cast<int>(s.soldiers.size()) > alive) {
+        s.soldiers.back().Kill();
+        s.soldiers.pop_back();
     }
 }
 
@@ -205,18 +217,35 @@ void BattleState::CullFinishedEffects() {
                    effects_.end());
 }
 
+// The player is always Blue, whether Blue marched in or is holding the castle.
+// Orders therefore have to follow the colour, not the attacker/defender role --
+// routing them to attacker_ meant that in every battle the player defended, the
+// command bar was driving the enemy: pressing CHARGE applied the 1.6x multiplier
+// to the army killing them.
+BattleState::Side &BattleState::PlayerSide() {
+    return attacker_.side == world::Owner::Blue ? attacker_ : defender_;
+}
+
+BattleState::Side &BattleState::AiSide() {
+    return attacker_.side == world::Owner::Blue ? defender_ : attacker_;
+}
+
 void BattleState::IssueCommand(Command c) {
     if (over_) {
         return;
     }
     if (c == Command::Retreat) {
-        // Retreat is an immediate loss for the attacker, not a draw: the castle
-        // stays with whoever held it.
-        Finish(defender_.side);
+        // The player's side quits the field, so the other side wins -- which is
+        // not the same as "the defender wins". When the player is defending,
+        // retreating hands the castle to the attacker; the old unconditional
+        // Finish(defender_.side) awarded the win to the player in exactly that
+        // case, turning the retreat key into a free victory.
+        Finish(AiSide().side);
         return;
     }
-    attacker_.command      = c;
-    attacker_.commandUntil = SDL_GetTicks() + COMMAND_MS;
+    Side &player        = PlayerSide();
+    player.command      = c;
+    player.commandUntil = SDL_GetTicks() + COMMAND_MS;
 }
 
 void BattleState::ResolveTick() {
@@ -224,15 +253,16 @@ void BattleState::ResolveTick() {
         return;
     }
 
-    const Uint32 now = SDL_GetTicks();
-    if (now >= attacker_.commandUntil) {
-        attacker_.command = Command::Hold;
+    Side &player = PlayerSide();
+    Side &ai     = AiSide();
+
+    if (Expired(SDL_GetTicks(), player.commandUntil)) {
+        player.command = Command::Hold;
     }
 
-    // The defender picks a command on its own so the fight is not one-sided:
-    // charge while ahead, hold while behind.
-    defender_.command =
-        (defender_.troops >= attacker_.troops) ? Command::Charge : Command::Hold;
+    // The AI picks its own order so the fight is not one-sided: charge while
+    // ahead, hold while behind.
+    ai.command = (ai.troops >= player.troops) ? Command::Charge : Command::Hold;
 
     auto damage = [&](const Side &from, const Side &to) {
         float d = from.troops * 0.06f * world::Counter(from.troop, to.troop);
@@ -246,8 +276,14 @@ void BattleState::ResolveTick() {
         case Command::Retreat: d = 0.0f; break;
         }
         // Holding also reduces damage taken, which is what makes it a real
-        // choice rather than a strictly worse charge.
-        if (to.command == Command::Hold) {
+        // choice rather than a strictly worse charge. A non-Archer VOLLEY is
+        // treated as a hold on both sides of the ledger: it already takes the
+        // hold penalty to its own output above, and reading it as anything else
+        // here would make it strictly worse than the order it is standing in for.
+        const bool braced =
+            to.command == Command::Hold ||
+            (to.command == Command::Volley && to.troop != world::Troop::Archer);
+        if (braced) {
             d *= 0.65f;
         }
         return static_cast<int>(std::ceil(d));
@@ -262,12 +298,16 @@ void BattleState::ResolveTick() {
     SyncSoldierCount(attacker_);
     SyncSoldierCount(defender_);
 
-    // One effect per tick per side, at the front rank, so the clash has a pulse
-    // without spawning an entity per casualty.
-    if (!attacker_.soldiers.empty()) {
-        if (auto *t = attacker_.soldiers.front()
-                          .TryGetComponent<TransformComponent>()) {
-            SpawnHitEffect(t->position + glm::vec2(60.0f, -20.0f));
+    // One effect per tick per side, at the inner edge of each line, so the clash
+    // has a pulse without spawning an entity per casualty.
+    for (Side *s : {&attacker_, &defender_}) {
+        if (s->soldiers.empty()) {
+            continue;
+        }
+        if (auto *t = s->soldiers.front().TryGetComponent<TransformComponent>()) {
+            const float towardCentre =
+                (t->position.x < windowWidth_ / 2.0f) ? 60.0f : -60.0f;
+            SpawnHitEffect(t->position + glm::vec2(towardCentre, -20.0f));
         }
     }
 
@@ -295,6 +335,12 @@ void BattleState::Finish(world::Owner winner) {
     result.defender     = defender_.general;
     result.castle       = castle_;
     result.winner       = winner;
+    // The floor of 1 is load-bearing, not cosmetic. On mutual annihilation both
+    // counts are 0 and the surviving side would be recorded with no troops --
+    // resume() writes this straight back onto the general, and a general with 0
+    // troops deals `ceil(0 * ...)` = 0 damage forever, so its next battle could
+    // never end. A last survivor holding the field is the cheapest rule that
+    // keeps every general able to fight.
     result.winnerTroops = std::max(
         1, (winner == attacker_.side) ? attacker_.troops : defender_.troops);
 
@@ -442,12 +488,16 @@ void BattleState::RenderHud() {
     const int   startX = windowWidth_ / 2 - (n * slotW) / 2;
     const int   y      = windowHeight_ - 84;
 
+    // The player's own order is the one to box, which is not attacker_ whenever
+    // the player is the one defending.
+    const Side &player = (attacker_.side == world::Owner::Blue) ? attacker_
+                                                                : defender_;
     for (int i = 0; i < n; ++i) {
         SDL_Texture *tex = assetStore_->GetTexture(ids[i]);
         const int cx = startX + i * slotW + slotW / 2;
         const bool active = !over_ &&
-                            static_cast<int>(attacker_.command) == i &&
-                            SDL_GetTicks() < attacker_.commandUntil;
+                            static_cast<int>(player.command) == i &&
+                            !Expired(SDL_GetTicks(), player.commandUntil);
         if (active) {
             ui::DrawPanel(renderer_, cx - slotW / 2 + 8, y - 10, slotW - 16, 52,
                           200);

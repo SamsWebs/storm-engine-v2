@@ -17,7 +17,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 OUT=ui
-FONT=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf
+FONT=${FONT:-/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf}
 
 if ! command -v convert >/dev/null; then
     echo "gen-ui.sh: ImageMagick's 'convert' is not on PATH" >&2

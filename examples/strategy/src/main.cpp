@@ -22,7 +22,12 @@ int main(int argc, char *argv[]) {
     }
 
     Game game;
-    game.Run(start);
+    const bool ok = game.Run(start);
     game.Destroy();
-    return 0;
+    // Non-zero when the game never started -- the usual cause is the artwork not
+    // being downloaded yet, which Game::LoadAssets reports. Returning 0
+    // unconditionally made that abort invisible to `make run`, to CI and to any
+    // shell doing `./bin/realms && ...`, which is the whole point of failing
+    // loudly instead of opening a black window.
+    return ok ? 0 : 1;
 }

@@ -160,13 +160,24 @@ void OverworldState::RefreshCastleSprite(int castle) {
 
 glm::vec2 OverworldState::GeneralPixel(int general) const {
     const auto &g = campaign_->generals[general];
-    const glm::vec2 from = CastlePixel(g.atCastle);
+
+    // Interpolate between the castles' CENTRES, then offset for the marker's own
+    // size. Lerping the castles' draw origins instead put the marker a castle's
+    // width off its road, because CastlePixel is pre-shifted to centre a
+    // 320x256 sprite at 0.34 and the marker is a 192x192 sprite at 0.30.
+    auto centreOf = [&](int castle) {
+        return CastlePixel(castle) + glm::vec2(kCastleW * kCastleScale / 2.0f,
+                                               kCastleH * kCastleScale / 2.0f);
+    };
+    const glm::vec2 half(kUnitFrame * kArmyScale / 2.0f);
+
+    const glm::vec2 from = centreOf(g.atCastle);
     if (g.toCastle < 0) {
-        return from;
+        return from - half;
     }
-    const glm::vec2 to = CastlePixel(g.toCastle);
+    const glm::vec2 to = centreOf(g.toCastle);
     const float t = 1.0f - (g.marchDays / static_cast<float>(MARCH_DAYS));
-    return from + (to - from) * std::min(std::max(t, 0.0f), 1.0f);
+    return from + (to - from) * std::min(std::max(t, 0.0f), 1.0f) - half;
 }
 
 void OverworldState::SyncArmyMarkers() {
@@ -268,28 +279,48 @@ void OverworldState::RunEnemyAI() {
         if (!g.alive || g.side != world::Owner::Red || g.toCastle >= 0) {
             continue;
         }
-        // Nearest adjacent castle that is not already Red and is not already
-        // the target of another Red general -- otherwise the whole enemy side
-        // piles onto one castle and the map stops moving.
-        int best = -1;
-        for (int c = 0; c < world::kCastleCount; ++c) {
-            if (!campaign_->Adjacent(g.atCastle, c)) continue;
-            if (campaign_->castles[c].owner == world::Owner::Red) continue;
-
-            bool taken = false;
+        // Two passes, and the second one matters more than it looks.
+        //
+        // Pass 1 takes an adjacent castle that is not already Red and is not
+        // already another Red general's target -- without the second test the
+        // whole enemy side piles onto one castle and the map stops moving.
+        //
+        // Pass 2 is the fallback: if every neighbour is already Red, the general
+        // repositions through friendly territory instead of standing still. With
+        // pass 1 alone a general enclosed by its own castles was inert for the
+        // rest of the game, and once every surviving Red general was enclosed
+        // the campaign could not progress at all -- no marches, no battles, so
+        // nothing could ever end it.
+        auto claimed = [&](int c) {
             for (int j = 0; j < world::kGeneralCount; ++j) {
                 if (j != i && campaign_->generals[j].alive &&
                     campaign_->generals[j].side == world::Owner::Red &&
                     campaign_->generals[j].toCastle == c) {
-                    taken = true;
-                    break;
+                    return true;
                 }
             }
-            if (!taken) {
+            return false;
+        };
+
+        int best = -1;
+        for (int c = 0; c < world::kCastleCount && best < 0; ++c) {
+            if (!campaign_->Adjacent(g.atCastle, c)) continue;
+            if (campaign_->castles[c].owner == world::Owner::Red) continue;
+            if (claimed(c)) continue;
+            best = c;
+        }
+
+        if (best < 0) {
+            // Reposition. Skipping castles another general already garrisons
+            // keeps the side spread out rather than stacking on one tile.
+            for (int c = 0; c < world::kCastleCount && best < 0; ++c) {
+                if (!campaign_->Adjacent(g.atCastle, c)) continue;
+                if (claimed(c)) continue;
+                if (campaign_->GarrisonAt(c) >= 0) continue;
                 best = c;
-                break;
             }
         }
+
         if (best >= 0) {
             StartMarch(i, best);
         }
@@ -318,28 +349,48 @@ void OverworldState::CheckArrivals() {
             continue;
         }
 
-        const int dest = g.toCastle;
-        const int defender = campaign_->GarrisonAt(dest);
-        const bool contested =
-            campaign_->castles[dest].owner != g.side ||
-            (defender >= 0 && campaign_->generals[defender].side != g.side);
+        const int dest     = g.toCastle;
+        const int garrison = campaign_->GarrisonAt(dest);
 
-        if (!contested) {
+        // The two questions are separate, and conflating them was a latent bug:
+        // an earlier `contested` ORed "castle is not mine" with "garrison is an
+        // enemy", then treated any garrison at a contested castle as a defender.
+        // A friendly general standing in a castle our side does not own would
+        // therefore have been fought as if it were the enemy -- and resume()
+        // resolves by comparing Owner values, so it would have credited the
+        // castle to one of our own generals and destroyed the other.
+        const bool enemyCastle = campaign_->castles[dest].owner != g.side;
+        const bool enemyGarrison =
+            garrison >= 0 && campaign_->generals[garrison].side != g.side;
+
+        if (!enemyCastle && !enemyGarrison) {
             // Friendly move: no fight, just arrive.
             g.atCastle = dest;
             g.toCastle = -1;
+            // A general that just became idle is newly orderable. Without this
+            // the order panel stays blank -- selected_ is only recomputed on an
+            // arrow press -- so a player whose generals were all marching had no
+            // visible way to know control had come back.
+            if (g.side == world::Owner::Blue && selected_ < 0) {
+                CycleSelection(0);
+            }
             continue;
         }
 
-        if (defender < 0) {
-            // Undefended castle changes hands without a battle.
-            g.atCastle                   = dest;
-            g.toCastle                   = -1;
+        if (!enemyGarrison) {
+            // Undefended (or friendly-held) enemy castle changes hands without
+            // a battle.
+            g.atCastle                     = dest;
+            g.toCastle                     = -1;
             campaign_->castles[dest].owner = g.side;
             RefreshCastleSprite(dest);
             logger_.Log("Castle " + std::to_string(dest) + " taken unopposed");
+            if (g.side == world::Owner::Blue && selected_ < 0) {
+                CycleSelection(0);
+            }
             continue;
         }
+        const int defender = garrison;
 
         // A real fight. Push the battle ON TOP of this state: everything here
         // -- the registry, the entities, the day counter -- stays alive
@@ -356,6 +407,35 @@ void OverworldState::CheckArrivals() {
 bool OverworldState::CampaignOver() const {
     return campaign_->CountOwned(world::Owner::Blue) == world::kCastleCount ||
            campaign_->CountOwned(world::Owner::Red) == world::kCastleCount;
+}
+
+// Called after EVERY path that can change castle ownership, not just after a
+// battle.
+//
+// This used to live only in resume(), which fires only when a battle pops. But
+// ownership also flips on the no-battle path in CheckArrivals, and that is how
+// a campaign usually finishes: once one side has lost its last general its
+// castles are ungarrisoned, so the other side walks into each of them
+// unopposed. The sixth capture then satisfied the win condition with nothing
+// left to observe it, and the map became an absorbing state -- RunEnemyAI skips
+// castles it already owns, so no general ever marched again, no battle could be
+// pushed, and resume() could never fire. The result was a live window with a
+// running day counter, dead input, and no way out but ESC.
+bool OverworldState::MaybeEndCampaign() {
+    if (leaving_ || !CampaignOver()) {
+        return false;
+    }
+    leaving_ = true;
+    const world::Owner winner =
+        campaign_->CountOwned(world::Owner::Blue) == world::kCastleCount
+            ? world::Owner::Blue
+            : world::Owner::Red;
+    logger_.Log(std::string("Campaign over, winner ") +
+                (winner == world::Owner::Blue ? "Blue" : "Red"));
+    machine_->changeState(new GameOverState(
+        renderer_, windowWidth_, windowHeight_, isDebugging_, assetStore_,
+        machine_, gamepad_, campaign_, winner, isRunning_));
+    return true;
 }
 
 void OverworldState::resume() {
@@ -399,15 +479,7 @@ void OverworldState::resume() {
     // frame and advance several days at once.
     lastTicks_ = SDL_GetTicks();
 
-    if (CampaignOver() && !leaving_) {
-        leaving_ = true;
-        const world::Owner winner =
-            campaign_->CountOwned(world::Owner::Blue) == world::kCastleCount
-                ? world::Owner::Blue
-                : world::Owner::Red;
-        machine_->changeState(new GameOverState(
-            renderer_, windowWidth_, windowHeight_, isDebugging_, assetStore_,
-            machine_, gamepad_, campaign_, winner, isRunning_));
+    if (MaybeEndCampaign()) {
         return;
     }
 
@@ -486,8 +558,13 @@ void OverworldState::update() {
         }
     }
 
-    const Uint32 now   = SDL_GetTicks();
-    const Uint32 delta = now - lastTicks_;
+    const Uint32 now = SDL_GetTicks();
+    // Clamped. An unclamped delta turns any event-loop stall -- dragging the
+    // window, the machine sleeping, a slow first frame after the battle pops --
+    // into a burst of days advancing in one tick, which teleports every marching
+    // army to its destination at once. MAX_DELTA_MS of real time is the most the
+    // campaign will absorb from a single frame; the rest is dropped.
+    const Uint32 delta = std::min(now - lastTicks_, MAX_DELTA_MS);
     lastTicks_         = now;
 
     dayAccumMs_ += delta;
@@ -498,6 +575,12 @@ void OverworldState::update() {
 
     CheckArrivals();
     if (leaving_ || awaitingBattle_) {
+        return;
+    }
+
+    // Ownership can change in CheckArrivals without a battle, so the end of the
+    // campaign has to be checked here as well as in resume().
+    if (MaybeEndCampaign()) {
         return;
     }
 
@@ -533,8 +616,13 @@ void OverworldState::RenderHud() {
         const int panelY = windowHeight_ - 116;
         ui::DrawPanel(renderer_, 12, panelY, 330, 66);
 
+        // Scaled against the strongest army any general starts with, so a full
+        // bar means "as strong as anyone began". The old divisor was a bare 80,
+        // which no general ever reaches -- the bar could never read more than
+        // about two thirds and looked broken at full strength.
         ui::DrawNumber(renderer_, digits, g.troops, 26, panelY + 16, 0.9f);
-        ui::DrawBar(renderer_, 110, panelY + 20, 210, 26, g.troops / 80.0f,
+        ui::DrawBar(renderer_, 110, panelY + 20, 210, 26,
+                    g.troops / static_cast<float>(world::kMaxStartTroops),
                     ui::BlueColour());
 
         // Marching-order marker: a ring on the castle currently chosen.

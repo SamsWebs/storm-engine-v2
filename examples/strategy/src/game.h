@@ -34,7 +34,9 @@ public:
     void ProcessInput();
     void Update();
     void Render();
-    void Run(StartState start = StartState::Menu);
+    // False when initialisation failed and the game never ran, so main() can
+    // exit non-zero.
+    bool Run(StartState start = StartState::Menu);
     void Destroy();
 
 private:

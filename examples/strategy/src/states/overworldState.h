@@ -42,6 +42,8 @@ private:
     static constexpr int MAP_W     = 16;
     static constexpr int MAP_H     = 12;
     static constexpr int MARCH_DAYS = 3;
+    static constexpr int DECO_COUNT = 16;   // trees, bushes and rocks
+    static constexpr int MAX_TREES  = 3;    // trees dominate; keep them rare
     static constexpr Uint32 DAY_MS = 1400;   // one day per 1.4s
 
     // Most real time a single frame may contribute to the day timer. Without a
@@ -50,6 +52,7 @@ private:
     static constexpr Uint32 MAX_DELTA_MS = 100;
 
     void SpawnTerrain();
+    void SpawnDecorations();
     void SpawnCastles();
     void RefreshCastleSprite(int castle);
     void SyncArmyMarkers();

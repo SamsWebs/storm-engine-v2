@@ -71,6 +71,11 @@ bool Game::LoadAssets() {
         {"tilemap", "./assets/gfx/terrain/tilemap.png"},
         {"water",   "./assets/gfx/terrain/water.png"},
 
+        // Scenery. Tree and bush are animated strips; rock is a single tile.
+        {"tree", "./assets/gfx/deco/tree.png"},
+        {"bush", "./assets/gfx/deco/bush.png"},
+        {"rock", "./assets/gfx/deco/rock.png"},
+
         {"explosion", "./assets/gfx/fx/explosion.png"},
 
 

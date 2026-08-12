@@ -95,6 +95,9 @@ bool Game::LoadAssets() {
         {"lose",         "./assets/ui/lose.png"},
         {"hint_map",     "./assets/ui/hint_map.png"},
         {"hint_battle",  "./assets/ui/hint_battle.png"},
+        {"confirm_retreat", "./assets/ui/confirm_retreat.png"},
+        {"confirm_body",    "./assets/ui/confirm_body.png"},
+        {"confirm_hint",    "./assets/ui/confirm_hint.png"},
     };
 
     // A missing texture is fatal, not a warning. The sentinel above only proves

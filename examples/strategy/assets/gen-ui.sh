@@ -95,4 +95,10 @@ outlined lose.png         "THE REALM IS LOST"  56 "$BLOOD"
 outlined hint_map.png     "ARROWS SELECT   ENTER MARCH   ESC QUIT"   20 "$DIM"
 outlined hint_battle.png  "1 CHARGE   2 HOLD   3 VOLLEY   4 RETREAT" 20 "$DIM"
 
+# Retreat confirmation. Retreat is the one order that cannot be taken back -- it
+# concedes the castle the instant it lands -- so it asks first.
+outlined confirm_retreat.png "RETREAT?"                            56 "$BLOOD"
+outlined confirm_body.png    "THE CASTLE IS LOST"                  26 "$PARCHMENT"
+outlined confirm_hint.png    "ENTER / A  CONFIRM      ESC / B  CANCEL" 20 "$DIM"
+
 echo "gen-ui.sh: wrote $(ls -1 "$OUT" | wc -l) files to $OUT/"

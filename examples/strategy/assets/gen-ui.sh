@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Regenerates assets/ui/ -- the digit strip and the text labels.
+# Regenerates assets/ui/ -- the digit strip, the text labels and the window icon.
 #
 # The engine has no text rendering (common/ carries five components and five
 # systems, and nothing links SDL_ttf), so every string in this game is a
@@ -100,5 +100,50 @@ outlined hint_battle.png  "1 CHARGE   2 HOLD   3 VOLLEY   4 RETREAT" 20 "$DIM"
 outlined confirm_retreat.png "RETREAT?"                            56 "$BLOOD"
 outlined confirm_body.png    "THE CASTLE IS LOST"                  26 "$PARCHMENT"
 outlined confirm_hint.png    "ENTER / A  CONFIRM      ESC / B  CANCEL" 20 "$DIM"
+
+# ---------------------------------------------------------------------------
+# Window icon.
+#
+# Drawn from primitives rather than cut from the artwork, which is what
+# examples/shooter does with its sprite sheet. That is not an option here: Tiny
+# Swords may not be redistributed, so anything derived from it would have to be
+# gitignored along with the rest of gfx/ and the repository would ship a game
+# with no icon. Generating it keeps the icon committed, licence-free, and
+# available before the player has downloaded anything.
+#
+# +antialias (i.e. antialiasing OFF) throughout: this sits next to pixel art,
+# and smoothed edges read as blurry at 32px rather than smooth.
+OL='#2b1e3d'    # outline, same plum as the text
+ST='#f6e7c8'    # stone
+SH='#cdb492'    # stone course
+GOLD='#ffd75e'
+BL='#5a8ce6'    # the Blue faction's pennant
+RD='#d25050'    # the Red faction's
+
+convert -size 64x64 xc:none +antialias \
+    `# pennants, one per faction, flown from the tower tops` \
+    -fill "$OL" -draw "rectangle 13,4 14,18" \
+    -fill "$BL" -draw "polygon 15,5 26,9 15,13" \
+    -fill "$OL" -draw "rectangle 49,4 50,18" \
+    -fill "$RD" -draw "polygon 48,5 37,9 48,13" \
+    `# curtain wall, set lower than the towers so the silhouette has a step` \
+    -fill "$OL" -draw "rectangle 20,28 44,58" \
+    -fill "$ST" -draw "rectangle 22,30 42,56" \
+    -fill "$OL" -draw "rectangle 22,28 26,33" -draw "rectangle 30,28 34,33" \
+                -draw "rectangle 38,28 42,33" \
+    `# towers` \
+    -fill "$OL" -draw "rectangle 6,16 22,58"  -fill "$ST" -draw "rectangle 8,18 20,56" \
+    -fill "$OL" -draw "rectangle 42,16 58,58" -fill "$ST" -draw "rectangle 44,18 56,56" \
+    -fill "$OL" -draw "rectangle 8,16 11,21"  -draw "rectangle 15,16 18,21" \
+                -draw "rectangle 44,16 47,21" -draw "rectangle 51,16 54,21" \
+    -fill "$OL" -draw "rectangle 12,26 15,32" -draw "rectangle 48,26 51,32" \
+    `# stone course on the towers only -- run across the whole front it cuts
+     # through the gate arch and the shape stops reading` \
+    -fill "$SH" -draw "rectangle 8,40 20,42" -draw "rectangle 44,40 56,42" \
+    `# gate` \
+    -fill "$OL"      -draw "roundrectangle 26,38 38,58 7,7" \
+    -fill "#4a3a5e"  -draw "roundrectangle 28,40 36,58 6,6" \
+    -fill "$GOLD"    -draw "rectangle 31,47 33,49" \
+    "$OUT/icon.png"
 
 echo "gen-ui.sh: wrote $(ls -1 "$OUT" | wc -l) files to $OUT/"

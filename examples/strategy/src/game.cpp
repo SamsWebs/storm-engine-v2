@@ -136,6 +136,22 @@ void Game::Initialize(StartState start) {
         return;
     }
 
+    // Window icon, set before the artwork check on purpose: it is one of the
+    // images this example owns (assets/gen-ui.sh draws it), so it is present
+    // even on the run where the player has not downloaded Tiny Swords yet and
+    // LoadAssets is about to refuse to start.
+    //
+    // SDL_SetWindowIcon copies the surface, so it is freed immediately --
+    // holding it would leak. Loaded through SDL_image rather than the
+    // AssetStore, which deals in textures and cannot hand back a surface.
+    if (SDL_Surface *icon = IMG_Load("./assets/ui/icon.png")) {
+        SDL_SetWindowIcon(window_, icon);
+        SDL_FreeSurface(icon);
+    } else {
+        // Not fatal: the game runs fine with the window manager's default.
+        logger_->Err("Missing ./assets/ui/icon.png -- run from the game root.");
+    }
+
     renderer_ = SDL_CreateRenderer(
         window_, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
     if (!renderer_) {

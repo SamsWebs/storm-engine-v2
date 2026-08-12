@@ -67,11 +67,18 @@ so `make run` and CI see the failure too.
 
 Everything in this directory that is not under `gfx/`:
 
-- **`ui/`** — the digit strip and every text label. The engine has no text
-  rendering at all: `common/` holds five components and five systems, and
-  nothing links SDL_ttf. Tiny Swords ships buttons and banners but no font, so
-  these are rendered from DejaVu Sans by `gen-ui.sh` and committed. Being
-  generated, they carry no third-party licence.
+- **`ui/`** — the digit strip, every text label, and the window icon. The engine
+  has no text rendering at all: `common/` holds five components and five
+  systems, and nothing links SDL_ttf. Tiny Swords ships buttons and banners but
+  no font, so these are rendered from DejaVu Sans by `gen-ui.sh` and committed.
+  Being generated, they carry no third-party licence.
+
+  `ui/icon.png` is drawn from primitives rather than cut out of the artwork the
+  way `examples/shooter` cuts its icon from its sprite sheet — anything derived
+  from Tiny Swords would have to be gitignored with the rest of `gfx/`, and the
+  repository would ship a game with no icon. It is also set before the artwork
+  check, so the window has an icon even on the run where the download is still
+  missing.
 - **`gen-ui.sh`** — regenerates `ui/`. Run it after changing any wording. Needs
   ImageMagick.
 - **`maps/overworld.map`** — the campaign map, in `TileMapLoader`'s CSV format.

@@ -1,8 +1,6 @@
 # netchat
 
-A console chat over UDP built on the engine's `net/` module — the smallest
-complete example of hosting a game and joining it. One process hosts on a port;
-any number of others join, and every line typed is broadcast to the whole room.
+A console chat over UDP built on the engine's `net/` module - the smallest complete example of hosting a game and joining it. One process hosts on a port; any number of others join, and every line typed is broadcast to the whole room.
 
 ## Building & Running
 
@@ -37,7 +35,7 @@ send; `/quit` leaves.
 | The per-frame pump | `Update()` (timers, keepalives, timeouts) + `Poll()` (receive, flush) in one loop |
 | Connect/disconnect callbacks | join/leave prints, including the disconnect *reason* |
 | Game messages over chunks | `NetMessageWriter` / `NetMessageReader`: type id first, then fields |
-| Reliable messages | `vital = true` — chat must never be dropped |
+| Reliable messages | `vital = true` - chat must never be dropped |
 | Broadcast | `NetServer::Broadcast` fans one message to every client |
 
 The client prints its own messages only after the host echoes them back —
@@ -45,8 +43,4 @@ watch your line appear once the round trip completes.
 
 ## Wire Up
 
-Every chat line is one chunk: `[varint type=1][varint length][name][varint
-length][text]`. Nothing about chat is special-cased in the engine — the same
-`Send`/`Broadcast`/`OnChunk` calls carry any game message (match setup,
-franchise state, position updates), which is the pattern the networked game
-loop will use.
+Every chat line is one chunk: `[varint type=1][varint length][name][varint length][text]`. Nothing about chat is special-cased in the engine - the same `Send`/`Broadcast`/`OnChunk` calls carry any game message (match setup, franchise state, position updates), which is the pattern the networked game loop will use.

@@ -1,6 +1,6 @@
 # Storm Checkers (netplay)
 
-A graphical, authoritative-netplay checkers game built as a storm-engine-v2 example. Demonstrates the engine's net module for real gameplay: the host validates every move, a full-state message syncs late joiners, and turns flow over reliable chunks — no prediction, no rollback, the cheapest way to learn networked game rules.
+A graphical, authoritative-netplay checkers game built as a storm-engine-v2 example. Demonstrates the engine's net module for real gameplay: the host validates every move, a full-state message syncs late joiners, and turns flow over reliable chunks - no prediction, no rollback, the cheapest way to learn networked game rules.
 
 ![Storm Engine v2 checkers example](screenshot.png)
 
@@ -22,7 +22,7 @@ Start the host, then join from other machines or terminals:
 ./bin/netplay-checkers <host-ip|localhost> 51235     # on a client machine
 ```
 
-`<host-ip>` is **the host machine's own LAN address** — substitute it, do not
+`<host-ip>` is **the host machine's own LAN address** - substitute it, do not
 type it literally. Find it on the host with `hostname -I` (or `ip -4 addr`).
 Both processes on the same machine? Use `localhost`.
 
@@ -48,7 +48,7 @@ Rules are standard draughts:
 
 - Pieces move one square diagonally; kings (from promotion) move in both directions.
 - Captures are **forced**: if you have a capture, you must take it.
-- Multi-jump chains continue automatically — keep clicking the same piece until the chain ends.
+- Multi-jump chains continue automatically - keep clicking the same piece until the chain ends.
 - Forfeit any time with `/ff`; if a player disconnects mid-game, the other side wins.
 - The host announces every move and the winner in the log and HUD.
 
@@ -59,4 +59,4 @@ Rules are standard draughts:
 - **ECS + RenderSystem**: board, pieces, and highlight marks are `Transform` + `Sprite` entities with z-index layering, rebuilt by the host after each move.
 - **AssetStore**: PNG textures for board/pieces/marks, TTF HUD font, and SDL_mixer SFX for moves, captures, and the win fanfare (audio degrades gracefully when no device is available).
 
-The server is the same binary as the client — `host`/join is decided by the command line, and the engine's net module runs on both sides.
+The server is the same binary as the client - `host`/join is decided by the command line, and the engine's net module runs on both sides.

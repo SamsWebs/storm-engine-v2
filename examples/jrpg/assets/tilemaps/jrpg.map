@@ -856,358 +856,157 @@ tiles Outside-Tileset 32 32 160 64 1 1184 0 1 1 0 0
 tiles Outside-Tileset 32 32 160 64 1 1184 608 1 1 0 0
 tiles Outside-Tileset 32 32 160 64 1 1216 0 1 1 0 0
 tiles Outside-Tileset 32 32 160 64 1 1216 608 1 1 0 0
-tiles Outside-Tileset 32 32 64 64 2 368 96 1 1 0 0
-tiles Outside-Tileset 32 32 64 64 2 368 112 1 1 0 0
-tiles Outside-Tileset 32 32 64 64 2 368 128 1 1 0 0
-tiles Outside-Tileset 32 32 64 64 2 368 144 1 1 0 0
-tiles Outside-Tileset 32 32 64 64 2 368 160 1 1 0 0
-tiles Outside-Tileset 32 32 64 64 2 368 176 1 1 0 0
-tiles Outside-Tileset 32 32 64 64 2 368 192 1 1 0 0
-tiles Outside-Tileset 32 32 64 64 2 368 208 1 1 0 0
-tiles Outside-Tileset 32 32 64 64 2 368 224 1 1 0 0
-tiles Outside-Tileset 32 32 64 64 2 368 240 1 1 0 0
-tiles Outside-Tileset 32 32 64 64 2 368 256 1 1 0 0
-tiles Outside-Tileset 32 32 64 64 2 368 272 1 1 0 0
-tiles Outside-Tileset 32 32 64 64 2 368 288 1 1 0 0
-tiles Outside-Tileset 32 32 64 64 2 368 304 1 1 0 0
-tiles Outside-Tileset 16 16 16 32 1 80 96 1 1 0 0
-tiles Outside-Tileset 16 16 16 32 1 128 96 1 1 0 0
-tiles Outside-Tileset 16 16 16 32 1 144 96 1 1 0 0
-tiles Outside-Tileset 16 16 16 32 1 160 96 1 1 0 0
-tiles Outside-Tileset 16 16 16 32 1 176 96 1 1 0 0
-tiles Outside-Tileset 16 16 16 32 1 192 96 1 1 0 0
-tiles Outside-Tileset 16 16 16 32 1 112 96 1 1 0 0
-tiles Outside-Tileset 16 16 16 32 1 208 96 1 1 0 0
-tiles Outside-Tileset 16 16 16 32 1 224 96 1 1 0 0
-tiles Outside-Tileset 16 16 16 32 1 240 96 1 1 0 0
-tiles Outside-Tileset 16 16 16 32 1 256 96 1 1 0 0
-tiles Outside-Tileset 16 16 16 32 1 272 96 1 1 0 0
-tiles Outside-Tileset 16 16 16 32 1 288 96 1 1 0 0
-tiles Outside-Tileset 16 16 16 32 1 304 96 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 320 112 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 336 112 1 1 0 0
-tiles Outside-Tileset 16 16 16 32 1 336 96 1 1 0 0
-tiles Outside-Tileset 16 16 16 32 1 320 96 1 1 0 0
-tiles Outside-Tileset 16 16 16 32 1 352 96 1 1 0 0
-tiles Outside-Tileset 16 16 16 32 1 368 96 1 1 0 0
-tiles Outside-Tileset 16 16 16 32 1 96 96 1 1 0 0
-tiles Outside-Tileset 16 16 16 32 1 64 96 1 1 0 0
-tiles Outside-Tileset 16 16 16 32 1 48 96 1 1 0 0
-tiles Outside-Tileset 16 16 16 32 1 32 96 1 1 0 0
-tiles Outside-Tileset 16 16 16 32 1 16 96 1 1 0 0
-tiles Outside-Tileset 16 16 16 32 1 0 96 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 0 112 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 16 112 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 32 112 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 48 112 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 48 128 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 64 128 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 80 128 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 96 128 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 128 112 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 112 112 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 96 112 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 64 112 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 80 112 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 144 112 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 160 112 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 176 112 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 192 112 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 208 112 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 224 112 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 240 112 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 256 112 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 272 112 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 288 112 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 304 112 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 352 112 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 336 128 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 368 144 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 368 112 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 352 128 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 368 128 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 320 128 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 304 128 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 288 128 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 272 128 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 256 128 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 240 128 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 224 128 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 208 128 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 192 128 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 176 128 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 160 128 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 144 128 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 128 128 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 112 128 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 32 128 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 16 128 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 0 128 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 0 144 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 0 160 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 16 160 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 64 160 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 16 144 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 64 144 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 48 160 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 48 144 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 32 144 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 80 144 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 96 144 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 128 144 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 112 144 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 144 144 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 160 144 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 176 144 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 192 144 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 208 144 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 224 144 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 240 144 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 256 144 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 272 144 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 288 144 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 304 144 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 352 160 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 336 144 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 320 144 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 80 160 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 96 160 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 112 160 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 128 160 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 144 160 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 160 160 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 176 160 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 192 176 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 192 160 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 208 160 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 224 160 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 240 160 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 256 160 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 272 160 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 288 160 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 304 160 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 320 160 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 336 160 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 368 160 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 352 144 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 368 176 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 368 192 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 352 192 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 352 176 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 336 208 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 288 192 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 320 176 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 304 176 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 288 176 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 224 176 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 208 176 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 176 176 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 160 176 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 144 176 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 128 176 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 112 176 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 96 176 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 80 176 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 64 176 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 48 176 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 32 160 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 32 176 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 0 176 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 16 176 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 240 176 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 368 224 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 320 192 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 272 192 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 256 176 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 336 176 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 336 192 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 304 192 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 272 176 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 224 192 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 208 192 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 192 192 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 176 192 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 160 192 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 144 192 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 128 192 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 112 192 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 96 192 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 80 192 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 64 192 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 48 192 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 32 192 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 16 192 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 0 192 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 0 240 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 0 208 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 16 208 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 32 208 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 48 208 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 80 208 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 96 208 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 112 208 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 128 208 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 160 208 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 192 208 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 176 208 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 208 208 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 224 208 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 240 208 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 256 208 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 272 208 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 288 208 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 304 208 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 256 192 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 352 208 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 240 192 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 320 208 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 144 208 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 64 208 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 16 224 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 32 224 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 48 224 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 64 224 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 80 224 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 112 224 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 160 224 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 192 224 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 240 224 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 224 224 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 256 224 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 288 224 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 272 224 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 176 224 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 208 224 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 128 224 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 144 224 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 96 224 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 304 224 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 320 224 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 336 224 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 352 224 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 368 240 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 352 240 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 336 240 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 320 240 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 304 240 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 288 240 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 272 240 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 256 240 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 240 240 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 224 240 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 208 240 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 192 240 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 176 240 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 160 240 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 144 240 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 128 240 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 112 240 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 96 240 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 80 240 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 64 240 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 48 240 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 32 240 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 16 240 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 16 256 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 0 224 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 0 256 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 144 256 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 96 256 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 112 256 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 64 256 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 80 256 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 48 256 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 160 256 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 224 256 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 128 256 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 32 256 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 208 256 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 240 256 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 256 256 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 288 256 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 272 256 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 176 256 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 192 256 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 336 256 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 368 272 1 1 0 0
+tiles Outside-Tileset 32 32 0 32 1 0 96 1 1 0 0
+tiles Outside-Tileset 32 32 0 64 1 0 128 1 1 0 0
+tiles Outside-Tileset 32 32 0 64 1 0 160 1 1 0 0
+tiles Outside-Tileset 32 32 0 64 1 0 192 1 1 0 0
+tiles Outside-Tileset 32 32 0 64 1 0 224 1 1 0 0
+tiles Outside-Tileset 32 32 0 64 1 0 256 1 1 0 0
+tiles Outside-Tileset 32 32 0 64 1 0 288 1 1 0 0
+tiles Outside-Tileset 32 32 0 96 1 0 320 1 1 0 0
+tiles Outside-Tileset 32 32 16 32 1 32 96 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 32 128 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 32 160 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 32 192 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 32 224 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 32 256 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 32 288 1 1 0 0
+tiles Outside-Tileset 32 32 16 96 1 32 320 1 1 0 0
+tiles Outside-Tileset 32 32 16 32 1 64 96 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 64 128 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 64 160 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 64 192 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 64 224 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 64 256 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 64 288 1 1 0 0
+tiles Outside-Tileset 32 32 16 96 1 64 320 1 1 0 0
+tiles Outside-Tileset 32 32 16 32 1 96 96 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 96 128 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 96 160 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 96 192 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 96 224 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 96 256 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 96 288 1 1 0 0
+tiles Outside-Tileset 32 32 16 96 1 96 320 1 1 0 0
+tiles Outside-Tileset 32 32 16 32 1 128 96 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 128 128 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 128 160 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 128 192 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 128 224 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 128 256 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 128 288 1 1 0 0
+tiles Outside-Tileset 32 32 16 96 1 128 320 1 1 0 0
+tiles Outside-Tileset 32 32 16 32 1 160 96 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 160 128 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 160 160 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 160 192 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 160 224 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 160 256 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 160 288 1 1 0 0
+tiles Outside-Tileset 32 32 16 96 1 160 320 1 1 0 0
+tiles Outside-Tileset 32 32 16 32 1 192 96 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 192 128 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 192 160 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 192 192 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 192 224 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 192 256 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 192 288 1 1 0 0
+tiles Outside-Tileset 32 32 16 96 1 192 320 1 1 0 0
+tiles Outside-Tileset 32 32 16 32 1 224 96 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 224 128 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 224 160 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 224 192 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 224 224 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 224 256 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 224 288 1 1 0 0
+tiles Outside-Tileset 32 32 16 96 1 224 320 1 1 0 0
+tiles Outside-Tileset 32 32 16 32 1 256 96 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 256 128 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 256 160 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 256 192 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 256 224 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 256 256 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 256 288 1 1 0 0
+tiles Outside-Tileset 32 32 16 96 1 256 320 1 1 0 0
+tiles Outside-Tileset 32 32 16 32 1 288 96 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 288 128 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 288 160 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 288 192 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 288 224 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 288 256 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 288 288 1 1 0 0
+tiles Outside-Tileset 32 32 16 96 1 288 320 1 1 0 0
+tiles Outside-Tileset 32 32 16 32 1 320 96 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 320 128 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 320 160 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 320 192 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 320 224 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 320 256 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 320 288 1 1 0 0
+tiles Outside-Tileset 32 32 16 96 1 320 320 1 1 0 0
+tiles Outside-Tileset 32 32 16 32 1 352 96 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 352 128 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 352 160 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 352 192 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 352 224 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 352 256 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 352 288 1 1 0 0
+tiles Outside-Tileset 32 32 16 96 1 352 320 1 1 0 0
+tiles Outside-Tileset 32 32 64 32 1 384 96 1 1 0 0
+tiles Outside-Tileset 32 32 64 64 1 384 128 1 1 0 0
+tiles Outside-Tileset 32 32 64 64 1 384 160 1 1 0 0
+tiles Outside-Tileset 32 32 64 64 1 384 192 1 1 0 0
+tiles Outside-Tileset 32 32 64 64 1 384 224 1 1 0 0
+tiles Outside-Tileset 32 32 64 64 1 384 256 1 1 0 0
+tiles Outside-Tileset 32 32 64 64 1 384 288 1 1 0 0
+tiles Outside-Tileset 32 32 64 96 1 384 320 1 1 0 0
+tiles Outside-Tileset 32 32 0 32 1 832 192 1 1 0 0
+tiles Outside-Tileset 32 32 0 64 1 832 224 1 1 0 0
+tiles Outside-Tileset 32 32 0 64 1 832 256 1 1 0 0
+tiles Outside-Tileset 32 32 0 64 1 832 288 1 1 0 0
+tiles Outside-Tileset 32 32 0 96 1 832 320 1 1 0 0
+tiles Outside-Tileset 32 32 16 32 1 864 192 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 864 224 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 864 256 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 864 288 1 1 0 0
+tiles Outside-Tileset 32 32 16 96 1 864 320 1 1 0 0
+tiles Outside-Tileset 32 32 16 32 1 896 192 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 896 224 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 896 256 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 896 288 1 1 0 0
+tiles Outside-Tileset 32 32 16 96 1 896 320 1 1 0 0
+tiles Outside-Tileset 32 32 16 32 1 928 192 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 928 224 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 928 256 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 928 288 1 1 0 0
+tiles Outside-Tileset 32 32 16 96 1 928 320 1 1 0 0
+tiles Outside-Tileset 32 32 16 32 1 960 192 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 960 224 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 960 256 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 960 288 1 1 0 0
+tiles Outside-Tileset 32 32 16 96 1 960 320 1 1 0 0
+tiles Outside-Tileset 32 32 16 32 1 992 192 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 992 224 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 992 256 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 992 288 1 1 0 0
+tiles Outside-Tileset 32 32 16 96 1 992 320 1 1 0 0
+tiles Outside-Tileset 32 32 16 32 1 1024 192 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 1024 224 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 1024 256 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 1024 288 1 1 0 0
+tiles Outside-Tileset 32 32 16 96 1 1024 320 1 1 0 0
+tiles Outside-Tileset 32 32 16 32 1 1056 192 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 1056 224 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 1056 256 1 1 0 0
+tiles Outside-Tileset 32 32 16 48 1 1056 288 1 1 0 0
+tiles Outside-Tileset 32 32 16 96 1 1056 320 1 1 0 0
+tiles Outside-Tileset 32 32 64 32 1 1088 192 1 1 0 0
+tiles Outside-Tileset 32 32 64 64 1 1088 224 1 1 0 0
+tiles Outside-Tileset 32 32 64 64 1 1088 256 1 1 0 0
+tiles Outside-Tileset 32 32 64 64 1 1088 288 1 1 0 0
+tiles Outside-Tileset 32 32 64 96 1 1088 320 1 1 0 0
 tiles Outside-Tileset 32 32 128 32 1 0 320 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 352 256 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 320 256 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 304 256 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 352 272 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 336 272 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 320 272 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 304 272 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 288 272 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 272 272 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 256 272 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 240 272 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 224 272 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 176 272 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 160 272 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 144 272 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 128 272 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 128 288 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 208 272 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 192 272 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 112 288 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 80 272 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 112 272 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 96 272 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 64 272 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 48 272 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 32 272 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 16 272 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 0 272 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 0 288 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 16 288 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 32 288 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 48 288 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 64 288 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 80 288 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 96 288 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 144 288 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 160 288 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 176 288 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 192 288 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 208 288 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 224 288 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 240 288 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 256 288 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 272 288 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 288 288 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 304 288 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 320 288 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 336 288 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 352 288 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 368 288 1 1 0 0
-tiles Outside-Tileset 16 16 16 112 1 0 304 1 1 0 0
-tiles Outside-Tileset 16 16 16 112 1 16 304 1 1 0 0
-tiles Outside-Tileset 16 16 16 112 1 32 304 1 1 0 0
-tiles Outside-Tileset 16 16 16 112 1 48 304 1 1 0 0
-tiles Outside-Tileset 16 16 16 112 1 64 304 1 1 0 0
-tiles Outside-Tileset 16 16 16 112 1 80 304 1 1 0 0
-tiles Outside-Tileset 16 16 16 112 1 96 304 1 1 0 0
-tiles Outside-Tileset 16 16 16 112 1 112 304 1 1 0 0
-tiles Outside-Tileset 16 16 16 112 1 128 304 1 1 0 0
-tiles Outside-Tileset 16 16 16 112 1 144 304 1 1 0 0
-tiles Outside-Tileset 16 16 16 112 1 160 304 1 1 0 0
-tiles Outside-Tileset 16 16 16 112 1 176 304 1 1 0 0
-tiles Outside-Tileset 16 16 16 112 1 192 304 1 1 0 0
-tiles Outside-Tileset 16 16 16 112 1 208 304 1 1 0 0
-tiles Outside-Tileset 16 16 16 112 1 224 304 1 1 0 0
-tiles Outside-Tileset 16 16 16 112 1 240 304 1 1 0 0
-tiles Outside-Tileset 16 16 16 112 1 256 304 1 1 0 0
-tiles Outside-Tileset 16 16 16 112 1 272 304 1 1 0 0
-tiles Outside-Tileset 16 16 16 112 1 288 304 1 1 0 0
-tiles Outside-Tileset 16 16 16 112 1 368 304 1 1 0 0
-tiles Outside-Tileset 16 16 16 112 1 352 304 1 1 0 0
-tiles Outside-Tileset 16 16 16 112 1 336 304 1 1 0 0
-tiles Outside-Tileset 16 16 16 112 1 304 304 1 1 0 0
-tiles Outside-Tileset 16 16 16 112 1 320 304 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 368 256 1 1 0 0
 tiles Outside-Tileset 16 16 80 32 1 384 96 1 1 0 0
-tiles Outside-Tileset 16 16 16 48 1 368 208 1 1 0 0
 tiles Outside-Tileset 32 32 128 64 1 0 352 1 1 0 0
 tiles Outside-Tileset 32 32 160 64 1 32 352 1 1 0 0
 tiles Outside-Tileset 32 32 160 64 1 64 352 1 1 0 0
@@ -1299,90 +1098,4 @@ tiles Buildings-Tileset 32 32 32 96 2 32 224 1 1 0 0
 tiles Outside-Tileset 32 32 224 96 2 1232 16 1 1 0 0
 tiles Outside-Tileset 32 32 96 128 2 0 384 1 1 0 0
 tiles Outside-Tileset 32 32 96 128 2 0 32 1 1 0 0
-tiles Outside-Tileset 32 32 0 96 2 848 320 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 0 64 2 848 288 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 0 64 2 848 272 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 0 64 2 848 256 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 0 64 2 848 304 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 0 64 2 848 240 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 0 64 2 864 240 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 0 64 2 848 224 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 0 64 2 864 208 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 0 64 2 864 224 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 0 64 2 848 208 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 0 32 2 848 192 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 32 32 2 880 192 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 32 32 2 896 192 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 32 32 2 912 192 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 32 32 2 928 192 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 32 32 2 944 192 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 32 32 2 960 192 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 32 32 2 976 192 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 32 32 2 992 192 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 32 32 2 1008 192 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 32 32 2 1024 192 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 32 32 2 1040 192 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 64 32 2 1072 192 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 64 64 2 1072 224 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 64 64 2 1072 240 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 64 64 2 1072 256 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 64 64 2 1072 272 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 64 64 2 1072 288 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 64 64 2 1072 304 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 32 96 2 880 320 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 64 96 2 1072 320 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 32 96 2 896 320 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 32 96 2 912 320 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 32 96 2 928 320 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 32 96 2 944 320 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 32 96 2 960 320 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 32 96 2 976 320 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 32 96 2 992 320 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 32 96 2 1008 320 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 32 96 2 1024 320 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 32 96 2 1040 320 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 32 96 2 1056 320 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 32 64 2 880 224 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 32 64 2 896 224 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 32 64 2 912 224 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 32 64 2 928 224 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 32 64 2 944 224 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 32 64 2 960 224 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 32 64 2 976 224 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 32 64 2 992 224 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 32 64 2 1008 224 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 32 64 2 1024 208 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 32 64 2 1040 208 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 32 64 2 1040 224 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 32 64 2 1040 240 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 32 64 2 1040 256 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 32 64 2 1040 272 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 32 64 2 1040 288 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 32 64 2 1024 288 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 32 64 2 1024 272 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 32 64 2 1008 304 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 32 64 2 1008 288 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 32 64 2 1024 256 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 32 64 2 1024 240 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 32 64 2 1008 240 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 32 64 2 1008 256 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 32 64 2 992 256 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 32 64 2 976 256 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 32 64 2 960 256 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 32 64 2 944 256 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 32 64 2 928 256 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 32 64 2 912 256 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 32 64 2 896 256 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 32 64 2 880 256 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 32 64 2 880 272 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 32 64 2 880 288 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 32 64 2 896 288 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 32 64 2 912 288 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 32 64 2 928 288 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 32 64 2 928 272 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 32 64 2 944 272 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 32 64 2 944 288 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 32 64 2 960 288 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 32 64 2 976 288 1 1 1 0 0 0 0 0
-tiles Outside-Tileset 32 32 32 64 2 992 272 1 1 1 0 0 0 0 0
 tiles Outside-Tileset 32 32 96 96 3 960 336 1 1 1 0 0 0 0 0

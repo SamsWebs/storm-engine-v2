@@ -75,4 +75,4 @@ Sprites: **Tiny Swords** by [Pixel Frog](https://pixelfrog-assets.itch.io/tiny-s
 
 `assets/ui/` and `assets/maps/` are generated and authored here.  `assets/gen-ui.sh` rebuilds the text and digits from DejaVu Sans; Storm! Engine v2 engine has no text rendering, so every string in the game is an image.
 
-The same script draws `assets/ui/icon.png`, the window icon, from ImageMagick primitives. `examples/shooter` cuts its icon out of its sprite sheet, which is not an option here — anything derived from Tiny Swords would have to be gitignored with the rest of `gfx/`, and the repository would ship a game with no icon. It is set before the artwork check, so the window is branded even on the run that stops to tell you to download the pack.
+The same script draws `assets/ui/icon.png`, the window icon, from ImageMagick primitives.

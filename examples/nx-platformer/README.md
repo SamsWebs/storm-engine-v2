@@ -1,4 +1,4 @@
-# Storm Platformer — Nintendo Switch
+# Storm Platformer - Nintendo Switch
 
 A Nintendo Switch homebrew port of the storm-engine-v2 platformer example. Builds with [devkitPro](https://devkitpro.org/) and produces an `.nro` you can run on a homebrew-enabled Switch or in an emulator.
 
@@ -91,4 +91,4 @@ nx-platformer/
 
 ## Engine Concepts Demonstrated
 
-Same ECS architecture, `TileMapLoader`, tile-based physics, and scrolling camera as the Linux platformer — see `examples/platformer/README.md` for a detailed breakdown. The key Switch-specific addition is the `#ifdef __SWITCH__` blocks that swap keyboard input for controller input and `./assets/` paths for `romfs:/assets/` paths without duplicating any game logic.
+Same ECS architecture, `TileMapLoader`, tile-based physics, and scrolling camera as the Linux platformer - see `examples/platformer/README.md` for a detailed breakdown. The key Switch-specific addition is the `#ifdef __SWITCH__` blocks that swap keyboard input for controller input and `./assets/` paths for `romfs:/assets/` paths without duplicating any game logic.

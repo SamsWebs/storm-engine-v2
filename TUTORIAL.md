@@ -2,8 +2,6 @@
 
 storm-engine-v2 is a C++17 game engine built on SDL2 that uses the **Entity Component System (ECS)** pattern. This tutorial walks you through building a game from scratch using the engine's core concepts.
 
----
-
 ## Table of Contents
 
 1. [Core Concepts](#core-concepts)
@@ -20,19 +18,15 @@ storm-engine-v2 is a C++17 game engine built on SDL2 that uses the **Entity Comp
 12. [Tags and Groups](#tags-and-groups)
 13. [Putting It Together](#putting-it-together)
 
----
-
 ## Core Concepts
 
 The engine is organized around three ideas:
 
-- **Entity** — a unique ID representing any object in your game (player, enemy, bullet, tile).
-- **Component** — plain data attached to an entity (position, velocity, sprite).
-- **System** — logic that operates on every entity that has a specific set of components.
+- **Entity** - a unique ID representing any object in your game (player, enemy, bullet, tile).
+- **Component** - plain data attached to an entity (position, velocity, sprite).
+- **System** - logic that operates on every entity that has a specific set of components.
 
 This separation keeps data and behavior independent, making it easy to add new entity types without touching existing code.
-
----
 
 ## Project Setup
 
@@ -61,8 +55,6 @@ include ../examples.mk
 ```
 
 `examples.mk` and `base.mk` handle all compiler flags, SDL2 linking, and the build rules automatically.
-
----
 
 ## The Game Loop
 
@@ -140,7 +132,7 @@ void Game::Run() {
     }
 }
 
-// Let the active state own all event polling — do NOT call SDL_PollEvent
+// Let the active state own all event polling - do NOT call SDL_PollEvent
 // here, or you will consume events before the state can see them.
 void Game::ProcessInput() { gameStateMachine.processInput(); }
 void Game::Update()       { gameStateMachine.update();       }
@@ -166,9 +158,7 @@ int main(int argc, char *argv[]) {
 }
 ```
 
-> **Important:** Never call `SDL_PollEvent` in both `Game::ProcessInput` and `PlayState::processInput`. The event queue is shared — whoever polls first consumes the events and the other sees nothing. Let the active state own all event polling.
-
----
+> **Important:** Never call `SDL_PollEvent` in both `Game::ProcessInput` and `PlayState::processInput`. The event queue is shared - whoever polls first consumes the events and the other sees nothing. Let the active state own all event polling.
 
 ## Game State Machine
 
@@ -195,8 +185,6 @@ public:
 ```
 
 `GameState` already includes all engine headers (`ecs.h`, `assetStore.h`, `systems/render.h`, etc.), so you don't need to repeat those includes in your state headers.
-
----
 
 ## Registry and Entities
 
@@ -227,7 +215,7 @@ player.RemoveComponent<RigidBodyComponent>();
 player.Kill();
 ```
 
-> Entity creation and destruction are **deferred** — they take effect the next time you call `registry.Update()`. Always call `registry.Update()` at the start of your `update()` method before running systems.
+> Entity creation and destruction are **deferred** - they take effect the next time you call `registry.Update()`. Always call `registry.Update()` at the start of your `update()` method before running systems.
 
 ```cpp
 void PlayState::update() {
@@ -242,8 +230,6 @@ void PlayState::update() {
     registry.GetSystem<CollisionSystem>().Update();
 }
 ```
-
----
 
 ## Built-in Components
 
@@ -285,7 +271,7 @@ entity.AddComponent<SpriteComponent>("player", 64, 64, 2);
 entity.GetComponent<SpriteComponent>().flip = SDL_FLIP_HORIZONTAL;
 ```
 
-`zIndex` controls draw order — higher values render on top.
+`zIndex` controls draw order - higher values render on top.
 
 ### AnimationComponent
 Animates a horizontal sprite sheet by cycling `srcRect.x` each frame.
@@ -312,8 +298,6 @@ An axis-aligned bounding box used by `CollisionSystem`.
 
 entity.AddComponent<BoxColliderComponent>(64, 64); // width, height
 ```
-
----
 
 ## Built-in Systems
 
@@ -358,11 +342,9 @@ void PlayState::render() {
 }
 ```
 
----
-
 ## Writing a Custom Component
 
-A component is a plain struct with a default constructor and any constructors you need. No base class is required — the engine uses templates to identify component types at compile time.
+A component is a plain struct with a default constructor and any constructors you need. No base class is required - the engine uses templates to identify component types at compile time.
 
 ```cpp
 // src/components/healthComponent.h
@@ -384,8 +366,6 @@ enemy.AddComponent<HealthComponent>(50);
 auto &health = enemy.GetComponent<HealthComponent>();
 health.hp -= 10;
 ```
-
----
 
 ## Writing a Custom System
 
@@ -425,8 +405,6 @@ registry.GetSystem<HealthSystem>().Update();
 
 A system only sees entities that have **all** of its required components. If you call `RequireComponent<HealthComponent>()` and `RequireComponent<TransformComponent>()`, the system ignores any entity missing either one.
 
----
-
 ## AssetStore
 
 `AssetStore` loads and caches SDL textures by string ID. Pass the renderer and a file path relative to where the binary runs.
@@ -444,8 +422,6 @@ assetStore->ClearAssets();
 
 The `AssetStore_Ptr` (`std::unique_ptr<AssetStore>`) is created in `Game` and moved into the first state via `std::move`. If you need it in subsequent states, pass a raw pointer or reference rather than moving ownership again.
 
----
-
 ## Logger
 
 ```cpp
@@ -456,13 +432,11 @@ logger.Err("Failed to load texture: player.png");
 
 Output is printed to stdout with a timestamp and color coding (green for info, red for errors). All entries are also stored in `Logger::messages` if you want to display them in-game.
 
----
-
 ## Tags and Groups
 
 Tags and groups let you quickly look up specific entities without iterating everything.
 
-**Tags** — one unique tag per entity, one entity per tag:
+**Tags** - one unique tag per entity, one entity per tag:
 
 ```cpp
 player.Tag("player");
@@ -474,7 +448,7 @@ Entity p = registry.GetEntityByTag("player");
 if (registry.EntityHasTag(p, "player")) { ... }
 ```
 
-**Groups** — multiple entities can share a group name:
+**Groups** - multiple entities can share a group name:
 
 ```cpp
 bullet.Group("bullets");
@@ -487,8 +461,6 @@ if (registry.DoesGroupExist("enemies")) {
     }
 }
 ```
-
----
 
 ## Putting It Together
 
@@ -565,15 +537,13 @@ bool PlayState::onEnter() { m_loadingComplete = true; return true; }
 bool PlayState::onExit()  { m_exiting = true;         return true; }
 ```
 
----
-
 ## Reference: What Lives Where
 
 | Thing | Location |
 |---|---|
 | Engine headers | `/usr/local/include/stormengine2/` |
 | Example source | `examples/<name>/src/` |
-| Assets | `examples/<name>/assets/` — paths are relative to the binary |
+| Assets | `examples/<name>/assets/` - paths are relative to the binary |
 | Binary output | `examples/<name>/bin/` |
 | Build rules | `base.mk`, `examples/examples.mk` |
 

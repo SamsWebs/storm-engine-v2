@@ -8,8 +8,6 @@ Everything here is a candidate for **Storm! Engine v3**, where the compatibility
 
 Measured on the current tree (x86-64, g++ 9, `-std=c++17`): `sizeof(Entity)` 16, `sizeof(Signature)` 8, `sizeof(System)` 32, `sizeof(Registry)` 576, `sizeof(Tile)` 80.
 
----
-
 ## 1. A stale `Entity` handle can kill a different, live entity
 
 `Entity` is `{ std::size_t id; Registry *registry; }` and nothing more. Ids are recycled: `KillEntity` returns the id to a free list and the next `CreateEntity` hands it straight back out.
@@ -127,8 +125,6 @@ Any game needing collision *response* — bouncing, damage, triggers, pickups �
 
 **Why it stays.** An event bus is new architecture, and changing what `CollisionSystem::Update()` does to entities is a silent behaviour break for anything relying on the current kill semantics.
 
----
-
 ## Also on the v3 list
 
 Not defects exactly — design decisions worth revisiting when compatibility is no longer binding:
@@ -139,7 +135,5 @@ Not defects exactly — design decisions worth revisiting when compatibility is 
 - **`GameStateMachine` owns raw pointers** with implicitly generated copy operations, so copying one double-frees every state.
 - **Frame pacing lives in game code**, not the engine — every state re-implements the same `SDL_Delay` budget against `MILLISECS_PER_FRAME`.
 - **Three member-naming schemes** across the engine (bare, `m_`, trailing underscore) and two method casings (PascalCase in the ECS, camelCase in the state machine).
-
----
 
 *Items that can be fixed without breaking compatibility are tracked separately and are not listed here.*

@@ -378,10 +378,19 @@ void BattleState::processInput() {
 void BattleState::update() {
     gamepad_->Update();
 
-    if (gamepad_->PressedA())     IssueCommand(Command::Charge);
-    if (gamepad_->PressedB())     IssueCommand(Command::Hold);
-    if (gamepad_->PressedX())     IssueCommand(Command::Volley);
-    if (gamepad_->PressedBack())  IssueCommand(Command::Retreat);
+    // Retreat is on Y, not Back. Back quits the game in every other state, so
+    // binding it to a move that concedes a castle meant a player who had learnt
+    // "Back leaves" surrendered instead -- and left no way to quit from here at
+    // all. All four orders now sit on the face buttons, in the same order as the
+    // on-screen bar, and Back means the same thing everywhere.
+    if (gamepad_->PressedA()) IssueCommand(Command::Charge);
+    if (gamepad_->PressedB()) IssueCommand(Command::Hold);
+    if (gamepad_->PressedX()) IssueCommand(Command::Volley);
+    if (gamepad_->PressedY()) IssueCommand(Command::Retreat);
+    if (gamepad_->PressedBack()) {
+        isRunning_ = false;
+        return;
+    }
 
     const Uint32 now   = SDL_GetTicks();
     const Uint32 delta = now - lastTicks_;

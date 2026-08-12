@@ -108,12 +108,19 @@ void PlayState::LoadColliders() {
             float cx, cy, sx, sy, cw, ch, ox, oy;
             if (!(f >> cx >> cy >> sx >> sy >> cw >> ch >> ox >> oy))
                 break;
-            // Each collider covers one source tile (32×32) at the given position
+            // Honour the size in the file. This used to read cw/ch and then
+            // discard them, hardcoding every collider to one source tile, so
+            // the file's own width/height columns meant nothing and a wall had
+            // to be spelled out one 32px block at a time. Nobody did, which is
+            // why the level had no perimeter and the player could walk off it.
+            //
+            // Zero still means "one tile" -- that is what all twenty of the
+            // original hand-placed entries carry.
             colliderRects_.push_back({
                 static_cast<int>(cx),
                 static_cast<int>(cy),
-                TILE_SRC_W,
-                TILE_SRC_H
+                (cw > 0) ? static_cast<int>(cw) : TILE_SRC_W,
+                (ch > 0) ? static_cast<int>(ch) : TILE_SRC_H
             });
         }
     }

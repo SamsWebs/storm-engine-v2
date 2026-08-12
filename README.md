@@ -18,7 +18,7 @@ A lightweight, ECS-based 2D game engine built on SDL2 — made for game jams and
 - **Virtual gamepad** for touch devices — d-pad + action-button layout, pure and spec'd (`<stormengine2/input/virtualGamepad.h>`), driven by `examples/android-platformer`
 - **UDP networking** — host/join LAN play: reliable + unreliable chunks, kick/ban/timeout, snapshot replication with per-client deltas and a prediction cache (`<stormengine2/net/net.h>`, see [docs/networking.md](docs/networking.md))
 - Built-in **tile map editor** with drag-to-paint, drag-to-erase, and layer support
-- Example games: platformer, shooter (*1945*, a vertical shoot-'em-up with menu, HUD and controller support), strategy, puzzle, JRPG, sports, Android platformer, Switch platformer, and networking demos (netchat, netrepl, netplay-checkers)
+- Example games: platformer, shooter (*1945*, a vertical shoot-'em-up with menu, HUD and controller support), strategy (*Realms*, a *Dragon Force*-style campaign map with pushed side-on battles — artwork downloaded separately, see below), puzzle, JRPG, sports, Android platformer, Switch platformer, and networking demos (netchat, netrepl, netplay-checkers)
 - Platforms: Linux, Nintendo Switch (source builds), Android (source builds, verified on hardware); iOS possible via the same SDL layer
 
 ## Component type limit
@@ -293,3 +293,12 @@ must stay with it. This differs from the rest of the repository, which is WTFPL.
 The `platformer` example's tileset is CC0 from
 [bee-m](https://bee-m.itch.io/simple-platformer-tileset-8x8-and-16x16); see
 `examples/platformer/assets/tilemaps/License.txt`.
+
+The `strategy` example uses **Tiny Swords** by
+[Pixel Frog](https://pixelfrog-assets.itch.io/tiny-swords). That pack is free
+for personal and commercial use but **may not be redistributed**, so it is the
+one example whose artwork is *not* in this repository: it ships code only and
+the pack is downloaded once, following
+`examples/strategy/assets/README.md`. Running it without the art prints the
+download URL and exits. Crediting Pixel Frog is optional under those terms and
+done here anyway.

@@ -55,3 +55,13 @@ editor/imgui.ini
 
 # Build-flag stamp (base.mk) — invalidates objects when PROFILE/OPT change
 .build-flags
+
+# examples/strategy draws its sprites from Tiny Swords (Pixel Frog), whose
+# licence permits use but forbids redistribution — "You may not redistribute,
+# resell, or repackage the assets, even if the files are modified." Committing
+# them here would be redistribution, so that example ships code only and the
+# user fetches the pack themselves; see examples/strategy/assets/README.md.
+#
+# Only gfx/ is the downloaded art. assets/ui/ (generated from a font by
+# gen-ui.sh) and assets/maps/ (authored here) are ours and stay tracked.
+examples/strategy/assets/gfx/

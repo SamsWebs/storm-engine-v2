@@ -1,114 +1,105 @@
-// //
-// //  GameOverState.cpp
-// //  SDL Game Programming Book
-// //
-// //  Created by shaun mitchell on 17/02/2013.
-// //  Copyright (c) 2013 shaun mitchell. All rights reserved.
-// //
+#include "gameOverState.h"
 
-// #include "GameOverState.h"
-// #include "MainMenuState.h"
-// #include "PlayState.h"
-// #include "TextureManager.h"
-// #include "AnimatedGraphic.h"
-// #include "Game.h"
-// #include "MenuButton.h"
-// #include "InputHandler.h"
-// #include "StateParser.h"
+#include "../ui.h"
+#include "menuState.h"
 
-// const std::string GameOverState::s_gameOverID = "GAMEOVER";
+const std::string GameOverState::s_gameOverID = "GAMEOVER";
 
-// void GameOverState::s_gameOverToMain()
-// {
-//     TheGame::Instance()->getStateMachine()->changeState(new MainMenuState());
-// }
+GameOverState::GameOverState(SDL_Renderer *renderer, int windowWidth,
+                             int windowHeight, bool isDebugging,
+                             AssetStore *assetStore, GameStateMachine *machine,
+                             Gamepad *gamepad, world::Campaign *campaign,
+                             world::Owner winner, bool &isRunning)
+    : renderer_{renderer}, windowWidth_{windowWidth},
+      windowHeight_{windowHeight}, isDebugging_{isDebugging},
+      assetStore_{assetStore}, machine_{machine}, gamepad_{gamepad},
+      campaign_{campaign}, winner_{winner}, isRunning_{isRunning} {}
 
-// void GameOverState::s_restartPlay()
-// {
-//     TheGame::Instance()->getStateMachine()->changeState(new PlayState());
-// }
+bool GameOverState::onEnter() {
+    enteredMs_ = SDL_GetTicks();
+    leaving_   = false;
+    logger_.Log("GameOverState entered");
+    return true;
+}
 
-// void GameOverState::update()
-// {
-//     if(m_loadingComplete && !m_gameObjects.empty())
-//     {
-//         for(unsigned int i = 0; i < m_gameObjects.size(); i++)
-//         {
-//             m_gameObjects[i]->update();
-//         }
-//     }
-// }
+bool GameOverState::onExit() {
+    logger_.Log("GameOverState exited");
+    return true;
+}
 
-// void GameOverState::render()
-// {
-//     if(m_loadingComplete && !m_gameObjects.empty())
-//     {
-//         for(unsigned int i = 0; i < m_gameObjects.size(); i++)
-//         {
-//             m_gameObjects[i]->draw();
-//         }
-//     }
-// }
+void GameOverState::ReturnToMenu() {
+    if (leaving_) {
+        return;
+    }
+    leaving_ = true;
+    machine_->changeState(new MenuState(renderer_, windowWidth_, windowHeight_,
+                                        isDebugging_, assetStore_, machine_,
+                                        gamepad_, campaign_, isRunning_));
+}
 
-// bool GameOverState::onEnter()
-// {
-//     // parse the state
-//     StateParser stateParser;
-//     stateParser.parseState(DATA_PREFIX "attack.xml", s_gameOverID,
-//     &m_gameObjects, &m_textureIDList);
+void GameOverState::processInput() {
+    SDL_Event event;
+    while (SDL_PollEvent(&event)) {
+        gamepad_->HandleEvent(event);
 
-//     m_callbacks.push_back(0);
-//     m_callbacks.push_back(s_gameOverToMain);
-//     m_callbacks.push_back(s_restartPlay);
+        if (event.type == SDL_QUIT) {
+            isRunning_ = false;
+            return;
+        }
+        if (event.type != SDL_KEYDOWN) {
+            continue;
+        }
+        // Auto-repeat would dismiss this screen the instant it appeared if the
+        // player were still holding the key that ended the campaign.
+        if (event.key.repeat) {
+            continue;
+        }
+        if (event.key.keysym.sym == SDLK_ESCAPE) {
+            isRunning_ = false;
+            return;
+        }
+        ReturnToMenu();
+        return;
+    }
+}
 
-//     // set the callbacks for menu items
-//     setCallbacks(m_callbacks);
+void GameOverState::update() {
+    gamepad_->Update();
+    if (leaving_) {
+        return;
+    }
+    if (gamepad_->PressedA() || gamepad_->PressedStart()) {
+        ReturnToMenu();
+        return;
+    }
+    if (gamepad_->PressedBack()) {
+        isRunning_ = false;
+        return;
+    }
+    if (SDL_GetTicks() - enteredMs_ > AUTO_RETURN_MS) {
+        ReturnToMenu();
+    }
+}
 
-//     m_loadingComplete = true;
+void GameOverState::render() {
+    const bool won = (winner_ == world::Owner::Blue);
+    if (won) {
+        SDL_SetRenderDrawColor(renderer_, 38, 64, 48, 255);
+    } else {
+        SDL_SetRenderDrawColor(renderer_, 60, 34, 38, 255);
+    }
+    SDL_RenderClear(renderer_);
 
-//     std::cout << "entering GameOverState\n";
-//     return true;
-// }
+    const int cx = windowWidth_ / 2;
+    ui::DrawTextureCentred(renderer_,
+                           assetStore_->GetTexture(won ? "win" : "lose"), cx,
+                           260, 1.0f);
 
-// bool GameOverState::onExit()
-// {
-//     if(m_loadingComplete && !m_gameObjects.empty())
-//     {
-//         for(unsigned int i = 0; i < m_gameObjects.size(); i++)
-//         {
-//             m_gameObjects[i]->clean();
-//             delete m_gameObjects[i];
-//         }
+    ui::DrawPanel(renderer_, cx - 150, 400, 300, 60);
+    ui::DrawTexture(renderer_, assetStore_->GetTexture("day"), cx - 128, 412,
+                    0.9f);
+    ui::DrawNumber(renderer_, assetStore_->GetTexture("digits"), campaign_->day,
+                   cx - 40, 410, 0.9f);
 
-//         m_gameObjects.clear();
-//     }
-
-//     std::cout << m_gameObjects.size();
-
-//     // clear the texture manager
-//     for(unsigned int i = 0; i < m_textureIDList.size(); i++)
-//     {
-//         TheTextureManager::Instance()->clearFromTextureMap(m_textureIDList[i]);
-//     }
-
-//     TheInputHandler::Instance()->reset();
-
-//     std::cout << "exiting GameOverState\n";
-//     return true;
-// }
-
-// void GameOverState::setCallbacks(const std::vector<Callback>& callbacks)
-// {
-//     // go through the game objects
-//     for(unsigned int i = 0; i < m_gameObjects.size(); i++)
-//     {
-//         // if they are of type MenuButton then assign a callback based on the
-//         id passed in from the file
-//         if(dynamic_cast<MenuButton*>(m_gameObjects[i]))
-//         {
-//             MenuButton* pButton =
-//             dynamic_cast<MenuButton*>(m_gameObjects[i]);
-//             pButton->setCallback(callbacks[pButton->getCallbackID()]);
-//         }
-//     }
-// }
+    SDL_RenderPresent(renderer_);
+}

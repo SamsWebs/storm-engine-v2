@@ -235,17 +235,47 @@ void BattleState::IssueCommand(Command c) {
         return;
     }
     if (c == Command::Retreat) {
-        // The player's side quits the field, so the other side wins -- which is
-        // not the same as "the defender wins". When the player is defending,
-        // retreating hands the castle to the attacker; the old unconditional
-        // Finish(defender_.side) awarded the win to the player in exactly that
-        // case, turning the retreat key into a free victory.
-        Finish(AiSide().side);
+        // Ask first. Every other order is a few seconds of modifier and wears
+        // off; this one ends the battle and hands over the castle, so a
+        // mispress is unrecoverable.
+        confirmRetreat_ = true;
+        pausedAtMs_     = SDL_GetTicks();
         return;
     }
     Side &player        = PlayerSide();
     player.command      = c;
     player.commandUntil = SDL_GetTicks() + COMMAND_MS;
+}
+
+void BattleState::ConfirmRetreat() {
+    if (!confirmRetreat_) {
+        return;
+    }
+    confirmRetreat_ = false;
+    lastTicks_      = SDL_GetTicks();   // the prompt swallowed real time
+    logger_.Log("Retreat confirmed");
+    // The player's side quits the field, so the other side wins -- which is not
+    // the same as "the defender wins". When the player is defending, retreating
+    // hands the castle to the attacker.
+    Finish(AiSide().side);
+}
+
+void BattleState::CancelRetreat() {
+    if (!confirmRetreat_) {
+        return;
+    }
+    confirmRetreat_ = false;
+
+    // Give back the time the prompt was up. Both deadlines are absolute
+    // SDL_GetTicks values, so without this a long deliberation would silently
+    // expire the standing order and, once the battle is over, cut short the
+    // outcome banner -- or skip it entirely and pop straight back to the map.
+    const Uint32 paused = SDL_GetTicks() - pausedAtMs_;
+    attacker_.commandUntil += paused;
+    defender_.commandUntil += paused;
+    overAtMs_              += paused;
+    lastTicks_ = SDL_GetTicks();
+    logger_.Log("Retreat cancelled");
 }
 
 void BattleState::ResolveTick() {
@@ -361,6 +391,30 @@ void BattleState::processInput() {
             continue;
         }
 
+        // Modal. While the retreat prompt is up it is the only thing listening,
+        // so a stray order key cannot slip through and a mis-aimed press cannot
+        // confirm by accident.
+        if (confirmRetreat_) {
+            switch (event.key.keysym.sym) {
+            case SDLK_RETURN:
+            case SDLK_KP_ENTER:
+            case SDLK_y:
+                ConfirmRetreat();
+                return;
+            // ESC cancels the prompt rather than quitting the game. That is what
+            // a modal is expected to do, and it keeps ESC from ever being the
+            // key that loses a castle.
+            case SDLK_ESCAPE:
+            case SDLK_n:
+            case SDLK_4:
+                CancelRetreat();
+                break;
+            default:
+                break;
+            }
+            continue;
+        }
+
         switch (event.key.keysym.sym) {
         case SDLK_1: IssueCommand(Command::Charge);  break;
         case SDLK_2: IssueCommand(Command::Hold);    break;
@@ -383,6 +437,26 @@ void BattleState::update() {
     // "Back leaves" surrendered instead -- and left no way to quit from here at
     // all. All four orders now sit on the face buttons, in the same order as the
     // on-screen bar, and Back means the same thing everywhere.
+    if (confirmRetreat_) {
+        // Modal on the pad too: A confirms, B cancels, everything else is
+        // ignored. Y deliberately does NOT confirm -- Y is what opened the
+        // prompt, and a double-tap would defeat the point of asking.
+        if (gamepad_->PressedA() || gamepad_->PressedStart()) {
+            ConfirmRetreat();
+        } else if (gamepad_->PressedB() || gamepad_->PressedBack()) {
+            CancelRetreat();
+        }
+
+        // Damage stops, but the scene does not. Animations keep running and
+        // finished effects keep being culled, so the pause reads as a held
+        // breath rather than as the game having hung -- and the effect entities
+        // do not sit around waiting for the player to make up their mind.
+        CullFinishedEffects();
+        registry_.Update();
+        registry_.GetSystem<AnimationSystem>().Update();
+        return;
+    }
+
     if (gamepad_->PressedA()) IssueCommand(Command::Charge);
     if (gamepad_->PressedB()) IssueCommand(Command::Hold);
     if (gamepad_->PressedX()) IssueCommand(Command::Volley);
@@ -526,6 +600,35 @@ void BattleState::RenderHud() {
     }
 }
 
+// Drawn over the battle, not instead of it: the player is being asked about the
+// fight, so the fight has to stay on screen behind the question.
+void BattleState::RenderRetreatPrompt() {
+    // Dim everything first, which is what makes the panel read as modal rather
+    // than as one more HUD element.
+    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(renderer_, 12, 8, 20, 170);
+    SDL_Rect full{0, 0, windowWidth_, windowHeight_};
+    SDL_RenderFillRect(renderer_, &full);
+
+    // Deliberately NOT centred. The ranks sit across the middle of the screen,
+    // and a centred panel covers exactly the thing the player is being asked
+    // about -- how the fight is actually going. This sits above them, under the
+    // strength bars.
+    const int w = 560;
+    const int h = 184;
+    const int x = windowWidth_ / 2 - w / 2;
+    const int y = 100;
+    ui::DrawPanel(renderer_, x, y, w, h, 235);
+
+    const int cx = windowWidth_ / 2;
+    ui::DrawTextureCentred(renderer_, assetStore_->GetTexture("confirm_retreat"),
+                           cx, y + 22, 1.0f);
+    ui::DrawTextureCentred(renderer_, assetStore_->GetTexture("confirm_body"),
+                           cx, y + 86, 1.0f);
+    ui::DrawTextureCentred(renderer_, assetStore_->GetTexture("confirm_hint"),
+                           cx, y + 136, 1.0f);
+}
+
 void BattleState::render() {
     // A flat field rather than a tilemap: the battle is a different register
     // from the map, and GameStateMachine::render() draws only the top state, so
@@ -539,6 +642,10 @@ void BattleState::render() {
 
     registry_.GetSystem<RenderSystem>().Update(renderer_, *assetStore_);
     RenderHud();
+
+    if (confirmRetreat_) {
+        RenderRetreatPrompt();
+    }
 
     SDL_RenderPresent(renderer_);
 }

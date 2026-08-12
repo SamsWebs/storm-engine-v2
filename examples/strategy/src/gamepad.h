@@ -85,6 +85,11 @@ public:
         current_.start = button(SDL_CONTROLLER_BUTTON_START);
         current_.back  = button(SDL_CONTROLLER_BUTTON_BACK);
 
+        // Shoulders. Cycling a selection with LB/RB is the standard console
+        // idiom and leaves the d-pad free for the thing being chosen.
+        current_.lb = button(SDL_CONTROLLER_BUTTON_LEFTSHOULDER);
+        current_.rb = button(SDL_CONTROLLER_BUTTON_RIGHTSHOULDER);
+
         // Right trigger as an alternative fire, which is what most people
         // reach for in a shooter.
         current_.fire = current_.a ||
@@ -109,10 +114,13 @@ public:
     bool PressedA() const     { return current_.a && !previous_.a; }
     bool PressedB() const     { return current_.b && !previous_.b; }
     bool PressedX() const     { return current_.x && !previous_.x; }
+    bool PressedY() const     { return current_.y && !previous_.y; }
     bool PressedStart() const { return current_.start && !previous_.start; }
     bool PressedBack() const  { return current_.back && !previous_.back; }
     bool PressedUp() const    { return current_.up && !previous_.up; }
     bool PressedDown() const  { return current_.down && !previous_.down; }
+    bool PressedLB() const    { return current_.lb && !previous_.lb; }
+    bool PressedRB() const    { return current_.rb && !previous_.rb; }
 
 private:
     static constexpr Sint16 DEADZONE = 8000;   // ~25% of 32767
@@ -121,6 +129,7 @@ private:
         bool left = false, right = false, up = false, down = false;
         bool a = false, b = false, x = false, y = false;
         bool start = false, back = false;
+        bool lb = false, rb = false;
         bool fire = false;
     };
 

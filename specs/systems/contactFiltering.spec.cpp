@@ -84,6 +84,31 @@ It(lets_bullets_hit_enemies_but_not_each_other) {
   Assert::That(system.GetContacts().size(), Equals(2u));
 }
 
+It(consults_the_filter_only_for_pairs_that_actually_overlap) {
+  Registry registry;
+  registry.AddSystem<ContactSystem>();
+
+  // Two overlapping, one far away. The filter must see the overlapping pair
+  // and nothing else - it is the cheap gate in front of the manifold, not a
+  // visitor over every pair in the world.
+  MakeFilterCollider(registry, {0, 0}, "a");
+  MakeFilterCollider(registry, {5, 5}, "b");
+  MakeFilterCollider(registry, {900, 900}, "c");
+
+  registry.Update();
+  auto &system = registry.GetSystem<ContactSystem>();
+
+  int consulted = 0;
+  system.SetPairFilter([&consulted](const Entity &, const Entity &) {
+    ++consulted;
+    return true;
+  });
+  system.Update();
+
+  Assert::That(consulted, Equals(1));
+  Assert::That(system.GetContacts().size(), Equals(1u));
+}
+
 It(implements_a_sensor_as_a_filtered_pair_without_a_new_component) {
   Registry registry;
   registry.AddSystem<ContactSystem>();

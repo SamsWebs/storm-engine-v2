@@ -28,15 +28,6 @@ struct PlayerComponent {};
 struct EnemyComponent {};
 struct BulletComponent {};
 
-struct AABB {
-    float x, y, w, h;
-};
-
-bool Overlaps(const AABB &a, const AABB &b) {
-    return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h &&
-           a.y + a.h > b.y;
-}
-
 } // namespace
 
 const std::string PlayState::s_playID = "PLAY_STATE";
@@ -63,6 +54,23 @@ bool PlayState::onEnter() {
     registry_.AddSystem<MovementSystem>();
     registry_.AddSystem<RenderSystem>();
     registry_.AddSystem<AnimationSystem>();
+    registry_.AddSystem<ContactSystem>();
+
+    // Only bullet-vs-enemy and player-vs-enemy mean anything here. Rejecting
+    // the rest in the filter rather than in CheckCollisions is what keeps a
+    // dense volley cheap: without it every bullet pairs with every other
+    // bullet, and all of those contacts are built and then thrown away.
+    registry_.GetSystem<ContactSystem>().SetPairFilter(
+        [](const Entity &a, const Entity &b) {
+            const bool aEnemy = a.HasComponent<EnemyComponent>();
+            const bool bEnemy = b.HasComponent<EnemyComponent>();
+            if (aEnemy == bEnemy) {
+                return false; // enemy-vs-enemy, or neither side is an enemy
+            }
+            const Entity &other = aEnemy ? b : a;
+            return other.HasComponent<BulletComponent>() ||
+                   other.HasComponent<PlayerComponent>();
+        });
 
     SpawnPlayer();
     SpawnWave();
@@ -98,6 +106,9 @@ void PlayState::SpawnPlayer() {
     // -- silently. Non-looped: the roll is started by resetting startTime and
     // ends on the last frame.
     player.AddComponent<AnimationComponent>(8, ROLL_FPS, false, false);
+    // Inset from the 32px sprite: the aircraft does not fill its cell, and a
+    // full-cell hitbox made near misses read as hits.
+    player.AddComponent<BoxColliderComponent>(20, 20, glm::vec2(6, 6));
 
     player_ = player;
 }
@@ -111,6 +122,7 @@ void PlayState::SpawnEnemy(const glm::vec2 &pos) {
     // Green fighter, sheet row 2 col 0.
     enemy.AddComponent<SpriteComponent>("sheet", SPRITE, SPRITE, 1, false, 0,
                                         2 * SPRITE);
+    enemy.AddComponent<BoxColliderComponent>(SPRITE, SPRITE);
     // No flip: the sheet's aircraft are drawn nose-down already, which is the
     // direction these fly.
 }
@@ -129,6 +141,8 @@ void PlayState::SpawnBullet() {
     // Orange bullet pair, sheet row 5 col 0.
     bullet.AddComponent<SpriteComponent>("sheet", SPRITE, SPRITE, 2, false, 0,
                                          5 * SPRITE);
+    // The sprite cell is 32px but the drawn bullet pair is a narrow strip.
+    bullet.AddComponent<BoxColliderComponent>(10, 16, glm::vec2(11, 8));
 }
 
 void PlayState::SpawnExplosion(glm::vec2 pos) {
@@ -386,93 +400,74 @@ void PlayState::CullOffscreenEntities() {
     }
 }
 
-// Hand-rolled AABB checks. CollisionSystem is wrong here twice over: it kills
-// BOTH entities on contact -- deleting the player on any enemy touch -- and it
-// offers no hook for scoring or spawning an explosion.
+// Overlap detection comes from the engine's ContactSystem, which reports
+// contacts instead of acting on them. CollisionSystem, the older one, is wrong
+// here twice over: it kills BOTH entities on contact -- deleting the player on
+// any enemy touch -- and it offers no hook for scoring or spawning an
+// explosion.
 void PlayState::CheckCollisions() {
     if (!player_ || leaving_) {
         return;
     }
     const Uint32 now = SDL_GetTicks();
 
-    auto &pt = player_->GetComponent<TransformComponent>();
-    const AABB playerBox{pt.position.x + 6.0f, pt.position.y + 6.0f, 20.0f,
-                         20.0f};
+    auto &contacts = registry_.GetSystem<ContactSystem>();
+    contacts.Update();
 
-    std::vector<Entity> bullets = registry_.DoesGroupExist("bullets")
-                                      ? registry_.GetEntitiesByGroup("bullets")
-                                      : std::vector<Entity>{};
-    std::vector<Entity> enemies = registry_.DoesGroupExist("enemies")
-                                      ? registry_.GetEntitiesByGroup("enemies")
-                                      : std::vector<Entity>{};
-
-    // A killed entity stays in these snapshots -- and in its group -- until the
-    // next registry_.Update(). Track what has died this frame by id so a second
-    // bullet cannot hit the same enemy and score it twice.
+    // A killed entity stays in the system's entity vector until the next
+    // registry_.Update(), so it can still turn up in a contact this frame.
+    // Track what has died by id, so a second bullet cannot hit the same enemy
+    // and score it twice.
     //
-    // The previous version guarded against that by breaking out of the whole
-    // bullet loop after the first hit, which silently capped the game at one
-    // kill per frame: fire fast enough into a dense formation and bullets
-    // passed straight through.
-    std::set<int> deadEnemies;
-    std::set<int> spentBullets;
+    // An earlier version guarded that by breaking out of the whole bullet loop
+    // after the first hit, which silently capped the game at one kill per
+    // frame: fire fast enough into a dense formation and bullets passed
+    // straight through.
+    std::set<std::size_t> deadEnemies;
+    std::set<std::size_t> spentBullets;
 
-    for (auto &b : bullets) {
-        if (spentBullets.count(b.GetId())) {
+    // Bullets get their own pass, ahead of the player's. The hand-rolled
+    // version resolved every bullet before it looked at the player, so an
+    // enemy shot down this frame could never also take a life. Contacts arrive
+    // sorted by entity id, which would interleave the two.
+    for (const auto &c : contacts.GetContacts()) {
+        const bool aIsEnemy = c.a.HasComponent<EnemyComponent>();
+        Entity enemy = aIsEnemy ? c.a : c.b;
+        Entity other = aIsEnemy ? c.b : c.a;
+        if (!other.HasComponent<BulletComponent>()) {
             continue;
         }
-        auto *bt = registry_.TryGetComponent<TransformComponent>(b);
-        if (!bt) {
+        if (deadEnemies.count(enemy.GetId()) ||
+            spentBullets.count(other.GetId())) {
             continue;
         }
-        const AABB bulletBox{bt->position.x + 11.0f, bt->position.y + 8.0f,
-                             10.0f, 16.0f};
 
-        for (auto &e : enemies) {
-            if (deadEnemies.count(e.GetId())) {
-                continue;
-            }
-            auto *et = registry_.TryGetComponent<TransformComponent>(e);
-            if (!et) {
-                continue;
-            }
-            const AABB enemyBox{et->position.x, et->position.y,
-                                static_cast<float>(SPRITE),
-                                static_cast<float>(SPRITE)};
-            if (!Overlaps(bulletBox, enemyBox)) {
-                continue;
-            }
-
-            SpawnExplosion(et->position);
-            e.Kill();
-            b.Kill();
-            deadEnemies.insert(e.GetId());
-            spentBullets.insert(b.GetId());
-            score_ += 100;
-            logger_.Log("Score: " + std::to_string(score_));
-            break;   // one bullet kills one enemy
-        }
+        SpawnExplosion(enemy.GetComponent<TransformComponent>().position);
+        enemy.Kill();
+        other.Kill();
+        deadEnemies.insert(enemy.GetId());
+        spentBullets.insert(other.GetId());
+        score_ += 100;
+        logger_.Log("Score: " + std::to_string(score_));
     }
 
     if (PlayerInvulnerable(now)) {
         return;
     }
-    for (auto &e : enemies) {
-        if (deadEnemies.count(e.GetId())) {
+
+    for (const auto &c : contacts.GetContacts()) {
+        const bool aIsEnemy = c.a.HasComponent<EnemyComponent>();
+        const Entity &enemy = aIsEnemy ? c.a : c.b;
+        const Entity &other = aIsEnemy ? c.b : c.a;
+        if (!other.HasComponent<PlayerComponent>()) {
             continue;
         }
-        auto *et = registry_.TryGetComponent<TransformComponent>(e);
-        if (!et) {
+        if (deadEnemies.count(enemy.GetId())) {
             continue;
         }
-        const AABB enemyBox{et->position.x, et->position.y,
-                            static_cast<float>(SPRITE),
-                            static_cast<float>(SPRITE)};
-        if (Overlaps(playerBox, enemyBox)) {
-            SpawnExplosion(pt.position);
-            LoseLife();
-            return;   // LoseLife may have queued a changeState
-        }
+        SpawnExplosion(player_->GetComponent<TransformComponent>().position);
+        LoseLife(); // may have queued a changeState
+        return;
     }
 }
 
@@ -527,8 +522,8 @@ void PlayState::render() {
     // No debug collider overlay: RenderColliderSystem is not registered, and
     // GetSystem on an unregistered system goes through std::map::at -- it
     // would throw here and abort under the Switch build's -fno-exceptions.
-    // Nothing in this game carries a BoxColliderComponent anyway; collision is
-    // hand-rolled AABB in CheckCollisions.
+    // The entities do carry BoxColliderComponent now, so registering it in
+    // onEnter() is all an overlay would take.
 
     RenderHud();
 

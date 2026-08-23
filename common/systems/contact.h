@@ -97,9 +97,14 @@ public:
 
         Contact contact{entities[low], entities[high], glm::vec2(0.0f, 0.0f),
                         0.0f};
-        if (!Manifold(bounds[low], bounds[high], contact.normal, contact.depth))
-          continue;
+
+        // Filter before the manifold, not after. The whole point of the filter
+        // is to make a crowd of like things cheap - a volley of bullets pairs
+        // with itself O(n^2) times - and computing the manifold first would do
+        // the expensive half of the work for every pair it then discards.
         if (filter && !filter(contact.a, contact.b))
+          continue;
+        if (!Manifold(bounds[low], bounds[high], contact.normal, contact.depth))
           continue;
 
         contacts.push_back(contact);

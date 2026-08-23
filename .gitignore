@@ -48,6 +48,7 @@ local.properties
 .claude/settings.local.json
 .agents/
 CLAUDE.md
+CODING.md
 docs/TECH_DEBT.md
 
 # Editor runtime state (ImGui rewrites ./imgui.ini in the CWD on every run)

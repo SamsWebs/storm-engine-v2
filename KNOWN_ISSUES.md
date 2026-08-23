@@ -6,6 +6,8 @@ The 1.x public API is frozen. A game that compiles and links against 1.2.x must 
 
 Everything here is a candidate for **Storm! Engine v3**, where the compatibility promise resets. Items that *can* be fixed without a break live in the tech-debt ledger instead, not in this file.
 
+**One deliberate exception has been taken.** 1.3.0 added font and sound caches to `AssetStore`, moving `sizeof(AssetStore)` from 112 to 208. Games allocate the store themselves via `std::make_unique<AssetStore>()`, so the size is emitted in game code and a 1.2.x binary relinked against a 1.3.0 `.so` overflows its allocation. It was taken knowingly: the `.deb` ships headers and library together, so the supported upgrade path - install the package, rebuild the game - is always consistent. It is recorded here so the next layout change is argued rather than assumed.
+
 Measured on the current tree (x86-64, g++ 9, `-std=c++17`): `sizeof(Entity)` 16, `sizeof(Signature)` 8, `sizeof(System)` 32, `sizeof(Registry)` 576, `sizeof(Tile)` 80.
 
 ## 1. A stale `Entity` handle can kill a different, live entity

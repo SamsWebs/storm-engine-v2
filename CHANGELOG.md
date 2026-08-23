@@ -2,7 +2,48 @@
 
 ## [1.3.0] - 2026-08-23
 
+> **Upgrading from 1.2.x requires a REBUILD, not just a relink.** `AssetStore`
+> gained font and sound caches, so `sizeof(AssetStore)` went from 112 to 208
+> bytes. Every game allocates the store in its own code
+> (`assetStore = std::make_unique<AssetStore>()`), which emits the size at the
+> call site - so a game binary compiled against 1.2.x headers allocates 112
+> bytes and then calls a 1.3.0 constructor that initialises out to 208. That is
+> a heap overflow, and nothing warns about it.
+>
+> This is a deliberate, one-off exception to the 1.x layout promise in
+> `KNOWN_ISSUES.md`. It is safe in the normal flow: the `.deb` ships headers and
+> the `.so` together, so installing a new package and rebuilding gives a
+> consistent pair. Do not swap `libstormenginev2.so` underneath an already-built
+> game.
+
 ### Added
+
+- **`AssetStore` now caches fonts and sounds, not just textures.**
+  `AddFont(id, path, ptSize)` / `GetFont(id)` and `AddSound(id, path)` /
+  `GetSound(id)`, mirroring the existing texture pair; `ClearAssets()` frees all
+  three. The engine has always linked `-lSDL2_ttf` and `-lSDL2_mixer` into every
+  binary - including the headless console networking examples - while exposing
+  no API for either, so four examples hand-rolled their own font loading.
+
+  A `TTF_Font` is rasterised at one point size, so a game registers one id per
+  size it draws at (`"hud-18"`, `"hud-32"`). Getters return `nullptr` for a
+  missing id rather than throwing, matching `GetTexture`.
+
+  **Call `ClearAssets()` before `TTF_Quit()` / `Mix_CloseAudio()` / `SDL_Quit()`.**
+  Those free every open font and chunk themselves, so a store torn down
+  afterwards hands already-freed pointers to `TTF_CloseFont`. The store usually
+  outlives the state that shut the subsystems down, which is exactly the order
+  that goes wrong - `examples/sports` had this bug and is fixed here.
+
+- **`Text` (`common/text.h`) - one line of text, drawn correctly.**
+  `Text::Draw`, `Text::DrawCentred` and `Text::Measure`. Header-only, free of
+  engine types, null-safe on both the renderer and the font, and it never leaks
+  the intermediate surface or texture on any failure path. Fonts come from
+  `AssetStore::GetFont`; nothing here opens or closes one.
+
+  `DrawCentred` replaces the hand-guessed offsets (`windowWidth / 2 - 30`) the
+  examples were carrying, which drift the moment a string or a point size
+  changes.
 
 - **`ContactSystem` (`common/systems/contact.h`) - collision detection that
   reports instead of acting.** `CollisionSystem` could only respond to an
@@ -63,6 +104,14 @@
 
 ### Fixed
 
+- **`examples/puzzle` re-opened its font from disk on every line of text.**
+  `RenderText` called `TTF_OpenFont` - a file read plus a rasteriser build - and
+  `TTF_CloseFont` around each of its 15 call sites, every frame. It now uses the
+  AssetStore font cache.
+- **`examples/sports` silently ignored the point size it was given.**
+  `PlayState::DrawText` accepted a `ptSize` argument and never used it, so
+  `"GOAL!"` at 28 and `"YOU WIN!"` at 32 rendered at 22 like everything else.
+  Size-keyed fonts make that impossible to express.
 - **`examples/sports`: the left goal could never be scored.** `CheckGoal`
   tests `px < RINK_X` (60), but `HockeyPhysicsSystem` clamped a free puck to
   `RL + PUCK_HALF` = 70 and `UpdatePuckCarry` put a carried one no further

@@ -14,9 +14,10 @@ storm-engine-v2 is a C++17 game engine built on SDL2 that uses the **Entity Comp
 8. [Writing a Custom Component](#writing-a-custom-component)
 9. [Writing a Custom System](#writing-a-custom-system)
 10. [AssetStore](#assetstore)
-11. [Logger](#logger)
-12. [Tags and Groups](#tags-and-groups)
-13. [Putting It Together](#putting-it-together)
+11. [Text](#text)
+12. [Logger](#logger)
+13. [Tags and Groups](#tags-and-groups)
+14. [Putting It Together](#putting-it-together)
 
 ## Core Concepts
 
@@ -227,7 +228,7 @@ void PlayState::update() {
     registry.Update(); // flush pending entity adds/kills first
     registry.GetSystem<MovementSystem>().Update(deltaTime);
     registry.GetSystem<AnimationSystem>().Update();
-    registry.GetSystem<CollisionSystem>().Update();
+    registry.GetSystem<ContactSystem>().Update();
 }
 ```
 
@@ -455,20 +456,71 @@ A system only sees entities that have **all** of its required components. If you
 
 ## AssetStore
 
-`AssetStore` loads and caches SDL textures by string ID. Pass the renderer and a file path relative to where the binary runs.
+`AssetStore` loads and caches textures, fonts and sounds by string ID. Paths are relative to where the binary runs.
 
 ```cpp
 assetStore->AddTexture(renderer, "player", "./assets/gfx/player.png");
 assetStore->AddTexture(renderer, "enemy",  "./assets/gfx/enemy.png");
 
-// Retrieve a texture directly (for manual SDL rendering)
-SDL_Texture *tex = assetStore->GetTexture("player");
+// A TTF_Font is rasterised at ONE point size, so register one id per size
+// you draw at. Requires TTF_Init() to have been called.
+assetStore->AddFont("hud-18",   "./assets/fonts/font.ttf", 18);
+assetStore->AddFont("title-32", "./assets/fonts/font.ttf", 32);
 
-// Free all textures (called automatically in the destructor)
+// Requires Mix_OpenAudio() to have been called.
+assetStore->AddSound("jump", "./assets/sfx/jump.wav");
+
+SDL_Texture *tex   = assetStore->GetTexture("player");
+TTF_Font    *font  = assetStore->GetFont("hud-18");
+Mix_Chunk   *sfx   = assetStore->GetSound("jump");
+
+Mix_PlayChannel(-1, sfx, 0);
+
+// Frees textures, fonts AND sounds. Called automatically in the destructor.
 assetStore->ClearAssets();
 ```
 
+Every getter returns `nullptr` for a missing ID rather than throwing, so
+null-check the result - nothing aborts under the Switch build's
+`-fno-exceptions`.
+
+**Call `ClearAssets()` before `TTF_Quit()`, `Mix_CloseAudio()` or `SDL_Quit()`.**
+Those calls free every open font and chunk themselves, so a store destroyed
+afterwards hands already-freed pointers to `TTF_CloseFont`. The store usually
+outlives the state that shut the subsystems down, which is exactly the order
+that goes wrong.
+
+The store does not initialise SDL_ttf or SDL_mixer. Without `TTF_Init()` or
+`Mix_OpenAudio()` you get a logged failure and a `nullptr`, not a crash.
+
 The `AssetStore_Ptr` (`std::unique_ptr<AssetStore>`) is created in `Game` and moved into the first state via `std::move`. If you need it in subsequent states, pass a raw pointer or reference rather than moving ownership again.
+
+## Text
+
+Drawing one line with SDL_ttf is a five-call dance with a failure path at every
+step. `Text` (`<stormengine2/text.h>`) is that dance, done once:
+
+```cpp
+#include <stormengine2/text.h>
+
+TTF_Font *font = assetStore->GetFont("hud-18");
+
+// Top-left at (10, 10). Returns the size drawn; {0, 0} means nothing was.
+Text::Draw(renderer, font, "Score: 400", 10, 10, {255, 255, 255, 255});
+
+// Horizontally centred - no more hand-guessed "windowWidth / 2 - 30" offsets,
+// which drift the moment the string or the point size changes.
+Text::DrawCentred(renderer, font, "GAME OVER", windowWidth / 2, 200,
+                  {255, 210, 50, 255});
+
+// Measure without drawing, for your own layout.
+SDL_Point size = Text::Measure(font, "Score: 400");
+```
+
+Header-only and null-safe: a null renderer or font draws nothing and returns
+`{0, 0}`, which is exactly what `GetFont` hands you for an unregistered ID. It
+never opens or closes a font, and never leaks the intermediate surface or
+texture.
 
 ## Logger
 

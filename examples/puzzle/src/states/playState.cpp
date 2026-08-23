@@ -45,6 +45,14 @@ PlayState::~PlayState() {
 
 bool PlayState::onEnter() {
     TTF_Init();
+
+    // Cache one font per point size the HUD draws at. RenderText used to call
+    // TTF_OpenFont -- a file read plus a rasteriser build -- on every one of
+    // its 15 call sites, every frame.
+    for (int pt : {20, 24, 26}) {
+        assetStore_->AddFont("hud-" + std::to_string(pt),
+                             "./assets/fonts/font.ttf", pt);
+    }
     m_loadingComplete = true;
     return true;
 }
@@ -351,17 +359,8 @@ void PlayState::RenderBoardBackground() {
 }
 
 void PlayState::RenderText(const std::string &text, int x, int y, SDL_Color color, int size) {
-    TTF_Font *f = TTF_OpenFont("./assets/fonts/font.ttf", size);
-    if (!f) return;
-    SDL_Surface *surf = TTF_RenderText_Blended(f, text.c_str(), color);
-    if (surf) {
-        SDL_Texture *tex = SDL_CreateTextureFromSurface(renderer_, surf);
-        SDL_Rect dst = { x, y, surf->w, surf->h };
-        SDL_RenderCopy(renderer_, tex, nullptr, &dst);
-        SDL_DestroyTexture(tex);
-        SDL_FreeSurface(surf);
-    }
-    TTF_CloseFont(f);
+    Text::Draw(renderer_, assetStore_->GetFont("hud-" + std::to_string(size)),
+               text, x, y, color);
 }
 
 void PlayState::RenderNextPiece() {

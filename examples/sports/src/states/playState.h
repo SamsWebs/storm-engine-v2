@@ -11,6 +11,7 @@
 #include <stormengine2/logger.h>
 #include <stormengine2/states/gameState.h>
 #include <stormengine2/systems/contact.h>
+#include <stormengine2/text.h>
 #include <stormengine2/systems/render.h>
 
 #include "../components/puckComponent.h"
@@ -98,6 +99,8 @@ private:
   void DrawHUD();
   void DrawText(const std::string &text, int x, int y, SDL_Color color,
                 int ptSize = 22);
+  void DrawTextCentred(const std::string &text, int y, SDL_Color color,
+                       int ptSize = 22);
   glm::vec2 Center(const Entity &e, int size) const;
 
   static const std::string s_playID;
@@ -139,5 +142,4 @@ private:
 
   Uint32 lastTick_ = 0;
 
-  TTF_Font *font_ = nullptr;
 };

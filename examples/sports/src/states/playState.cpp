@@ -26,9 +26,14 @@ bool PlayState::onEnter() {
     logger_.Err("TTF_Init failed: " + std::string(TTF_GetError()));
   }
 
-  font_ = TTF_OpenFont("assets/fonts/font.ttf", 22);
-  if (!font_)
-    logger_.Err("Failed to open font: " + std::string(TTF_GetError()));
+  // One TTF_Font is rasterised at a single point size, so every size the HUD
+  // draws at gets its own id. The old code took a ptSize argument and then
+  // ignored it, rendering everything at 22 - "GOAL!" and "YOU WIN!" have never
+  // actually been bigger than the score line.
+  for (int pt : {18, 20, 22, 28, 32}) {
+    assetStore_->AddFont("hud-" + std::to_string(pt), "assets/fonts/font.ttf",
+                         pt);
+  }
 
   // Load textures
   assetStore_->AddTexture(renderer_, "rink", "assets/gfx/rink.png");
@@ -55,10 +60,10 @@ bool PlayState::onEnter() {
 bool PlayState::onExit() {
   CloseController();
 
-  if (font_) {
-    TTF_CloseFont(font_);
-    font_ = nullptr;
-  }
+  // Before TTF_Quit(), not after. TTF_Quit closes every open font itself, and
+  // this state owns the AssetStore - so a store torn down afterwards would
+  // hand already-freed pointers to TTF_CloseFont.
+  assetStore_->ClearAssets();
   TTF_Quit();
 
   delete playerEnt_;
@@ -661,21 +666,15 @@ void PlayState::DrawRink() {
 
 void PlayState::DrawText(const std::string &text, int x, int y, SDL_Color color,
                          int ptSize) {
-  if (!font_)
-    return;
-  SDL_Surface *surf = TTF_RenderText_Blended(font_, text.c_str(), color);
-  if (!surf)
-    return;
-  SDL_Texture *tex = SDL_CreateTextureFromSurface(renderer_, surf);
-  SDL_FreeSurface(surf);
-  if (!tex)
-    return;
+  Text::Draw(renderer_, assetStore_->GetFont("hud-" + std::to_string(ptSize)),
+             text, x, y, color);
+}
 
-  int w, h;
-  SDL_QueryTexture(tex, nullptr, nullptr, &w, &h);
-  SDL_Rect dst = {x, y, w, h};
-  SDL_RenderCopy(renderer_, tex, nullptr, &dst);
-  SDL_DestroyTexture(tex);
+void PlayState::DrawTextCentred(const std::string &text, int y, SDL_Color color,
+                                int ptSize) {
+  Text::DrawCentred(renderer_,
+                    assetStore_->GetFont("hud-" + std::to_string(ptSize)), text,
+                    windowWidth_ / 2, y, color);
 }
 
 void PlayState::DrawHUD() {
@@ -686,7 +685,7 @@ void PlayState::DrawHUD() {
   // Score
   std::string score =
       std::to_string(playerScore_) + "  —  " + std::to_string(aiScore_);
-  DrawText(score, windowWidth_ / 2 - 40, 12, white);
+  DrawTextCentred(score, 12, white);
 
   // Team labels
   DrawText("YOU", RINK_X + 10, 12, {100, 150, 255, 255});
@@ -699,16 +698,14 @@ void PlayState::DrawHUD() {
 
   // Goal message
   if (goalScored_ && !gameOver_) {
-    DrawText("GOAL!", windowWidth_ / 2 - 30, windowHeight_ / 2 - 20, gold, 28);
+    DrawTextCentred("GOAL!", windowHeight_ / 2 - 20, gold, 28);
   }
 
   // Goalie save - play is dead until the faceoff
   if (saveMade_ && !gameOver_) {
-    DrawText("SAVE!", windowWidth_ / 2 - 32, windowHeight_ / 2 - 20,
-             {120, 220, 255, 255}, 28);
-    DrawText("faceoff in " + std::to_string((int)resetTimer_ + 1),
-             windowWidth_ / 2 - 52, windowHeight_ / 2 + 20,
-             {200, 200, 200, 255}, 18);
+    DrawTextCentred("SAVE!", windowHeight_ / 2 - 20, {120, 220, 255, 255}, 28);
+    DrawTextCentred("faceoff in " + std::to_string((int)resetTimer_ + 1),
+                    windowHeight_ / 2 + 20, {200, 200, 200, 255}, 18);
   }
 
   // Game over
@@ -716,9 +713,8 @@ void PlayState::DrawHUD() {
     bool playerWon = playerScore_ >= GOALS_TO_WIN;
     std::string msg = playerWon ? "YOU WIN!" : "CPU WINS!";
     SDL_Color col = playerWon ? gold : red;
-    DrawText(msg, windowWidth_ / 2 - 50, windowHeight_ / 2 - 20, col, 32);
-    DrawText("Press ESC to exit", windowWidth_ / 2 - 70, windowHeight_ / 2 + 20,
-             white, 20);
+    DrawTextCentred(msg, windowHeight_ / 2 - 20, col, 32);
+    DrawTextCentred("Press ESC to exit", windowHeight_ / 2 + 20, white, 20);
   }
 
   // Puck owner indicator

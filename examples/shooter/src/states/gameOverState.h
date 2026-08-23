@@ -10,36 +10,36 @@
 
 class GameOverState : public GameState {
 public:
-    GameOverState(SDL_Renderer *renderer, int windowWidth, int windowHeight,
-                  bool isDebugging, AssetStore *assetStore,
-                  GameStateMachine *machine, Gamepad *gamepad, bool &isRunning, int finalScore,
-                  int wavesSurvived);
+  GameOverState(SDL_Renderer *renderer, int windowWidth, int windowHeight,
+                bool isDebugging, AssetStore *assetStore,
+                GameStateMachine *machine, Gamepad *gamepad, bool &isRunning,
+                int finalScore, int wavesSurvived);
 
-    void processInput() override;
-    void update() override;
-    void render() override;
-    bool onEnter() override;
-    bool onExit() override;
+  void processInput() override;
+  void update() override;
+  void render() override;
+  bool onEnter() override;
+  bool onExit() override;
 
-    std::string getStateID() const override { return s_overID; }
+  std::string getStateID() const override { return s_overID; }
 
 private:
-    void ToMenu();
+  void ToMenu();
 
-    static const std::string s_overID;
+  static const std::string s_overID;
 
-    SDL_Renderer     *renderer_;
-    int               windowWidth_;
-    int               windowHeight_;
-    bool              isDebugging_;
-    AssetStore       *assetStore_;
-    GameStateMachine *machine_;
-    Gamepad          *gamepad_;
-    bool             &isRunning_;
-    Logger            logger_;
+  SDL_Renderer *renderer_;
+  int windowWidth_;
+  int windowHeight_;
+  bool isDebugging_;
+  AssetStore *assetStore_;
+  GameStateMachine *machine_;
+  Gamepad *gamepad_;
+  bool &isRunning_;
+  Logger logger_;
 
-    int    finalScore_;
-    int    wavesSurvived_;
-    Uint32 enteredAt_ = 0;
-    bool   leaving_   = false;
+  int finalScore_;
+  int wavesSurvived_;
+  Uint32 enteredAt_ = 0;
+  bool leaving_ = false;
 };

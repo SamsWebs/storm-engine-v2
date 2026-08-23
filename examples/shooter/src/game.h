@@ -17,33 +17,33 @@
 // owns it for the whole run and hands out a raw pointer.
 class Game {
 public:
-    // Which state the game opens on. Anything but Menu is a testing shortcut.
-    enum class StartState { Menu, Play, GameOver };
+  // Which state the game opens on. Anything but Menu is a testing shortcut.
+  enum class StartState { Menu, Play, GameOver };
 
-    Game();
-    ~Game();
+  Game();
+  ~Game();
 
-    void Initialize(StartState start = StartState::Menu);
-    void ProcessInput();
-    void Update();
-    void Render();
-    void Run(StartState start = StartState::Menu);
-    void Destroy();
+  void Initialize(StartState start = StartState::Menu);
+  void ProcessInput();
+  void Update();
+  void Render();
+  void Run(StartState start = StartState::Menu);
+  void Destroy();
 
 private:
-    void LoadAssets();
+  void LoadAssets();
 
-    bool isRunning_   = false;
-    bool isDebugging_ = false;
+  bool isRunning_ = false;
+  bool isDebugging_ = false;
 
-    SDL_Window   *window_   = nullptr;
-    SDL_Renderer *renderer_ = nullptr;
+  SDL_Window *window_ = nullptr;
+  SDL_Renderer *renderer_ = nullptr;
 
-    GameStateMachine gameStateMachine_;
-    Gamepad          gamepad_;
-    Logger_Ptr       logger_;
-    AssetStore_Ptr   assetStore_;
+  GameStateMachine gameStateMachine_;
+  Gamepad gamepad_;
+  Logger_Ptr logger_;
+  AssetStore_Ptr assetStore_;
 
-    int windowWidth_  = 800;
-    int windowHeight_ = 600;
+  int windowWidth_ = 800;
+  int windowHeight_ = 600;
 };

@@ -18,6 +18,37 @@
 
 ### Added
 
+- **A `pkg-config` file, so an installed engine is actually usable.**
+  `make install` now generates `$(PREFIX)/lib/pkgconfig/stormengine2.pc` from
+  `stormengine2.pc.in`, and the `.deb` ships it. `README.md` previously said
+  "after installing, link your project with `-lstormenginev2`" - which fails
+  the moment a game calls SDL directly, and every real game does:
+
+      undefined reference to symbol 'SDL_Init'
+      libSDL2-2.0.so.0: error adding symbols: DSO missing from command line
+
+  The linker will not let a game borrow the engine's transitive libraries, so
+  the game has to name SDL2, SDL2_image, SDL2_ttf, SDL2_mixer and tinyxml2
+  itself. Now it does not have to:
+
+      g++ -std=c++17 mygame.cpp $(pkg-config --cflags --libs stormengine2) -o mygame
+
+  `tinyxml2` is in `Requires:` because `XmlLoader` embeds a
+  `tinyxml2::XMLDocument` by value, so a game's own translation unit emits
+  `~XMLDocument` and must link it. `glm` is deliberately absent: it ships no
+  `.pc` file, and naming a missing one makes pkg-config fail outright.
+
+- **A starter game at `/usr/local/share/stormengine2/template/`.**
+  Every example's Makefile is `include ../examples.mk`, which needs `base.mk`
+  from the source tree - so someone who installed only the `.deb` had no
+  Makefile to copy. This one builds with pkg-config and no engine source:
+
+      cp -r /usr/local/share/stormengine2/template ~/mygame
+      cd ~/mygame && make run
+
+  It carries the two rules that otherwise bite first: register systems before
+  creating entities, and let only the active state poll events.
+
 - **`AssetStore` now caches fonts and sounds, not just textures.**
   `AddFont(id, path, ptSize)` / `GetFont(id)` and `AddSound(id, path)` /
   `GetSound(id)`, mirroring the existing texture pair; `ClearAssets()` frees all
@@ -104,6 +135,12 @@
 
 ### Fixed
 
+- **`README.md` gave instructions that could not work.** The installation
+  section said to link with `-lstormenginev2` and stopped there, and the apt
+  prerequisites were listed only under *Building from Source* - the section a
+  package user skips. Both are fixed, and the `-dev` packages needed to compile
+  against the installed engine are now listed where a package user will see
+  them.
 - **`examples/puzzle` re-opened its font from disk on every line of text.**
   `RenderText` called `TTF_OpenFont` - a file read plus a rasteriser build - and
   `TTF_CloseFont` around each of its 15 call sites, every frame. It now uses the

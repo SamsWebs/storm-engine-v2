@@ -31,6 +31,13 @@ DESTDIR ?=
 PREFIX ?= /usr/local
 INSTALL_INCLUDE_DIR = $(DESTDIR)$(PREFIX)/include/stormengine2
 INSTALL_LIB_DIR = $(DESTDIR)$(PREFIX)/lib
+INSTALL_PKGCONFIG_DIR = $(INSTALL_LIB_DIR)/pkgconfig
+INSTALL_SHARE_DIR = $(DESTDIR)$(PREFIX)/share/stormengine2
+
+# Stamped into stormengine2.pc. The release workflow already knows the real
+# version; override it there. It is metadata only -- pkg-config reports it,
+# nothing links against it.
+VERSION ?= 1.3.0
 
 # The include dir is wiped before the copy: a bare `cp -r` never removes
 # anything, so headers and whole directories deleted from common/ lived on in
@@ -44,6 +51,19 @@ install:
 	cp $(TARGET) $(INSTALL_LIB_DIR)
 	cp -r ./common/* $(INSTALL_INCLUDE_DIR)
 	find $(INSTALL_INCLUDE_DIR) \( -name '*.o' -o -name '*.d' -o -name '*.cpp' \) -delete
+	# pkg-config file. Without it a game has to name SDL2, SDL2_image, SDL2_ttf,
+	# SDL2_mixer and tinyxml2 on its own link line -- linking only
+	# -lstormenginev2 fails with "DSO missing from command line" the moment the
+	# game calls SDL directly, which every real game does.
+	mkdir -p $(INSTALL_PKGCONFIG_DIR)
+	sed -e 's|@PREFIX@|$(PREFIX)|g' -e 's|@VERSION@|$(VERSION)|g' \
+	    stormengine2.pc.in > $(INSTALL_PKGCONFIG_DIR)/stormengine2.pc
+	# Starter game. Every example's Makefile is `include ../examples.mk`, which
+	# needs base.mk from the source tree -- so a .deb-only user has no Makefile
+	# to copy from. This one builds with pkg-config and no engine source.
+	rm -rf $(INSTALL_SHARE_DIR)/template
+	mkdir -p $(INSTALL_SHARE_DIR)
+	cp -r ./template $(INSTALL_SHARE_DIR)/template
 
 test: test-target run-test
 

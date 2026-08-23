@@ -138,7 +138,7 @@ jobs:
             sh -c 'set -e
               make PROFILE=release target
               strip --strip-unneeded bin/libstormenginev2.so
-              make install DESTDIR=/opt/library/pkg
+              make install DESTDIR=/opt/library/pkg VERSION=${{ needs.version.outputs.version }}
               readelf -d bin/libstormenginev2.so | grep NEEDED
               mkdir -p debian
               printf "Source: libstormenginev2\n\nPackage: libstormenginev2\nArchitecture: any\n" > debian/control

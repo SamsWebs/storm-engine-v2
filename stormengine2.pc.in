@@ -1,0 +1,18 @@
+prefix=@PREFIX@
+exec_prefix=${prefix}
+libdir=${exec_prefix}/lib
+includedir=${prefix}/include
+
+Name: stormengine2
+Description: Storm! Engine v2 - a lightweight ECS-based 2D game engine on SDL2
+URL: https://github.com/WillSams/storm-engine-v2
+Version: @VERSION@
+# Requires, not Requires.private, because a game compiles against these headers
+# directly: <stormengine2/states/gameState.h> pulls SDL2, and XmlLoader embeds a
+# tinyxml2::XMLDocument by value, so the game's TU emits ~XMLDocument and needs
+# to link tinyxml2 itself. glm is deliberately absent - it ships no .pc file and
+# is header-only on a standard include path, so naming it here would make
+# pkg-config fail outright on machines that have it.
+Requires: sdl2 SDL2_image SDL2_ttf SDL2_mixer tinyxml2
+Libs: -L${libdir} -lstormenginev2
+Cflags: -I${includedir}

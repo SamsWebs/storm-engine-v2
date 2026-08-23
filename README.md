@@ -58,7 +58,39 @@ sudo dpkg -i libstormenginev2_<version>_amd64.deb
 sudo dpkg -i libstormenginev2_<version>_arm64.deb
 ```
 
-After installing, link your project with `-lstormenginev2`.
+### Building a game against the installed engine
+
+The package gives you the library, the headers, a `pkg-config` file and a
+starter game. To **compile** against it you also need the development headers
+for its dependencies - the package's own `Depends:` covers the runtime
+libraries only:
+
+```bash
+sudo apt install build-essential pkg-config \
+                 libsdl2-dev libsdl2-image-dev libsdl2-ttf-dev \
+                 libsdl2-mixer-dev libglm-dev libtinyxml2-dev
+```
+
+Copy the starter game and build it:
+
+```bash
+cp -r /usr/local/share/stormengine2/template ~/mygame
+cd ~/mygame
+make run
+```
+
+Its `Makefile` needs no engine source. To wire the engine into a build of your
+own, ask `pkg-config`:
+
+```bash
+g++ -std=c++17 mygame.cpp $(pkg-config --cflags --libs stormengine2) -o mygame
+```
+
+> Do **not** link with `-lstormenginev2` alone. The moment your game calls SDL
+> directly - and every real game does - the linker fails with
+> `undefined reference to symbol 'SDL_Init'` /
+> `DSO missing from command line`, because it will not let your game borrow the
+> engine's transitive libraries. `pkg-config` emits the full set.
 
 ## Building from Source
 

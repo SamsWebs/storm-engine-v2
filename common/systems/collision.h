@@ -4,7 +4,15 @@
 #include "../components/rigidBody.h"
 #include "../components/transform.h"
 #include "../ecs.h"
+#include "contact.h"
 
+// Deprecated as of 1.3.0. CollisionSystem can only respond to an overlap by
+// killing both movable entities - there is no event, no manifold, and no way
+// to observe a contact without acting on it (KNOWN_ISSUES.md #10).
+// ContactSystem (../systems/contact.h) is the replacement.
+//
+// This stays, unchanged in behaviour, for source compatibility with games
+// written against 1.0-1.2. Removing it is a v3 item.
 class CollisionSystem : public System {
 public:
   CollisionSystem() {
@@ -29,35 +37,24 @@ public:
           if (entityB.HasComponent<RigidBodyComponent>())
             entityB.Kill();
 
-          // TODO: emit an event
+          // Observing a contact without killing anything is what
+          // ContactSystem is for.
         }
       }
     }
   }
-  // AABB (axis-aligned bounding boxes) collision detection
+
+  // AABB (axis-aligned bounding boxes) collision detection.
+  //
+  // The bounds math lives in ContactSystem::BoundsOf so there is one copy of
+  // it. The overlap test below stays inclusive, unlike
+  // ContactSystem::Overlaps: a shared edge has counted as a collision since
+  // 1.0 and narrowing that now would be a silent behaviour break.
   bool isCollision(const Entity &entA, const Entity &entB) {
-    const auto &tComponentA = entA.GetComponent<TransformComponent>();
-    const auto &tComponentB = entB.GetComponent<TransformComponent>();
-    const auto &colliderComponentA = entA.GetComponent<BoxColliderComponent>();
-    const auto &colliderComponentB = entB.GetComponent<BoxColliderComponent>();
+    const ContactAABB a = ContactSystem::BoundsOf(entA);
+    const ContactAABB b = ContactSystem::BoundsOf(entB);
 
-    const auto entAXmin = tComponentA.position.x + colliderComponentA.offset.x;
-    const auto entAXmax =
-        entAXmin + colliderComponentA.width * tComponentA.scale.x;
-
-    const auto entAYmin = tComponentA.position.y + colliderComponentA.offset.y;
-    const auto entAYmax =
-        entAYmin + colliderComponentA.height * tComponentA.scale.y;
-
-    const auto entBXmin = tComponentB.position.x + colliderComponentB.offset.x;
-    const auto entBXmax =
-        entBXmin + colliderComponentB.width * tComponentB.scale.x;
-
-    const auto entBYmin = tComponentB.position.y + colliderComponentB.offset.y;
-    const auto entBYmax =
-        entBYmin + colliderComponentB.height * tComponentB.scale.y;
-
-    return entAXmin <= entBXmax && entAXmax >= entBXmin &&
-           entAYmin <= entBYmax && entAYmax >= entBYmin;
+    return a.minX <= b.maxX && a.maxX >= b.minX && a.minY <= b.maxY &&
+           a.maxY >= b.minY;
   }
 };

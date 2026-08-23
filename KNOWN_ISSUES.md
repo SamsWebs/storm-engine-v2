@@ -119,11 +119,13 @@ A game that declares its own `Entity` or `Logger` collides.
 
 ## 10. Collision only kills; there is no event bus
 
-`CollisionSystem` responds to an overlap by calling `Kill()` on both entities when they carry a `RigidBodyComponent`. There is no callback, no event queue, no way to observe a collision without acting on it. `common/systems/collision.h:32` carries the `// TODO: emit an event` marking the gap.
+`CollisionSystem` responds to an overlap by calling `Kill()` on both entities when they carry a `RigidBodyComponent`. There is no callback, no event queue, no way to observe a collision without acting on it.
 
 Any game needing collision *response* — bouncing, damage, triggers, pickups — has to hand-roll its own overlap pass. That is not a defect in those games; it is the documented state of the engine.
 
 **Why it stays.** An event bus is new architecture, and changing what `CollisionSystem::Update()` does to entities is a silent behaviour break for anything relying on the current kill semantics.
+
+**Resolved for new code in 1.3.0.** `ContactSystem` (`common/systems/contact.h`) is the observe-without-acting path: it reports overlaps with a normal and penetration depth, fires begin/end callbacks once per pair, and never touches an entity. `CollisionSystem` is unchanged and stays unchanged for the whole 1.x line - the two share one copy of the bounds math via `ContactSystem::BoundsOf`. Deleting `CollisionSystem` is a v3 item, listed below.
 
 ## Also on the v3 list
 
@@ -135,5 +137,8 @@ Not defects exactly — design decisions worth revisiting when compatibility is 
 - **`GameStateMachine` owns raw pointers** with implicitly generated copy operations, so copying one double-frees every state.
 - **Frame pacing lives in game code**, not the engine — every state re-implements the same `SDL_Delay` budget against `MILLISECS_PER_FRAME`.
 - **Three member-naming schemes** across the engine (bare, `m_`, trailing underscore) and two method casings (PascalCase in the ECS, camelCase in the state machine).
+- **`CollisionSystem` should be deleted.** `ContactSystem` supersedes it entirely as of 1.3.0 and no in-repo game registers it - only `specs/systems/collision.spec.cpp` does. It survives only because `KNOWN_ISSUES.md` line 5 rules out deleting a public member inside 1.x. Delete the class, its spec, and its `TUTORIAL.md` row together.
+- **The collider offset is not scaled by the transform.** `ContactSystem::BoundsOf`, `CollisionSystem::isCollision` and `RenderColliderSystem::Update` (`common/systems/renderCollider.h:22-26`) all compute `position + offset` while scaling the extents by `transform.scale`. So a collider with `offset = {4, 0}` on an entity at `scale = {2, 2}` starts 4 px from the origin, not 8. The three agree, so nothing is visibly broken today; scaling the offset would be more consistent but silently moves every collider a game has ever authored with a non-unit scale.
+- **`ContactSystem`'s broadphase sweeps one axis.** It sorts by `minX` and breaks the inner loop on the first candidate starting past the current right edge, which degrades back to all-pairs for anything stacked in a single column. A uniform grid is the upgrade, and nothing in-repo is near the entity count where it would matter.
 
 *Items that can be fixed without breaking compatibility are tracked separately and are not listed here.*

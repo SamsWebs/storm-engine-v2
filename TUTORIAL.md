@@ -316,8 +316,56 @@ registry.AddSystem<RenderColliderSystem>(); // debug: draws collider outlines
 | `MovementSystem` | Transform + RigidBody | Moves entities by `velocity * deltaTime` each frame |
 | `RenderSystem` | Transform + Sprite | Draws all sprites sorted by `zIndex` |
 | `AnimationSystem` | Sprite + Animation | Advances the sprite sheet frame |
-| `CollisionSystem` | Transform + Sprite + BoxCollider | Detects AABB collisions |
+| `ContactSystem` | Transform + BoxCollider | Reports AABB overlaps with a normal and depth, plus begin/end callbacks. Never kills or moves anything |
+| `CollisionSystem` | Transform + BoxCollider | Detects AABB collisions and kills both movable entities. Deprecated - prefer `ContactSystem` |
 | `RenderColliderSystem` | Transform + BoxCollider | Draws collider rectangles (debug) |
+
+`ContactSystem` reports; it never acts. Read `GetContacts()` and decide what a
+contact means, or install `SetOnBeginContact` / `SetOnEndContact` for the
+once-per-pair transitions:
+
+```cpp
+registry_.AddSystem<ContactSystem>();
+auto &contacts = registry_.GetSystem<ContactSystem>();
+
+// Skip pairs you never care about - this is where layers and sensors live.
+contacts.SetPairFilter([](const Entity &a, const Entity &b) {
+  return !(a.BelongsToGroup("bullets") && b.BelongsToGroup("bullets"));
+});
+
+contacts.SetOnBeginContact([](const Contact &c) {
+  // Fires once when the pair starts touching, not every frame.
+});
+
+// ... then in update(), after registry_.Update():
+contacts.Update();
+for (const auto &c : contacts.GetContacts()) {
+  // c.a always holds the lower entity id, so c.normal points a -> b.
+  auto &transform = c.a.GetComponent<TransformComponent>();
+  transform.position -= ContactSystem::MinimumTranslation(c);
+}
+```
+
+Three things to know.
+
+A shared edge is *not* a contact - the overlap test is strict, unlike
+`CollisionSystem::isCollision`, which is inclusive and counts one.
+
+System membership is computed once, when `Registry::Update()` admits an
+entity. Adding a `BoxColliderComponent` to an entity that is already live will
+never get it into `ContactSystem`; create the entity with its collider.
+
+**Do not build tilemap collision out of one collider entity per tile.** The
+manifold picks the axis of least penetration *per box*, so a character sliding
+along a floor made of adjacent tile colliders can pick up a sideways normal
+from a tile it barely overlaps and get shoved out of the wall - the classic
+ghost-vertex problem, and the reason Box2D has a dedicated chain shape for it.
+`ContactSystem` suits a modest number of distinct bodies: a puck and six
+boards, bullets and enemies, a player and a handful of triggers. For tiles,
+snap to the grid instead the way `examples/platformer` does - it reads
+`IsSolid(col, row)` and resolves one axis at a time against tile boundaries
+(`src/states/playState.cpp:230-245`), which cannot catch on a seam because it
+never computes a normal at all.
 
 **Calling systems in your update/render:**
 

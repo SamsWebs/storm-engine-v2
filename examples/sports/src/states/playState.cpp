@@ -40,6 +40,12 @@ bool PlayState::onEnter() {
   // Register systems
   registry_.AddSystem<RenderSystem>();
   registry_.AddSystem<HockeyPhysicsSystem>();
+  // Registered before SpawnEntities: Registry::Update() computes system
+  // membership once, when an entity is admitted, so a system added after the
+  // fact would start empty and stay empty.
+  registry_.AddSystem<ContactSystem>();
+
+  OpenController();
 
   SpawnEntities();
   lastTick_ = SDL_GetTicks();
@@ -47,6 +53,8 @@ bool PlayState::onEnter() {
 }
 
 bool PlayState::onExit() {
+  CloseController();
+
   if (font_) {
     TTF_CloseFont(font_);
     font_ = nullptr;
@@ -64,6 +72,60 @@ bool PlayState::onExit() {
 // ─────────────────────────────────────────────────────────────────────────────
 // SpawnEntities
 // ─────────────────────────────────────────────────────────────────────────────
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Gamepad
+// ─────────────────────────────────────────────────────────────────────────────
+
+void PlayState::OpenController() {
+  if (pad_)
+    return;
+  for (int i = 0; i < SDL_NumJoysticks(); ++i) {
+    if (!SDL_IsGameController(i))
+      continue;
+    pad_ = SDL_GameControllerOpen(i);
+    if (pad_) {
+      logger_.Log("Gamepad connected: " +
+                  std::string(SDL_GameControllerName(pad_)));
+      return;
+    }
+  }
+}
+
+void PlayState::CloseController() {
+  if (!pad_)
+    return;
+  SDL_GameControllerClose(pad_);
+  pad_ = nullptr;
+  padAxis_ = {0.f, 0.f};
+}
+
+// Sticks and the d-pad are held state, not events, so they are sampled once a
+// frame. The shoot button is NOT read here - it has to be edge triggered, or
+// holding it would fire a shot every frame the puck is carried.
+void PlayState::PollController() {
+  padAxis_ = {0.f, 0.f};
+  if (!pad_)
+    return;
+
+  float ax = SDL_GameControllerGetAxis(pad_, SDL_CONTROLLER_AXIS_LEFTX);
+  float ay = SDL_GameControllerGetAxis(pad_, SDL_CONTROLLER_AXIS_LEFTY);
+  if (std::abs(ax) < PAD_DEADZONE)
+    ax = 0.f;
+  if (std::abs(ay) < PAD_DEADZONE)
+    ay = 0.f;
+  padAxis_ = {ax / 32767.f, ay / 32767.f};
+
+  // The d-pad is digital, so it deflects fully and overrides a resting stick.
+  if (SDL_GameControllerGetButton(pad_, SDL_CONTROLLER_BUTTON_DPAD_UP))
+    padAxis_.y = -1.f;
+  if (SDL_GameControllerGetButton(pad_, SDL_CONTROLLER_BUTTON_DPAD_DOWN))
+    padAxis_.y = 1.f;
+  if (SDL_GameControllerGetButton(pad_, SDL_CONTROLLER_BUTTON_DPAD_LEFT))
+    padAxis_.x = -1.f;
+  if (SDL_GameControllerGetButton(pad_, SDL_CONTROLLER_BUTTON_DPAD_RIGHT))
+    padAxis_.x = 1.f;
+}
 
 void PlayState::SpawnEntities() {
   // Rink background
@@ -112,9 +174,80 @@ void PlayState::SpawnEntities() {
       glm::vec2{1.f, 1.f}, 0.0);
   puck.AddComponent<SpriteComponent>("puck", PUCK_SIZE, PUCK_SIZE, 3);
   puck.AddComponent<PuckComponent>();
+  puck.AddComponent<BoxColliderComponent>(PUCK_SIZE, PUCK_SIZE);
   puckEnt_ = new Entity(puck);
 
+  SpawnWalls();
+
   registry_.Update();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SpawnWalls - the boards, as collider entities
+// ─────────────────────────────────────────────────────────────────────────────
+
+void PlayState::SpawnWalls() {
+  // The left and right runs are split around the goal mouth so a shot on
+  // target passes through instead of bouncing. With a solid wall there,
+  // CheckGoal's `px < RINK_X` test was unreachable - the free puck got
+  // clamped to RINK_X + 10 before it could ever cross the line, so the AI
+  // could not score at all.
+  const int mouthTop = GOAL_MOUTH_Y;
+  const int mouthBottom = GOAL_MOUTH_Y + GOAL_MOUTH_H;
+
+  const struct {
+    int x, y, w, h;
+  } boards[] = {
+      {RINK_X, RINK_Y - WALL_T, RINK_W, WALL_T},   // top
+      {RINK_X, RINK_B, RINK_W, WALL_T},            // bottom
+      {RINK_X - WALL_T, RINK_Y, WALL_T, mouthTop - RINK_Y},
+      {RINK_X - WALL_T, mouthBottom, WALL_T, RINK_B - mouthBottom},
+      {RINK_R, RINK_Y, WALL_T, mouthTop - RINK_Y},
+      {RINK_R, mouthBottom, WALL_T, RINK_B - mouthBottom},
+  };
+
+  for (const auto &board : boards) {
+    Entity wall = registry_.CreateEntity();
+    wall.Group("boards");
+    wall.AddComponent<TransformComponent>(
+        glm::vec2{static_cast<float>(board.x), static_cast<float>(board.y)},
+        glm::vec2{1.f, 1.f}, 0.0);
+    // No sprite - rink.png already draws the boards.
+    wall.AddComponent<BoxColliderComponent>(board.w, board.h);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ResolvePuckContacts - bounce the puck off whatever ContactSystem reported
+// ─────────────────────────────────────────────────────────────────────────────
+
+void PlayState::ResolvePuckContacts() {
+  auto &puck = puckEnt_->GetComponent<PuckComponent>();
+  // A carried puck is placed by its carrier every frame, so bouncing it here
+  // would only fight UpdatePuckCarry.
+  if (puck.ownerTag != -1)
+    return;
+
+  auto &puckT = puckEnt_->GetComponent<TransformComponent>();
+  const std::size_t puckId = puckEnt_->GetId();
+
+  for (const auto &contact :
+       registry_.GetSystem<ContactSystem>().GetContacts()) {
+    const bool puckIsA = contact.a.GetId() == puckId;
+    if (!puckIsA && contact.b.GetId() != puckId)
+      continue;
+
+    // Contact::normal points a -> b and `a` always holds the lower entity id,
+    // so flip it when the puck happens to be b. After that it always points
+    // from the puck into the board it hit.
+    const glm::vec2 normal = puckIsA ? contact.normal : -contact.normal;
+
+    // Push the puck back out, then mirror its velocity about that normal.
+    // Which board it was stopped mattering - this replaced four hardcoded
+    // axis-aligned bounce cases and the RL/RT/RR/RB constants behind them.
+    puckT.position -= normal * contact.depth;
+    puck.velocity = glm::reflect(puck.velocity, normal);
+  }
 }
 
 void PlayState::ResetPositions() {
@@ -135,6 +268,7 @@ void PlayState::ResetPositions() {
   auto &puck = puckEnt_->GetComponent<PuckComponent>();
   puck.velocity = {0.f, 0.f};
   puck.ownerTag = -1;
+  puck.pickupLock = 0.f;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -197,8 +331,33 @@ void PlayState::processInput() {
         break;
       }
       break;
+
+    // ── Gamepad ──────────────────────────────────────────────────────────
+    case SDL_CONTROLLERDEVICEADDED:
+      OpenController();
+      break;
+    case SDL_CONTROLLERDEVICEREMOVED:
+      if (pad_ && event.cdevice.which == SDL_JoystickInstanceID(
+                                             SDL_GameControllerGetJoystick(pad_))) {
+        CloseController();
+        OpenController(); // fall back to another pad if one is still attached
+      }
+      break;
+    case SDL_CONTROLLERBUTTONDOWN:
+      if (event.cbutton.button == SDL_CONTROLLER_BUTTON_A)
+        keyShoot_ = true;
+      if (event.cbutton.button == SDL_CONTROLLER_BUTTON_START ||
+          event.cbutton.button == SDL_CONTROLLER_BUTTON_BACK)
+        isRunning_ = false;
+      break;
+    case SDL_CONTROLLERBUTTONUP:
+      if (event.cbutton.button == SDL_CONTROLLER_BUTTON_A)
+        keyShoot_ = false;
+      break;
     }
   }
+
+  PollController();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -221,10 +380,11 @@ void PlayState::update() {
     return;
 
   // ── Post-goal reset timer ─────────────────────────────────────────────
-  if (goalScored_) {
+  if (goalScored_ || saveMade_) {
     resetTimer_ -= static_cast<float>(dt);
     if (resetTimer_ <= 0.f) {
       goalScored_ = false;
+      saveMade_ = false;
       ResetPositions();
     }
     registry_.Update();
@@ -243,12 +403,27 @@ void PlayState::update() {
   // ── Puck physics (free puck) ──────────────────────────────────────────
   registry_.GetSystem<HockeyPhysicsSystem>().Update(dt);
 
+  // ── Boards ────────────────────────────────────────────────────────────
+  registry_.GetSystem<ContactSystem>().Update();
+  ResolvePuckContacts();
+
   // ── Pickup attempts ───────────────────────────────────────────────────
   auto &puck = puckEnt_->GetComponent<PuckComponent>();
+  if (puck.pickupLock > 0.f)
+    puck.pickupLock -= static_cast<float>(dt);
   if (puck.ownerTag == -1) {
     TryPickup(*playerEnt_, 0);
     TryPickup(*aiSkaEnt_, 1);
     TryPickup(*aiGoalEnt_, 2);
+  }
+
+  // ── Goalie save ───────────────────────────────────────────────────────
+  // UpdateAI gives the goalie no clearing logic, so once it gains possession
+  // nothing would ever release the puck and play would deadlock. Whistle it
+  // dead instead and drop a fresh faceoff after SAVE_DELAY.
+  if (puck.ownerTag == 2 && !saveMade_ && !goalScored_) {
+    saveMade_ = true;
+    resetTimer_ = SAVE_DELAY;
   }
 
   // ── Goal detection ────────────────────────────────────────────────────
@@ -259,16 +434,27 @@ void PlayState::update() {
 
 void PlayState::UpdatePlayerMovement(double dt) {
   auto &t = playerEnt_->GetComponent<TransformComponent>();
-  float spd = PLAYER_SPEED * static_cast<float>(dt);
 
+  // Keyboard gives a unit push per axis; the stick gives its own magnitude,
+  // so a light lean skates slowly. Both are summed, then clamped to length 1
+  // -- which also stops a keyboard diagonal being sqrt(2) faster than a
+  // straight line, as it used to be when each axis got the full step.
+  glm::vec2 dir = {0.f, 0.f};
   if (keyUp_)
-    t.position.y -= spd;
+    dir.y -= 1.f;
   if (keyDown_)
-    t.position.y += spd;
+    dir.y += 1.f;
   if (keyLeft_)
-    t.position.x -= spd;
+    dir.x -= 1.f;
   if (keyRight_)
-    t.position.x += spd;
+    dir.x += 1.f;
+  dir += padAxis_;
+
+  const float len = glm::length(dir);
+  if (len > 1.f)
+    dir /= len;
+
+  t.position += dir * (PLAYER_SPEED * static_cast<float>(dt));
 
   // Clamp to left half of rink (player stays on own side when not attacking)
   t.position.x =
@@ -282,6 +468,7 @@ void PlayState::UpdatePlayerMovement(double dt) {
     // Shoot toward right goal
     puck.ownerTag = -1;
     puck.velocity = {SHOOT_SPEED, 0.f};
+    puck.pickupLock = PICKUP_LOCKOUT;
     keyShoot_ = false;
   }
 }
@@ -310,6 +497,7 @@ void PlayState::UpdateAI(double dt) {
       if (aPos.x < RINK_X + AI_SHOOT_DIST) {
         puck.ownerTag = -1;
         puck.velocity = {-SHOOT_SPEED * 0.85f, 0.f};
+        puck.pickupLock = PICKUP_LOCKOUT;
       }
     } else {
       // Chase the puck
@@ -378,6 +566,8 @@ void PlayState::UpdatePuckCarry() {
 void PlayState::TryPickup(Entity &skater, int ownerTag) {
   auto &puck = puckEnt_->GetComponent<PuckComponent>();
   if (puck.ownerTag != -1)
+    return;
+  if (puck.pickupLock > 0.f)
     return;
 
   glm::vec2 pc = Center(*puckEnt_, PUCK_SIZE);
@@ -502,12 +692,22 @@ void PlayState::DrawHUD() {
   DrawText("CPU", RINK_R - 60, 12, {255, 100, 100, 255});
 
   // Controls hint
-  DrawText("WASD: move   SPACE: shoot   ESC: quit", RINK_X, RINK_B + 10,
-           {160, 160, 160, 255});
+  DrawText(pad_ ? "STICK/DPAD: move   A: shoot   START: quit"
+                : "WASD: move   SPACE: shoot   ESC: quit",
+           RINK_X, RINK_B + 10, {160, 160, 160, 255});
 
   // Goal message
   if (goalScored_ && !gameOver_) {
     DrawText("GOAL!", windowWidth_ / 2 - 30, windowHeight_ / 2 - 20, gold, 28);
+  }
+
+  // Goalie save - play is dead until the faceoff
+  if (saveMade_ && !gameOver_) {
+    DrawText("SAVE!", windowWidth_ / 2 - 32, windowHeight_ / 2 - 20,
+             {120, 220, 255, 255}, 28);
+    DrawText("faceoff in " + std::to_string((int)resetTimer_ + 1),
+             windowWidth_ / 2 - 52, windowHeight_ / 2 + 20,
+             {200, 200, 200, 255}, 18);
   }
 
   // Game over

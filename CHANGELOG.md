@@ -1,5 +1,113 @@
 # Changelog
 
+## [1.3.0] - 2026-08-23
+
+### Added
+
+- **`ContactSystem` (`common/systems/contact.h`) - collision detection that
+  reports instead of acting.** `CollisionSystem` could only respond to an
+  overlap by killing both movable entities, which is why no example ever
+  registered it and why `examples/shooter`, `examples/platformer` and
+  `examples/sports` each hand-roll their own AABB pass. `ContactSystem`
+  detects the same overlaps and reports them, never touching an entity:
+
+  - `GetContacts()` returns this frame's overlaps as `Contact{a, b, normal,
+    depth}`, sorted ascending by `(a.id, b.id)` so a frame is deterministic.
+    `a` always holds the lower entity id, so `normal` does not depend on
+    iteration order.
+  - `ContactSystem::MinimumTranslation(contact)` gives the vector that
+    separates a pair. The system does not apply it - there is no scheduler,
+    so resolution order is the game's call.
+  - `SetOnBeginContact` / `SetOnEndContact` fire once per pair on the
+    transitions, not once per frame, matching Box2D's contact-event model.
+  - `SetPairFilter` skips pairs wholesale. Layers, masks and sensors all live
+    here, which costs none of the 32 process-wide component slots and changes
+    no component layout.
+
+  Header-only, so it adds nothing to `libstormenginev2.so`. `Contact`,
+  `ContactAABB` and `ContactSystem` join the engine's other global names -
+  see `KNOWN_ISSUES.md` #9.
+
+### Changed
+
+- **`CollisionSystem` now shares `ContactSystem`'s bounds math** via
+  `ContactSystem::BoundsOf`, so there is one copy of it rather than two.
+  Behaviour is unchanged: it still kills both movable entities on contact,
+  and its overlap test stays *inclusive*, so a shared edge still counts as a
+  collision. `ContactSystem::Overlaps` is strict and does not. All four
+  existing specs in `specs/systems/collision.spec.cpp` pass untouched.
+- **`CollisionSystem` is deprecated.** It is kept for source compatibility
+  with games written against 1.0-1.2 and is a candidate for removal in v3
+  (`KNOWN_ISSUES.md`). New code wants `ContactSystem`.
+- `TUTORIAL.md` - the system table claimed `CollisionSystem` requires
+  `Transform + Sprite + BoxCollider`. It requires `Transform + BoxCollider`;
+  `common/systems/collision.h` has never asked for a sprite.
+- **`examples/sports`: gamepad support.** A controller is opened at startup
+  and on `SDL_CONTROLLERDEVICEADDED`, released on removal with a fallback to
+  any other attached pad. Left stick (proportional, with an 8000-unit
+  deadzone) or d-pad to skate, `A` to shoot, `Start`/`Back` to quit. Keyboard
+  and pad stay live simultaneously and are merged into one direction vector,
+  and the on-screen control hint follows whichever is connected. Shoot is
+  edge-triggered from `SDL_CONTROLLERBUTTONDOWN`, not polled, so holding `A`
+  fires once rather than every frame. This uses SDL2's own
+  `SDL_GameController` directly - `common/input/virtualGamepad.h` is an
+  on-screen touch pad, not a physical-controller abstraction.
+- **`examples/sports`: a goalie save now whistles the play dead.** `SAVE!`
+  shows with a countdown and a fresh faceoff drops at center ice after
+  `SAVE_DELAY` (3s), reusing the same pause machinery as a goal.
+- **`examples/sports` (hockey) now uses `ContactSystem` for the boards.** The
+  rink walls are six collider entities and the bounce is one
+  `glm::reflect` about the reported contact normal, so `HockeyPhysicsSystem`
+  no longer needs to know the rink layout. It keeps only what is genuinely
+  the puck's motion model: integration, drag, and the sleep threshold.
+
+### Fixed
+
+- **`examples/sports`: the left goal could never be scored.** `CheckGoal`
+  tests `px < RINK_X` (60), but `HockeyPhysicsSystem` clamped a free puck to
+  `RL + PUCK_HALF` = 70 and `UpdatePuckCarry` put a carried one no further
+  left than 68, so neither could reach the line - the AI could not score at
+  all. The right goal only worked by accident, its clamp landing at 730 which
+  happens to pass `px + PUCK_SIZE > RINK_R`. The boards are now split either
+  side of the goal mouth, so a shot on target passes through and both goals
+  are reachable.
+- **`examples/sports`: a shot puck was re-grabbed on the very next frame.**
+  `UpdatePuckCarry` centres the puck exactly on its carrier, so at the moment
+  of release the gap between the two centres is zero. One frame of travel at
+  `SHOOT_SPEED` is 8.7px, well inside `PICKUP_RADIUS` (22px), so `TryPickup`
+  handed it straight back to the shooter and the puck never got away - for
+  the AI's shot as much as the player's. `PuckComponent::pickupLock` now
+  blocks pickups for `PICKUP_LOCKOUT` (0.35s) after a shot, by which point
+  the puck is 137px clear.
+- **`examples/sports`: a goalie save deadlocked the game.** `UpdateAI` gives
+  the goalie no clearing or shooting logic - it only tracks the puck's Y - so
+  once `TryPickup` handed it possession, `ownerTag` stayed 2 forever,
+  `UpdatePuckCarry` kept the puck glued to it, and play could never resume.
+  The save faceoff above resolves it.
+- **`examples/sports`: diagonal skating was sqrt(2) too fast.**
+  `UpdatePlayerMovement` added the full per-frame step to each axis
+  independently, so holding W+D moved 1.41x faster than either alone. Input is
+  now a direction vector clamped to length 1.
+- **`examples/sports`: the puck bounced 8px off-centre.**
+  `HockeyPhysicsSystem` treated `transform.position` as the puck's centre
+  (`position.y - PUCK_HALF`) while `Center()` and `CheckGoal` treat it as the
+  top-left, so the puck overshot two boards and stopped short of the other
+  two. Its `BoxColliderComponent` now defines the bounds and the two agree.
+- **`examples/sports`: `RL`/`RT`/`RR`/`RB` had to be kept in sync with
+  `PlayState`'s rink constants by hand**, as the comment above them admitted.
+  They are gone.
+
+### Notes
+
+- 22 new specs across `specs/systems/contact.spec.cpp`,
+  `contactEvents.spec.cpp` and `contactFiltering.spec.cpp`. Suite is 341
+  tests, up from 319. No build-file changes - `TESTSRCS` globs `specs/`.
+- End events are deliberately **not** fired for a pair whose entity was
+  killed. `Registry::Update()` returns a dead id to the free list in the same
+  pass that drops it from the system (`common/ecs.cpp:241-244`), so the id may
+  already name a different entity - handing it back is `KNOWN_ISSUES.md` #1
+  exactly. Such pairs are dropped silently.
+
 ## [1.2.6] - 2026-08-11
 
 ### Fixed

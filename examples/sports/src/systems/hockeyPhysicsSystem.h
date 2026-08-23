@@ -5,16 +5,16 @@
 
 #include "../components/puckComponent.h"
 
-// Rink bounds (must match PlayState constants)
-constexpr float RL = 62.f;   // rink left wall  (inner)
-constexpr float RT = 62.f;   // rink top wall   (inner)
-constexpr float RR = 738.f;  // rink right wall (inner)
-constexpr float RB = 538.f;  // rink bottom wall(inner)
-
-constexpr float PUCK_HALF = 8.f; // half of PUCK_SIZE (16px)
-
-// HockeyPhysicsSystem: moves the free puck and bounces it off rink walls.
-// Goal detection is NOT done here — PlayState reads puck position directly.
+// HockeyPhysicsSystem: integrates the free puck and bleeds its speed off.
+//
+// It does NOT handle the boards. The rink walls are ordinary collider
+// entities (PlayState::SpawnWalls) and the bounce is a reflection about the
+// contact normal ContactSystem reports (PlayState::ResolvePuckContacts), so
+// this system no longer needs to know where the rink is. That is what let the
+// old RL/RT/RR/RB constants - which had to be kept in sync with PlayState by
+// hand - go away.
+//
+// Goal detection is still PlayState's job; it reads the puck position.
 class HockeyPhysicsSystem : public System {
 public:
     HockeyPhysicsSystem() {
@@ -42,26 +42,6 @@ public:
             // Stop very slow puck to avoid endless micro-movement
             if (glm::length(puck.velocity) < 5.f)
                 puck.velocity = {0.f, 0.f};
-
-            // Bounce off top / bottom walls
-            if (transform.position.y - PUCK_HALF < RT) {
-                transform.position.y = RT + PUCK_HALF;
-                puck.velocity.y      = std::abs(puck.velocity.y);
-            }
-            if (transform.position.y + PUCK_HALF > RB) {
-                transform.position.y = RB - PUCK_HALF;
-                puck.velocity.y      = -std::abs(puck.velocity.y);
-            }
-
-            // Left / right walls bounce — goal zone handled in PlayState
-            if (transform.position.x - PUCK_HALF < RL) {
-                transform.position.x = RL + PUCK_HALF;
-                puck.velocity.x      = std::abs(puck.velocity.x);
-            }
-            if (transform.position.x + PUCK_HALF > RR) {
-                transform.position.x = RR - PUCK_HALF;
-                puck.velocity.x      = -std::abs(puck.velocity.x);
-            }
         }
     }
 };

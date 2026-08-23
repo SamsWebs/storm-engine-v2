@@ -198,8 +198,8 @@ void PlayState::SpawnWalls() {
   const struct {
     int x, y, w, h;
   } boards[] = {
-      {RINK_X, RINK_Y - WALL_T, RINK_W, WALL_T},   // top
-      {RINK_X, RINK_B, RINK_W, WALL_T},            // bottom
+      {RINK_X, RINK_Y - WALL_T, RINK_W, WALL_T}, // top
+      {RINK_X, RINK_B, RINK_W, WALL_T},          // bottom
       {RINK_X - WALL_T, RINK_Y, WALL_T, mouthTop - RINK_Y},
       {RINK_X - WALL_T, mouthBottom, WALL_T, RINK_B - mouthBottom},
       {RINK_R, RINK_Y, WALL_T, mouthTop - RINK_Y},
@@ -337,8 +337,9 @@ void PlayState::processInput() {
       OpenController();
       break;
     case SDL_CONTROLLERDEVICEREMOVED:
-      if (pad_ && event.cdevice.which == SDL_JoystickInstanceID(
-                                             SDL_GameControllerGetJoystick(pad_))) {
+      if (pad_ &&
+          event.cdevice.which ==
+              SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(pad_))) {
         CloseController();
         OpenController(); // fall back to another pad if one is still attached
       }

@@ -73,7 +73,8 @@ void GameOverState::update() {
     isRunning_ = false;
     return;
   }
-  if (gamepad_->Pressed(GamepadButton::A) || gamepad_->Pressed(GamepadButton::Start)) {
+  if (gamepad_->Pressed(GamepadButton::A) ||
+      gamepad_->Pressed(GamepadButton::Start)) {
     ToMenu();
     return;
   }

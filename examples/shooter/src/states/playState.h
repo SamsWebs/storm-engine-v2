@@ -79,5 +79,4 @@ private:
   bool leaving_ = false; // a changeState is already queued
 
   glm::vec2 playerStart_;
-
 };

@@ -124,5 +124,4 @@ private:
   bool keyInteract_ = false;
 
   DialogueState dialogue_;
-
 };

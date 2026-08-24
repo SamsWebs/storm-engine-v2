@@ -316,8 +316,9 @@ void PlayState::update() {
   const bool right = moveRight_ || gamepad_->Down(GamepadButton::Right);
   const bool up = moveUp_ || gamepad_->Down(GamepadButton::Up);
   const bool down = moveDown_ || gamepad_->Down(GamepadButton::Down);
-  const bool fire = spaceHeld_ || (gamepad_->Down(GamepadButton::A) ||
-                      gamepad_->Current().triggerRight > 0.5f); // A / RT, held
+  const bool fire =
+      spaceHeld_ || (gamepad_->Down(GamepadButton::A) ||
+                     gamepad_->Current().triggerRight > 0.5f); // A / RT, held
   const bool roll = rollPressed_ || gamepad_->Pressed(GamepadButton::B) ||
                     gamepad_->Pressed(GamepadButton::X); // B / X, edge
 

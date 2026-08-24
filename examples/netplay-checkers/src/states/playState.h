@@ -4,8 +4,8 @@
 #include <SDL2/SDL_mixer.h>
 #include <SDL2/SDL_ttf.h>
 
-#include <stormengine2/text.h>
 #include <cstdint>
+#include <stormengine2/text.h>
 #include <string>
 #include <vector>
 

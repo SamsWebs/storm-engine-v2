@@ -117,7 +117,8 @@ void MenuState::update() {
     isRunning_ = false;
     return;
   }
-  if (gamepad_->Pressed(GamepadButton::A) || gamepad_->Pressed(GamepadButton::Start)) {
+  if (gamepad_->Pressed(GamepadButton::A) ||
+      gamepad_->Pressed(GamepadButton::Start)) {
     if (selected_ == 0) {
       machine_->changeState(
           new PlayState(renderer_, windowWidth_, windowHeight_, isDebugging_,

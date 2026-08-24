@@ -365,9 +365,12 @@ bool PlayState::onEnter() {
   if (TTF_Init() != 0) {
     logger_.Err("TTF_Init failed: " + std::string(TTF_GetError()));
   }
-  font_ = TTF_OpenFont("assets/fonts/font.ttf", 18);
-  if (!font_)
-    logger_.Err("Failed to open font: " + std::string(TTF_GetError()));
+  // One id per point size the panel draws at. DrawText used to open a font
+  // from disk on every call for any size other than 18, then close it again.
+  for (int pt : {14, 16, 18, 20, 40}) {
+    assetStore_->AddFont("hud-" + std::to_string(pt), "assets/fonts/font.ttf",
+                         pt);
+  }
 
   // Load textures
   assetStore_->AddTexture(renderer_, "board", "assets/gfx/board.png");
@@ -620,10 +623,11 @@ bool PlayState::onExit() {
   }
   registry_.Update();
 
-  if (font_) {
-    TTF_CloseFont(font_);
-    font_ = nullptr;
-  }
+  // Before TTF_Quit() and CloseAudio(): both free everything they own, so a
+  // store cleared afterwards hands already-freed pointers to TTF_CloseFont and
+  // Mix_FreeChunk. This state owns the AssetStore, so its destructor would
+  // otherwise run the clear far too late.
+  assetStore_->ClearAssets();
   TTF_Quit();
   CloseAudio();
   return true;
@@ -1085,10 +1089,7 @@ void PlayState::render() {
 
 void PlayState::DrawText(const std::string &text, int x, int y, SDL_Color color,
                          int ptSize, int maxWidth) {
-  if (!font_)
-    return;
-  TTF_Font *f =
-      ptSize == 18 ? font_ : TTF_OpenFont("assets/fonts/font.ttf", ptSize);
+  TTF_Font *f = assetStore_->GetFont("hud-" + std::to_string(ptSize));
   if (!f)
     return;
   std::string use = text;
@@ -1108,26 +1109,7 @@ void PlayState::DrawText(const std::string &text, int x, int y, SDL_Color color,
       use = TruncateUTF8(use, (int)lo) + "\xE2\x80\xA6"; // …
     }
   }
-  SDL_Surface *surf = TTF_RenderText_Blended(f, use.c_str(), color);
-  if (!surf) {
-    if (f != font_)
-      TTF_CloseFont(f);
-    return;
-  }
-  SDL_Texture *tex = SDL_CreateTextureFromSurface(renderer_, surf);
-  SDL_FreeSurface(surf);
-  if (!tex) {
-    if (f != font_)
-      TTF_CloseFont(f);
-    return;
-  }
-  int w, h;
-  SDL_QueryTexture(tex, nullptr, nullptr, &w, &h);
-  SDL_Rect dst = {x, y, w, h};
-  SDL_RenderCopy(renderer_, tex, nullptr, &dst);
-  SDL_DestroyTexture(tex);
-  if (f != font_)
-    TTF_CloseFont(f);
+  Text::Draw(renderer_, f, use, x, y, color);
 }
 
 void PlayState::DrawStatusPanel() {
@@ -1289,19 +1271,20 @@ void PlayState::InitAudio() {
     audioDisabled_ = true;
     return;
   }
-  wavMove_ = Mix_LoadWAV("assets/sfx/move.wav");
-  wavCapture_ = Mix_LoadWAV("assets/sfx/capture.wav");
-  wavWin_ = Mix_LoadWAV("assets/sfx/win.wav");
-  if (!wavMove_ || !wavCapture_ || !wavWin_) {
+  assetStore_->AddSound("move", "assets/sfx/move.wav");
+  assetStore_->AddSound("capture", "assets/sfx/capture.wav");
+  assetStore_->AddSound("win", "assets/sfx/win.wav");
+  if (!assetStore_->GetSound("move") || !assetStore_->GetSound("capture") ||
+      !assetStore_->GetSound("win")) {
     printf("(sound files missing — audio disabled)\n");
     audioDisabled_ = true;
   }
 }
 
 void PlayState::CloseAudio() {
-  Mix_FreeChunk(wavMove_);
-  Mix_FreeChunk(wavCapture_);
-  Mix_FreeChunk(wavWin_);
+  // The chunks live in the AssetStore now and are freed by ClearAssets, which
+  // onExit() runs before this - Mix_CloseAudio frees every open chunk itself,
+  // so clearing afterwards would double-free.
   Mix_CloseAudio();
   SDL_QuitSubSystem(SDL_INIT_AUDIO);
 }
@@ -1310,14 +1293,14 @@ void PlayState::PlayStateSounds() {
   if (audioDisabled_)
     return;
   if (game_.winner >= 0) {
-    if (wavWin_)
-      Mix_PlayChannel(-1, wavWin_, 0);
+    if (Mix_Chunk *c = assetStore_->GetSound("win"))
+      Mix_PlayChannel(-1, c, 0);
   } else if (game_.lastCaptured > 0) {
-    if (wavCapture_)
-      Mix_PlayChannel(-1, wavCapture_, 0);
+    if (Mix_Chunk *c = assetStore_->GetSound("capture"))
+      Mix_PlayChannel(-1, c, 0);
   } else if (game_.lastFrom >= 0) {
-    if (wavMove_)
-      Mix_PlayChannel(-1, wavMove_, 0);
+    if (Mix_Chunk *c = assetStore_->GetSound("move"))
+      Mix_PlayChannel(-1, c, 0);
   }
 }
 

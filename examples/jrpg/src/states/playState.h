@@ -2,6 +2,8 @@
 
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_ttf.h>
+
+#include <stormengine2/text.h>
 #include <glm/glm.hpp>
 #include <string>
 #include <vector>
@@ -121,7 +123,6 @@ private:
 
     DialogueState dialogue_;
 
-    TTF_Font *font_ = nullptr;
 
     int millisecondsPreviousFrame_ = 0;
 };

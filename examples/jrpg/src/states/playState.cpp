@@ -23,9 +23,8 @@ PlayState::PlayState(SDL_Renderer *renderer, int windowWidth, int windowHeight,
         logger_.Err("PlayState: TTF_Init failed — " + std::string(TTF_GetError()));
         assetsLoaded_ = false;
     }
-    font_ = TTF_OpenFont("./assets/fonts/font.ttf", 18);
-    if (!font_) {
-        logger_.Err("PlayState: failed to load font — " + std::string(TTF_GetError()));
+    assetStore_->AddFont("hud-18", "./assets/fonts/font.ttf", 18);
+    if (!assetStore_->GetFont("hud-18")) {
         assetsLoaded_ = false;
     }
 
@@ -56,11 +55,13 @@ bool PlayState::onEnter() {
 }
 
 bool PlayState::onExit() {
-    if (font_) { TTF_CloseFont(font_); font_ = nullptr; }
+    // ClearAssets BEFORE TTF_Quit, not after: TTF_Quit closes every open font
+    // itself, so clearing a store that holds fonts afterwards would hand
+    // already-freed pointers to TTF_CloseFont.
+    assetStore_->ClearAssets();
     // Matches the TTF_Init in the constructor. Without it SDL_ttf is still up
     // when SDL_Quit runs, which leaves the font cache and FreeType allocated.
     TTF_Quit();
-    assetStore_->ClearAssets();
     m_exiting = true;
     return true;
 }
@@ -551,17 +552,5 @@ void PlayState::RenderDialogueBox() {
 // constructor, so per-call sizes aren't supported.
 void PlayState::DrawText(const std::string &text, int x, int y,
                          SDL_Color color) {
-    if (!font_ || text.empty()) return;
-
-    SDL_Surface *surf = TTF_RenderText_Blended(font_, text.c_str(), color);
-    if (!surf) return;
-    SDL_Texture *tex = SDL_CreateTextureFromSurface(renderer_, surf);
-    SDL_FreeSurface(surf);
-    if (!tex) return;
-
-    int w, h;
-    SDL_QueryTexture(tex, nullptr, nullptr, &w, &h);
-    SDL_Rect dst = {x, y, w, h};
-    SDL_RenderCopy(renderer_, tex, nullptr, &dst);
-    SDL_DestroyTexture(tex);
+    Text::Draw(renderer_, assetStore_->GetFont("hud-18"), text, x, y, color);
 }

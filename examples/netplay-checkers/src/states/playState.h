@@ -3,6 +3,8 @@
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_mixer.h>
 #include <SDL2/SDL_ttf.h>
+
+#include <stormengine2/text.h>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -131,7 +133,6 @@ private:
   bool &isRunning_;
 
   Registry registry_;
-  TTF_Font *font_ = nullptr;
 
   // ── Netplay ───────────────────────────────────────────────────────────
   bool host_;
@@ -161,9 +162,6 @@ private:
   bool hasPrev_ = false;
 
   // ── Audio ─────────────────────────────────────────────────────────────
-  Mix_Chunk *wavMove_ = nullptr;
-  Mix_Chunk *wavCapture_ = nullptr;
-  Mix_Chunk *wavWin_ = nullptr;
   bool audioDisabled_ = false;
 
   // ── Scripted input ────────────────────────────────────────────────────

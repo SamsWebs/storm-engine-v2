@@ -141,6 +141,18 @@
   package user skips. Both are fixed, and the `-dev` packages needed to compile
   against the installed engine are now listed where a package user will see
   them.
+- **`examples/netplay-checkers` re-opened its font from disk for every size but
+  one.** `DrawText` read `ptSize == 18 ? font_ : TTF_OpenFont(...)`, so sizes
+  14, 16, 20 and 40 each cost a file read and a rasteriser build per call, then
+  a close. Its three sound effects moved into the store as well. The UTF-8
+  truncation is untouched, `TTF_SizeUTF8` included - it measures UTF-8-aware
+  while rendering Latin-1, and "fixing" that would move where non-ASCII strings
+  get cut.
+- **`examples/netplay-checkers` and `examples/jrpg` never cleared the store
+  before tearing SDL_ttf down.** jrpg called `ClearAssets()` *after*
+  `TTF_Quit()`; checkers never called it at all and relied on the destructor,
+  which runs after `onExit()`. Both were harmless only because the store held
+  nothing but textures. Both are fixed.
 - **`examples/puzzle` re-opened its font from disk on every line of text.**
   `RenderText` called `TTF_OpenFont` - a file read plus a rasteriser build - and
   `TTF_CloseFont` around each of its 15 call sites, every frame. It now uses the

@@ -188,6 +188,12 @@ public:
 
 `GameState` already includes all engine headers (`ecs.h`, `assetStore.h`, `systems/render.h`, etc.), so you don't need to repeat those includes in your state headers.
 
+That convenience costs 146,748 preprocessed lines per file. If your game does not use most of the engine - no ECS, no built-in systems - include
+`<stormengine2/states/gameStateBase.h>` instead. It is the same `GameState`
+interface with none of the extras (80,265 lines, a 45% saving), and you include
+what you actually use. `gameState.h` includes it, so the two never drift and you
+can switch either way at any time.
+
 ## Registry and Entities
 
 The `Registry` is the heart of the ECS. It creates entities, attaches components, and connects entities to systems.

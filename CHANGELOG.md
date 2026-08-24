@@ -49,6 +49,30 @@
   It carries the two rules that otherwise bite first: register systems before
   creating entities, and let only the active state poll events.
 
+- **`common/states/gameStateBase.h` - the `GameState` interface without the
+  engine attached.** `states/gameState.h` transitively pulls SDL2, every
+  component, every system, the AssetStore, the Logger and the TileMapLoader:
+  **146,748 preprocessed lines for a 23-line interface**
+  (`KNOWN_ISSUES.md` #8). That is a fair trade for a small game that uses most
+  of it, and a bad one for a large game that does not.
+
+  The base header is the same interface and nothing else - **80,265 lines, a
+  45% saving per translation unit**, and almost all of what remains is SDL2
+  itself, which `CapFrameRate` needs for `SDL_GetTicks`/`SDL_Delay`.
+
+  `gameState.h` now includes it and adds the convenience includes on top, so
+  existing code sees no change, `sizeof` is unchanged (measured: 40 for a
+  minimal subclass, before and after), and the two headers cannot drift.
+
+  Measured against the flagship consumer: Center Ice Hockey includes
+  `gameState.h` in 38 files and uses none of the ECS it drags in - about
+  **2.5 million preprocessed lines** it never needed. It relies on none of the
+  transitive includes either, so the switch is an include swap with no other
+  source change.
+
+  A spec includes the base header and nothing else, so the saving cannot
+  silently regress.
+
 - **`GameState::CapFrameRate()` - frame pacing, written once.** Seven states
   had spelled out the same delay-compute-reset block by hand, and five of them
   shadowed the base class's own `millisecondsPreviousFrame` with a member of

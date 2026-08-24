@@ -109,6 +109,16 @@ Animated tiles therefore render as static ones, and the editor's animation UI ha
 
 **Meanwhile.** Include what you use in your own headers rather than leaning on the transitive path; that also makes the v3 upgrade a no-op for you.
 
+**A way out landed in 1.3.0.** `common/states/gameStateBase.h` is the same
+`GameState` interface without the convenience includes - 80,265 preprocessed
+lines against `gameState.h`'s 146,748, a 45% saving per translation unit.
+`gameState.h` now includes it and adds the rest, so nothing existing changed
+and the two cannot drift. A game that does not want the whole engine in every
+state includes the base header and includes what it uses. The defect itself
+stays: `gameState.h` still pulls everything, and trimming *that* is the source
+break v3 is for.
+
+
 ## 9. Every engine type is a global symbol
 
 No public type in `common/` sits in a named namespace. `Entity`, `Registry`, `System`, `Logger`, `Tile`, `TouchZone` and the rest are all global, and the installed headers land in `/usr/local/include/stormengine2/` with the include path as the only qualification. (The one anonymous namespace in the tree, in `netPacket.cpp`, is file-local implementation detail and unrelated.)

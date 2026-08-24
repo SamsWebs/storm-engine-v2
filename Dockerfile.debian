@@ -37,6 +37,12 @@ COPY ./examples /opt/library/examples
 COPY ./editor /opt/library/editor
 COPY ./Makefile.debian /opt/library/Makefile
 COPY ./base.mk /opt/library/base.mk
+# `make install` reads both of these. The release workflow stages the .deb with
+# `make install DESTDIR=...` inside this image, so anything the install target
+# touches has to be in the context or the packaging step dies on a missing file
+# after every object has already been compiled.
+COPY ./stormengine2.pc.in /opt/library/stormengine2.pc.in
+COPY ./template /opt/library/template
 
 # Build the project
 WORKDIR /opt/library

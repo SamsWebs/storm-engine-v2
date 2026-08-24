@@ -3,24 +3,24 @@
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_ttf.h>
 
-#include <stormengine2/text.h>
 #include <glm/glm.hpp>
+#include <stormengine2/text.h>
 #include <string>
 #include <vector>
 
 #include <stormengine2/assetStore.h>
-#include <stormengine2/ecs.h>
-#include <stormengine2/logger.h>
-#include <stormengine2/states/gameState.h>
-#include <stormengine2/tilemapLoader.h>
 #include <stormengine2/components/boxCollider.h>
 #include <stormengine2/components/sprite.h>
 #include <stormengine2/components/transform.h>
+#include <stormengine2/ecs.h>
+#include <stormengine2/logger.h>
+#include <stormengine2/states/gameState.h>
 #include <stormengine2/systems/render.h>
 #include <stormengine2/systems/renderCollider.h>
+#include <stormengine2/tilemapLoader.h>
 
-#include "../components/playerComponent.h"
 #include "../components/npcComponent.h"
+#include "../components/playerComponent.h"
 
 // ─── Sprite sheet layout (640×64, 20 frames of 32×64 each) ───────────────────
 // Frame 0:   idle up        Frame 1:  idle down
@@ -33,96 +33,97 @@ constexpr int PLAYER_FRAME_H = 64;
 // Player and NPCs share a layer so the render sort's feet-line tie-break
 // decides which of them is in front, rather than a fixed spawn-time constant.
 // Tiles in the map are all zIndex <= 3.
-constexpr int CHARACTER_Z    = 4;
+constexpr int CHARACTER_Z = 4;
 
-// ─── Tile constants ────────────────────────────────────────────────────────────
-// The editor uses a 16px grid; passing tileSize=8 to TileMapLoader preserves
-// the exact pixel coordinates from the map file (GCD of common worldX values).
+// ─── Tile constants
+// ──────────────────────────────────────────────────────────── The editor uses
+// a 16px grid; passing tileSize=8 to TileMapLoader preserves the exact pixel
+// coordinates from the map file (GCD of common worldX values).
 constexpr int LOADER_TILE_SIZE = 8;
-constexpr int LOADER_CELL_PX   = 8;   // relativePosition * LOADER_CELL_PX = world px
-constexpr int TILE_SRC_W       = 32;  // source tile width in the tileset PNG
-constexpr int TILE_SRC_H       = 32;  // source tile height in the tileset PNG
+constexpr int LOADER_CELL_PX =
+    8;                         // relativePosition * LOADER_CELL_PX = world px
+constexpr int TILE_SRC_W = 32; // source tile width in the tileset PNG
+constexpr int TILE_SRC_H = 32; // source tile height in the tileset PNG
 
 // ─── Level bounds ────────────────────────────────────────────────────────────
 constexpr float LEVEL_W = 1248.0f;
-constexpr float LEVEL_H = 640.0f;   // must be >= the 600px window: the camera
-                                    // clamps to LEVEL_H - windowHeight_, so a
-                                    // shorter level pins y at 0 and leaves a
-                                    // strip the map can never reach.
+constexpr float LEVEL_H = 640.0f; // must be >= the 600px window: the camera
+                                  // clamps to LEVEL_H - windowHeight_, so a
+                                  // shorter level pins y at 0 and leaves a
+                                  // strip the map can never reach.
 
 // ─────────────────────────────────────────────────────────────────────────────
 struct DialogueState {
-    bool        active       = false;
-    std::string speakerName;
-    std::string fullText;
-    int         visibleChars = 0;
-    float       typeTimer    = 0.0f;
-    float       typeInterval = 0.04f;  // seconds per character
-    bool        complete     = false;
+  bool active = false;
+  std::string speakerName;
+  std::string fullText;
+  int visibleChars = 0;
+  float typeTimer = 0.0f;
+  float typeInterval = 0.04f; // seconds per character
+  bool complete = false;
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
 class PlayState : public GameState {
 public:
-    PlayState(SDL_Renderer *renderer, int windowWidth, int windowHeight,
-              bool isDebugging, AssetStore_Ptr assetStore, bool &isRunning);
-    ~PlayState();
+  PlayState(SDL_Renderer *renderer, int windowWidth, int windowHeight,
+            bool isDebugging, AssetStore_Ptr assetStore, bool &isRunning);
+  ~PlayState();
 
-    void processInput() override;
-    void update()       override;
-    void render()       override;
-    // False when a required texture, the font, or SDL_ttf failed to load.
-    // Game checks this and refuses to start rather than opening an empty
-    // window and exiting 0.
-    bool AssetsLoaded() const { return assetsLoaded_; }
+  void processInput() override;
+  void update() override;
+  void render() override;
+  // False when a required texture, the font, or SDL_ttf failed to load.
+  // Game checks this and refuses to start rather than opening an empty
+  // window and exiting 0.
+  bool AssetsLoaded() const { return assetsLoaded_; }
 
-    bool onEnter()      override;
-    bool onExit()       override;
-    std::string getStateID() const override { return s_playID; }
+  bool onEnter() override;
+  bool onExit() override;
+  std::string getStateID() const override { return s_playID; }
 
 private:
-    void LoadAssets();
-    void SpawnTiles();
-    void LoadColliders();
-    void SpawnPlayer();
-    void SpawnNPC(float x, float y, const std::string &name,
-                  const std::string &dialogue, Direction facing);
+  void LoadAssets();
+  void SpawnTiles();
+  void LoadColliders();
+  void SpawnPlayer();
+  void SpawnNPC(float x, float y, const std::string &name,
+                const std::string &dialogue, Direction facing);
 
-    void UpdatePlayer(float dt);
-    void UpdateAnimation(float dt);
-    void CheckNpcInteraction();
-    void UpdateDialogue(float dt);
+  void UpdatePlayer(float dt);
+  void UpdateAnimation(float dt);
+  void CheckNpcInteraction();
+  void UpdateDialogue(float dt);
 
-    void RenderWorld();
-    void RenderDialogueBox();
-    void DrawText(const std::string &text, int x, int y, SDL_Color color);
+  void RenderWorld();
+  void RenderDialogueBox();
+  void DrawText(const std::string &text, int x, int y, SDL_Color color);
 
-    // Returns the srcX for a given direction + idle/walk state
-    int PlayerSrcX(const PlayerComponent &pc) const;
+  // Returns the srcX for a given direction + idle/walk state
+  int PlayerSrcX(const PlayerComponent &pc) const;
 
-    bool CollidesWithLevel(const SDL_Rect &r) const;
+  bool CollidesWithLevel(const SDL_Rect &r) const;
 
-    static const std::string s_playID;
+  static const std::string s_playID;
 
-    SDL_Renderer  *renderer_;
-    int            windowWidth_, windowHeight_;
-    bool           isDebugging_;
-    AssetStore_Ptr assetStore_;
-    Logger         logger_;
-    bool           assetsLoaded_ = true;
-    bool          &isRunning_;
+  SDL_Renderer *renderer_;
+  int windowWidth_, windowHeight_;
+  bool isDebugging_;
+  AssetStore_Ptr assetStore_;
+  Logger logger_;
+  bool assetsLoaded_ = true;
+  bool &isRunning_;
 
-    Registry       registry_;
-    glm::vec2      camera_ = {0.0f, 0.0f};
+  Registry registry_;
+  glm::vec2 camera_ = {0.0f, 0.0f};
 
-    std::vector<SDL_Rect> colliderRects_;
+  std::vector<SDL_Rect> colliderRects_;
 
-    // Input
-    bool keyUp_ = false, keyDown_ = false, keyLeft_ = false, keyRight_ = false;
-    bool keyInteract_ = false;
+  // Input
+  bool keyUp_ = false, keyDown_ = false, keyLeft_ = false, keyRight_ = false;
+  bool keyInteract_ = false;
 
-    DialogueState dialogue_;
+  DialogueState dialogue_;
 
-
-    int millisecondsPreviousFrame_ = 0;
+  int millisecondsPreviousFrame_ = 0;
 };

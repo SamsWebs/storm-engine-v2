@@ -11,27 +11,27 @@
 
 class Game {
 public:
-    Game();
-    ~Game();
+  Game();
+  ~Game();
 
-    bool Initialize();
-    void ProcessInput();
-    void Update();
-    void Render();
-    bool Run();
-    void Destroy();
+  bool Initialize();
+  void ProcessInput();
+  void Update();
+  void Render();
+  bool Run();
+  void Destroy();
 
 private:
-    bool isRunning   = false;
-    bool isDebugging = false;
+  bool isRunning = false;
+  bool isDebugging = false;
 
-    SDL_Window   *window   = nullptr;
-    SDL_Renderer *renderer = nullptr;
+  SDL_Window *window = nullptr;
+  SDL_Renderer *renderer = nullptr;
 
-    GameStateMachine gameStateMachine;
-    Logger_Ptr       logger;
-    AssetStore_Ptr   assetStore;
+  GameStateMachine gameStateMachine;
+  Logger_Ptr logger;
+  AssetStore_Ptr assetStore;
 
-    int windowWidth  = 800;
-    int windowHeight = 600;
+  int windowWidth = 800;
+  int windowHeight = 600;
 };

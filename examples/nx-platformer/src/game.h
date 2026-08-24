@@ -15,28 +15,28 @@
 
 class Game {
 public:
-    Game();
-    ~Game();
+  Game();
+  ~Game();
 
-    void Initialize();
-    void ProcessInput();
-    void Update();
-    void Render();
-    void Run();
-    void Destroy();
+  void Initialize();
+  void ProcessInput();
+  void Update();
+  void Render();
+  void Run();
+  void Destroy();
 
 private:
-    bool isRunning   = false;
-    bool isDebugging = false;
+  bool isRunning = false;
+  bool isDebugging = false;
 
-    SDL_Window   *window   = nullptr;
-    SDL_Renderer *renderer = nullptr;
+  SDL_Window *window = nullptr;
+  SDL_Renderer *renderer = nullptr;
 
-    GameStateMachine gameStateMachine;
-    Logger_Ptr       logger;
-    AssetStore_Ptr   assetStore;
+  GameStateMachine gameStateMachine;
+  Logger_Ptr logger;
+  AssetStore_Ptr assetStore;
 
-    // Switch is always 1280x720
-    int windowWidth  = 1280;
-    int windowHeight = 720;
+  // Switch is always 1280x720
+  int windowWidth = 1280;
+  int windowHeight = 720;
 };

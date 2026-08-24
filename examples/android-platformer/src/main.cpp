@@ -3,8 +3,8 @@
 #include "game.h"
 
 int main(int argc, char *argv[]) {
-    Game game;
-    game.Run();
-    game.Destroy();
-    return 0;
+  Game game;
+  game.Run();
+  game.Destroy();
+  return 0;
 }

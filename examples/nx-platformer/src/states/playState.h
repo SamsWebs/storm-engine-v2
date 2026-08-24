@@ -104,5 +104,4 @@ private:
 #ifdef __SWITCH__
   PadState pad_;
 #endif
-
 };

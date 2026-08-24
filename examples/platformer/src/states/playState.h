@@ -102,5 +102,4 @@ private:
   // Which run of the sprite strip is playing, so the swap only happens on a
   // change (restarting the clock every frame would freeze it on frame 0).
   bool animWalking_ = false;
-
 };

@@ -6,7 +6,7 @@
 #include <stormengine2/gameStateMachine.h>
 #include <stormengine2/states/gameState.h>
 
-#include "../gamepad.h"
+#include <stormengine2/input/gamepad.h>
 #include "../world.h"
 
 #include <string>

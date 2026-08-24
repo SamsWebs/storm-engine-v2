@@ -50,7 +50,7 @@ bool PlayState::onEnter() {
   // fact would start empty and stay empty.
   registry_.AddSystem<ContactSystem>();
 
-  OpenController();
+  pad_.OpenFirstAttached();
 
   SpawnEntities();
   lastTick_ = SDL_GetTicks();
@@ -58,7 +58,9 @@ bool PlayState::onEnter() {
 }
 
 bool PlayState::onExit() {
-  CloseController();
+  // Before SDL_Quit: SDL_GameControllerQuit force-closes every open pad, so a
+  // Gamepad destroyed afterwards would close freed memory.
+  pad_.Shutdown();
 
   // Before TTF_Quit(), not after. TTF_Quit closes every open font itself, and
   // this state owns the AssetStore - so a store torn down afterwards would
@@ -80,58 +82,6 @@ bool PlayState::onExit() {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Gamepad
-// ─────────────────────────────────────────────────────────────────────────────
-
-void PlayState::OpenController() {
-  if (pad_)
-    return;
-  for (int i = 0; i < SDL_NumJoysticks(); ++i) {
-    if (!SDL_IsGameController(i))
-      continue;
-    pad_ = SDL_GameControllerOpen(i);
-    if (pad_) {
-      logger_.Log("Gamepad connected: " +
-                  std::string(SDL_GameControllerName(pad_)));
-      return;
-    }
-  }
-}
-
-void PlayState::CloseController() {
-  if (!pad_)
-    return;
-  SDL_GameControllerClose(pad_);
-  pad_ = nullptr;
-  padAxis_ = {0.f, 0.f};
-}
-
-// Sticks and the d-pad are held state, not events, so they are sampled once a
-// frame. The shoot button is NOT read here - it has to be edge triggered, or
-// holding it would fire a shot every frame the puck is carried.
-void PlayState::PollController() {
-  padAxis_ = {0.f, 0.f};
-  if (!pad_)
-    return;
-
-  float ax = SDL_GameControllerGetAxis(pad_, SDL_CONTROLLER_AXIS_LEFTX);
-  float ay = SDL_GameControllerGetAxis(pad_, SDL_CONTROLLER_AXIS_LEFTY);
-  if (std::abs(ax) < PAD_DEADZONE)
-    ax = 0.f;
-  if (std::abs(ay) < PAD_DEADZONE)
-    ay = 0.f;
-  padAxis_ = {ax / 32767.f, ay / 32767.f};
-
-  // The d-pad is digital, so it deflects fully and overrides a resting stick.
-  if (SDL_GameControllerGetButton(pad_, SDL_CONTROLLER_BUTTON_DPAD_UP))
-    padAxis_.y = -1.f;
-  if (SDL_GameControllerGetButton(pad_, SDL_CONTROLLER_BUTTON_DPAD_DOWN))
-    padAxis_.y = 1.f;
-  if (SDL_GameControllerGetButton(pad_, SDL_CONTROLLER_BUTTON_DPAD_LEFT))
-    padAxis_.x = -1.f;
-  if (SDL_GameControllerGetButton(pad_, SDL_CONTROLLER_BUTTON_DPAD_RIGHT))
-    padAxis_.x = 1.f;
-}
-
 void PlayState::SpawnEntities() {
   // Rink background
   Entity rink = registry_.CreateEntity();
@@ -337,33 +287,26 @@ void PlayState::processInput() {
       }
       break;
 
-    // ── Gamepad ──────────────────────────────────────────────────────────
-    case SDL_CONTROLLERDEVICEADDED:
-      OpenController();
-      break;
-    case SDL_CONTROLLERDEVICEREMOVED:
-      if (pad_ &&
-          event.cdevice.which ==
-              SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(pad_))) {
-        CloseController();
-        OpenController(); // fall back to another pad if one is still attached
-      }
-      break;
-    case SDL_CONTROLLERBUTTONDOWN:
-      if (event.cbutton.button == SDL_CONTROLLER_BUTTON_A)
-        keyShoot_ = true;
-      if (event.cbutton.button == SDL_CONTROLLER_BUTTON_START ||
-          event.cbutton.button == SDL_CONTROLLER_BUTTON_BACK)
-        isRunning_ = false;
-      break;
-    case SDL_CONTROLLERBUTTONUP:
-      if (event.cbutton.button == SDL_CONTROLLER_BUTTON_A)
-        keyShoot_ = false;
-      break;
     }
+
+    // Device add/remove only; buttons and sticks are polled below.
+    pad_.HandleEvent(event);
   }
 
-  PollController();
+  pad_.Update();
+
+  // Edge-triggered, so holding A fires one shot rather than one per frame.
+  if (pad_.Pressed(GamepadButton::A)) {
+    keyShoot_ = true;
+  }
+  // Releasing A disarms a shot that never found a puck, matching what the
+  // keyboard's SDLK_SPACE key-up does.
+  if (pad_.Released(GamepadButton::A)) {
+    keyShoot_ = false;
+  }
+  if (pad_.Pressed(GamepadButton::Start) || pad_.Pressed(GamepadButton::Back)) {
+    isRunning_ = false;
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -454,7 +397,22 @@ void PlayState::UpdatePlayerMovement(double dt) {
     dir.x -= 1.f;
   if (keyRight_)
     dir.x += 1.f;
-  dir += padAxis_;
+  // Stick first, proportional. The d-pad only speaks when the stick is
+  // centred, because Gamepad folds both into the same direction buttons.
+  glm::vec2 padAxis{pad_.Current().leftX, pad_.Current().leftY};
+  if (padAxis.x == 0.f) {
+    if (pad_.Down(GamepadButton::Left))
+      padAxis.x = -1.f;
+    if (pad_.Down(GamepadButton::Right))
+      padAxis.x = 1.f;
+  }
+  if (padAxis.y == 0.f) {
+    if (pad_.Down(GamepadButton::Up))
+      padAxis.y = -1.f;
+    if (pad_.Down(GamepadButton::Down))
+      padAxis.y = 1.f;
+  }
+  dir += padAxis;
 
   const float len = glm::length(dir);
   if (len > 1.f)
@@ -692,7 +650,7 @@ void PlayState::DrawHUD() {
   DrawText("CPU", RINK_R - 60, 12, {255, 100, 100, 255});
 
   // Controls hint
-  DrawText(pad_ ? "STICK/DPAD: move   A: shoot   START: quit"
+  DrawText(pad_.Connected() ? "STICK/DPAD: move   A: shoot   START: quit"
                 : "WASD: move   SPACE: shoot   ESC: quit",
            RINK_X, RINK_B + 10, {160, 160, 160, 255});
 

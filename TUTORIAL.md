@@ -15,7 +15,8 @@ storm-engine-v2 is a C++17 game engine built on SDL2 that uses the **Entity Comp
 9. [Writing a Custom System](#writing-a-custom-system)
 10. [AssetStore](#assetstore)
 11. [Text](#text)
-12. [Logger](#logger)
+12. [Gamepad](#gamepad)
+13. [Logger](#logger)
 13. [Tags and Groups](#tags-and-groups)
 14. [Putting It Together](#putting-it-together)
 
@@ -521,6 +522,55 @@ Header-only and null-safe: a null renderer or font draws nothing and returns
 `{0, 0}`, which is exactly what `GetFont` hands you for an unregistered ID. It
 never opens or closes a font, and never leaks the intermediate surface or
 texture.
+
+## Gamepad
+
+`Gamepad` (`<stormengine2/input/gamepad.h>`) wraps one physical controller.
+Hold it by value in your `Game` and pass a pointer to the states that need it.
+
+> Not to be confused with `input/virtualGamepad.h`, which is an on-screen
+> *touch* pad for mobile and is SDL-free.
+
+```cpp
+#include <stormengine2/input/gamepad.h>
+
+Gamepad pad;                 // in Game, by value
+pad.OpenFirstAttached();     // SDL does not always send ADDED for a pad that
+                             // was already plugged in, so ask directly
+
+// In processInput, feed it device add/remove events:
+while (SDL_PollEvent(&event)) {
+  pad.HandleEvent(event);
+}
+
+// Then sample it once, after the event loop:
+pad.Update();
+
+// Held this frame:
+if (pad.Down(GamepadButton::Right)) { ... }
+
+// Only on the frame the button went down - menus need this, or holding the
+// button retriggers every frame:
+if (pad.Pressed(GamepadButton::A))    { Shoot(); }
+if (pad.Released(GamepadButton::A))   { ... }
+
+// Analog. Sticks are -1..1 with the deadzone already removed and rescaled, so
+// a light lean really does give a small number. Triggers are 0..1.
+const float x = pad.Current().leftX;
+const float speed = pad.Current().triggerRight;
+```
+
+`Down()` is true for the d-pad **or** the left stick past half travel, so a
+game binds a direction once and either input drives it. Read `Current().leftX`
+directly when you want the analog value rather than the digital one.
+
+**Call `Shutdown()` before `SDL_Quit()` or `SDL_QuitSubSystem()`.**
+`SDL_GameControllerQuit` force-closes and frees every open controller, so a
+`Gamepad` destroyed afterwards calls `SDL_GameControllerClose` on freed memory.
+The destructor is then a harmless second call.
+
+`SetDeadzone()` overrides the default (8000, about 24% of the axis range) if
+that feels wrong for your game.
 
 ## Logger
 

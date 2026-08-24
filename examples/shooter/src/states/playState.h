@@ -4,7 +4,7 @@
 
 #include <stormengine2/gameStateMachine.h>
 
-#include "../gamepad.h"
+#include <stormengine2/input/gamepad.h>
 #include <stormengine2/states/gameState.h>
 
 #include <glm/glm.hpp>

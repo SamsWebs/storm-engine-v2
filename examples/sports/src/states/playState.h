@@ -10,6 +10,7 @@
 #include <stormengine2/ecs.h>
 #include <stormengine2/logger.h>
 #include <stormengine2/states/gameState.h>
+#include <stormengine2/input/gamepad.h>
 #include <stormengine2/systems/contact.h>
 #include <stormengine2/text.h>
 #include <stormengine2/systems/render.h>
@@ -60,12 +61,6 @@ constexpr float RESET_DELAY = 2.0f;    // seconds to pause after a goal
 constexpr float SAVE_DELAY = 3.0f;     // seconds to pause after a goalie save
 constexpr float AI_SHOOT_DIST = 180.f; // AI shoots when this close to goal
 
-// ─── Gamepad
-// ────────────────────────────────────────────────────────────────── Analog
-// sticks rest slightly off centre, so anything under this counts as centred.
-// ~24% of the Sint16 range, the usual starting point.
-constexpr int PAD_DEADZONE = 8000;
-
 class PlayState : public GameState {
 public:
   PlayState(SDL_Renderer *renderer, int windowWidth, int windowHeight,
@@ -81,10 +76,6 @@ public:
 
 private:
   // ── Helpers ──────────────────────────────────────────────────────────────
-  void OpenController();
-  void CloseController();
-  void PollController();
-
   void SpawnEntities();
   void SpawnWalls();
   void ResolvePuckContacts();
@@ -124,11 +115,10 @@ private:
   bool keyUp_ = false, keyDown_ = false, keyLeft_ = false, keyRight_ = false;
   bool keyShoot_ = false;
 
-  // Gamepad. The stick contributes a proportional direction, the d-pad a
-  // full one; both are merged with the keyboard in UpdatePlayerMovement so
-  // either input works at any time, and so does both at once.
-  SDL_GameController *pad_ = nullptr;
-  glm::vec2 padAxis_ = {0.f, 0.f};
+  // The stick contributes a proportional direction, the d-pad a full one;
+  // both are merged with the keyboard in UpdatePlayerMovement, so either
+  // input works at any time and so does both at once.
+  Gamepad pad_;
 
   // Scores
   int playerScore_ = 0;

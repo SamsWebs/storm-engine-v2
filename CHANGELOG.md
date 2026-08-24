@@ -49,6 +49,27 @@
   It carries the two rules that otherwise bite first: register systems before
   creating entities, and let only the active state poll events.
 
+- **`Gamepad` (`common/input/gamepad.h`) - one physical controller, polled.**
+  `examples/shooter` and `examples/strategy` each carried a copy of this, and
+  the copies were literal: identical comments, including the hard-won ones
+  about `SDL_GameControllerQuit` teardown ordering and SDL not emitting
+  `CONTROLLERDEVICEADDED` for a pad that was already plugged in. They had
+  already diverged - strategy had shoulder buttons and five extra accessors
+  that shooter did not - and `examples/sports` had a third, hand-rolled from
+  raw `SDL_GameController`.
+
+  The engine version replaces twenty-odd named accessors with
+  `Down(GamepadButton)`, `Pressed(...)` and `Released(...)` over an enum, so a
+  new button is a row rather than three more methods. `Current()` exposes the
+  analog sticks and triggers, which none of the three copies did.
+
+  `GamepadState` and the three query functions are SDL-free and pure, so edge
+  detection and the deadzone maths are spec'd with no device attached.
+
+  This is the shape the virtual gamepad took in 1.2.0: written for a game,
+  proved there, then promoted. It is not the same thing as
+  `input/virtualGamepad.h`, which is an on-screen touch pad.
+
 - **`AssetStore` now caches fonts and sounds, not just textures.**
   `AddFont(id, path, ptSize)` / `GetFont(id)` and `AddSound(id, path)` /
   `GetSound(id)`, mirroring the existing texture pair; `ClearAssets()` frees all
@@ -141,6 +162,12 @@
   package user skips. Both are fixed, and the `-dev` packages needed to compile
   against the installed engine are now listed where a package user will see
   them.
+- **Every hand-rolled gamepad applied its deadzone by thresholding.** Zero
+  inside, raw value outside - so the stick jumped straight to about 24% of full
+  travel the instant it crossed the boundary, and a slow walk could not be
+  asked for. `GamepadNormaliseStick` subtracts the deadzone and stretches what
+  is left back over 0..1, giving a continuous ramp. It is also radial rather
+  than per-axis, so a full diagonal no longer outruns a straight push.
 - **`examples/netplay-checkers` re-opened its font from disk for every size but
   one.** `DrawText` read `ptSize == 18 ? font_ : TTF_OpenFont(...)`, so sizes
   14, 16, 20 and 40 each cost a file read and a rasteriser build per call, then

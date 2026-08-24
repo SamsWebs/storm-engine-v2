@@ -441,9 +441,9 @@ void BattleState::update() {
         // Modal on the pad too: A confirms, B cancels, everything else is
         // ignored. Y deliberately does NOT confirm -- Y is what opened the
         // prompt, and a double-tap would defeat the point of asking.
-        if (gamepad_->PressedA() || gamepad_->PressedStart()) {
+        if (gamepad_->Pressed(GamepadButton::A) || gamepad_->Pressed(GamepadButton::Start)) {
             ConfirmRetreat();
-        } else if (gamepad_->PressedB() || gamepad_->PressedBack()) {
+        } else if (gamepad_->Pressed(GamepadButton::B) || gamepad_->Pressed(GamepadButton::Back)) {
             CancelRetreat();
         }
 
@@ -457,11 +457,11 @@ void BattleState::update() {
         return;
     }
 
-    if (gamepad_->PressedA()) IssueCommand(Command::Charge);
-    if (gamepad_->PressedB()) IssueCommand(Command::Hold);
-    if (gamepad_->PressedX()) IssueCommand(Command::Volley);
-    if (gamepad_->PressedY()) IssueCommand(Command::Retreat);
-    if (gamepad_->PressedBack()) {
+    if (gamepad_->Pressed(GamepadButton::A)) IssueCommand(Command::Charge);
+    if (gamepad_->Pressed(GamepadButton::B)) IssueCommand(Command::Hold);
+    if (gamepad_->Pressed(GamepadButton::X)) IssueCommand(Command::Volley);
+    if (gamepad_->Pressed(GamepadButton::Y)) IssueCommand(Command::Retreat);
+    if (gamepad_->Pressed(GamepadButton::Back)) {
         isRunning_ = false;
         return;
     }

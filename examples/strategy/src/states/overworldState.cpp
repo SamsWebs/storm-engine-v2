@@ -683,26 +683,26 @@ void OverworldState::update() {
         return;
     }
 
-    if (gamepad_->PressedBack()) {
+    if (gamepad_->Pressed(GamepadButton::Back)) {
         isRunning_ = false;
         return;
     }
     // LB/RB pick the general, the d-pad picks where it goes. Left/right on the
     // d-pad stays wired to the same thing as LB/RB so the pad matches the
     // keyboard, where the arrow keys are all there is.
-    if (gamepad_->PressedLB() || gamepad_->PressedLeft()) {
+    if (gamepad_->Pressed(GamepadButton::LeftShoulder) || gamepad_->Pressed(GamepadButton::Left)) {
         CycleSelection(-1);
     }
-    if (gamepad_->PressedRB() || gamepad_->PressedRight()) {
+    if (gamepad_->Pressed(GamepadButton::RightShoulder) || gamepad_->Pressed(GamepadButton::Right)) {
         CycleSelection(1);
     }
-    if (gamepad_->PressedUp()) {
+    if (gamepad_->Pressed(GamepadButton::Up)) {
         CycleDestination(-1);
     }
-    if (gamepad_->PressedDown()) {
+    if (gamepad_->Pressed(GamepadButton::Down)) {
         CycleDestination(1);
     }
-    if (gamepad_->PressedA() || gamepad_->PressedStart()) {
+    if (gamepad_->Pressed(GamepadButton::A) || gamepad_->Pressed(GamepadButton::Start)) {
         if (selected_ >= 0 && !destinations_.empty()) {
             StartMarch(selected_, destinations_[destSlot_]);
             CycleSelection(0);

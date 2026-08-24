@@ -311,20 +311,21 @@ void PlayState::update() {
   // Sample the controller once per frame. Polled rather than accumulated
   // from events, so a pad unplugged mid-hold cannot latch a direction on.
   gamepad_->Update();
-  if (gamepad_->PressedBack()) {
+  if (gamepad_->Pressed(GamepadButton::Back)) {
     isRunning_ = false;
     return;
   }
 
   // Keyboard and controller are merged: either drives the game, and neither
   // disables the other.
-  const bool left = moveLeft_ || gamepad_->Left();
-  const bool right = moveRight_ || gamepad_->Right();
-  const bool up = moveUp_ || gamepad_->Up();
-  const bool down = moveDown_ || gamepad_->Down();
-  const bool fire = spaceHeld_ || gamepad_->Fire(); // A / RT, held
-  const bool roll = rollPressed_ || gamepad_->PressedB() ||
-                    gamepad_->PressedX(); // B / X, edge
+  const bool left = moveLeft_ || gamepad_->Down(GamepadButton::Left);
+  const bool right = moveRight_ || gamepad_->Down(GamepadButton::Right);
+  const bool up = moveUp_ || gamepad_->Down(GamepadButton::Up);
+  const bool down = moveDown_ || gamepad_->Down(GamepadButton::Down);
+  const bool fire = spaceHeld_ || (gamepad_->Down(GamepadButton::A) ||
+                      gamepad_->Current().triggerRight > 0.5f); // A / RT, held
+  const bool roll = rollPressed_ || gamepad_->Pressed(GamepadButton::B) ||
+                    gamepad_->Pressed(GamepadButton::X); // B / X, edge
 
   if (player_) {
     auto &rb = player_->GetComponent<RigidBodyComponent>();

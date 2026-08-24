@@ -6,7 +6,7 @@
 #include <stormengine2/gameStateMachine.h>
 #include <stormengine2/logger.h>
 
-#include "gamepad.h"
+#include <stormengine2/input/gamepad.h>
 #include "world.h"
 
 // The engine ships no Game class, no main loop and no window management -- only

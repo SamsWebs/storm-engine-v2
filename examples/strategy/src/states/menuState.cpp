@@ -88,17 +88,17 @@ void MenuState::update() {
         return;
     }
 
-    if (gamepad_->PressedUp()) {
+    if (gamepad_->Pressed(GamepadButton::Up)) {
         selected_ = (selected_ + MENU_COUNT - 1) % MENU_COUNT;
     }
-    if (gamepad_->PressedDown()) {
+    if (gamepad_->Pressed(GamepadButton::Down)) {
         selected_ = (selected_ + 1) % MENU_COUNT;
     }
-    if (gamepad_->PressedBack()) {
+    if (gamepad_->Pressed(GamepadButton::Back)) {
         isRunning_ = false;
         return;
     }
-    if (gamepad_->PressedA() || gamepad_->PressedStart()) {
+    if (gamepad_->Pressed(GamepadButton::A) || gamepad_->Pressed(GamepadButton::Start)) {
         if (selected_ == 0) {
             leaving_ = true;
             campaign_->Reset();

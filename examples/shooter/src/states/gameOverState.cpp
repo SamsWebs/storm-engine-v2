@@ -69,11 +69,11 @@ void GameOverState::processInput() {
 
 void GameOverState::update() {
   gamepad_->Update();
-  if (gamepad_->PressedBack()) {
+  if (gamepad_->Pressed(GamepadButton::Back)) {
     isRunning_ = false;
     return;
   }
-  if (gamepad_->PressedA() || gamepad_->PressedStart()) {
+  if (gamepad_->Pressed(GamepadButton::A) || gamepad_->Pressed(GamepadButton::Start)) {
     ToMenu();
     return;
   }

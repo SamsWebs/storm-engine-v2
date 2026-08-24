@@ -3,7 +3,11 @@
 #include <iostream>
 #include <vector>
 
-#include "states/gameState.h"
+// The slim interface, not the convenience header: this file uses only
+// GameState *, so pulling the whole engine in behind it would negate
+// gameStateBase.h entirely. A state that includes the slim header and this one
+// would still get all 146,775 preprocessed lines back.
+#include "states/gameStateBase.h"
 
 class GameStateMachine {
 public:

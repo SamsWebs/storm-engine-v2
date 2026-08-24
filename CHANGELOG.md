@@ -73,6 +73,20 @@
   A spec includes the base header and nothing else, so the saving cannot
   silently regress.
 
+  **`gameStateMachine.h` moved onto the base header too**, and that is what
+  makes any of it real. It uses only `GameState *` but included the convenience
+  header, so a state including the slim base *and* the state machine - which is
+  every state, since the machine is how states are switched - still pulled the
+  whole engine back in: 146,775 preprocessed lines, ECS and all. With the
+  change that file is 89,198 lines and ECS-free. Without it `gameStateBase.h`
+  is inert.
+
+  This narrows what `gameStateMachine.h` provides transitively. Nothing in the
+  repo relied on it - all nine examples, the editor and the suite build
+  unchanged - but a game that leaned on it for `ecs.h`, a component or the
+  AssetStore now needs its own include. That is the one source-visible change
+  in 1.3.0 besides the `AssetStore` rebuild requirement.
+
 - **`GameState::CapFrameRate()` - frame pacing, written once.** Seven states
   had spelled out the same delay-compute-reset block by hand, and five of them
   shadowed the base class's own `millisecondsPreviousFrame` with a member of

@@ -293,7 +293,7 @@ entity.AddComponent<AnimationComponent>(
 The sprite sheet must be laid out horizontally with each frame exactly `frameWidth` pixels wide.
 
 ### BoxColliderComponent
-An axis-aligned bounding box used by `CollisionSystem`.
+An axis-aligned bounding box, read by `ContactSystem` (and by the deprecated `CollisionSystem`).
 
 ```cpp
 #include <stormengine2/components/boxCollider.h>
@@ -309,7 +309,7 @@ All built-in systems are in `<stormengine2/systems/>`. Register them with `regis
 registry.AddSystem<MovementSystem>();
 registry.AddSystem<RenderSystem>();
 registry.AddSystem<AnimationSystem>();
-registry.AddSystem<CollisionSystem>();
+registry.AddSystem<ContactSystem>();
 registry.AddSystem<RenderColliderSystem>(); // debug: draws collider outlines
 ```
 
@@ -376,7 +376,7 @@ void PlayState::update() {
     registry.Update();
     registry.GetSystem<MovementSystem>().Update(deltaTime);
     registry.GetSystem<AnimationSystem>().Update();
-    registry.GetSystem<CollisionSystem>().Update();
+    registry.GetSystem<ContactSystem>().Update();
 }
 
 void PlayState::render() {
@@ -631,7 +631,7 @@ PlayState::PlayState(SDL_Renderer *renderer, int windowWidth, int windowHeight,
     registry_.AddSystem<MovementSystem>();
     registry_.AddSystem<RenderSystem>();
     registry_.AddSystem<AnimationSystem>();
-    registry_.AddSystem<CollisionSystem>();
+    registry_.AddSystem<ContactSystem>();
     registry_.AddSystem<RenderColliderSystem>();
 
     assetStore_->AddTexture(renderer_, "player", "./assets/gfx/player.png");
@@ -663,15 +663,12 @@ void PlayState::processInput() {
 }
 
 void PlayState::update() {
-    int wait = MILLISECS_PER_FRAME - (SDL_GetTicks() - millisecondsPreviousFrame);
-    if (wait > 0 && wait <= MILLISECS_PER_FRAME) SDL_Delay(wait);
-    double deltaTime = (SDL_GetTicks() - millisecondsPreviousFrame) / 1000.0;
-    millisecondsPreviousFrame = SDL_GetTicks();
+    const double deltaTime = CapFrameRate();
 
     registry_.Update();
     registry_.GetSystem<MovementSystem>().Update(deltaTime);
     registry_.GetSystem<AnimationSystem>().Update();
-    registry_.GetSystem<CollisionSystem>().Update();
+    registry_.GetSystem<ContactSystem>().Update();
 }
 
 void PlayState::render() {

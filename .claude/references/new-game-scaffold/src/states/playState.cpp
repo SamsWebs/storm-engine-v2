@@ -100,6 +100,14 @@ void PlayState::processInput() {
 
 void PlayState::update() {
     // Variable dt with a 60 FPS cap. Nothing enforces a minimum frame rate.
+    //
+    // On engine v1.3.0+ this whole block, and the millisecondsPreviousFrame_
+    // member shadowing GameState's own, collapse to:
+    //
+    //     const double deltaTime = CapFrameRate();
+    //
+    // which also clamps a hitch. It is spelled out here because the scaffold
+    // compiles against any 1.x install; see README.md, "Engine version".
     int wait = MILLISECS_PER_FRAME - (SDL_GetTicks() - millisecondsPreviousFrame_);
     if (wait > 0 && wait <= MILLISECS_PER_FRAME) {
         SDL_Delay(wait);

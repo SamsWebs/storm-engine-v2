@@ -1,6 +1,6 @@
 # Editor Tutorial — Building TestProject from Scratch
 
-This tutorial walks through recreating `example_maps/TestProject` step by step. By the end you will have painted tiles from two tilesets onto a canvas and saved a project that the storm-engine-v2 loader can open.
+This tutorial walks through recreating `example_map/TestProject` step by step. By the end you will have painted tiles from two tilesets onto a canvas and saved a project that the storm-engine-v2 loader can open.
 
 ---
 
@@ -36,7 +36,7 @@ TestProject uses two tilesets. Load them both before painting.
 ### Zelda Overworld
 
 1. Go to **Tools → Add Tileset**.
-2. Navigate to `assets/adv/Tilemaps/Tiles/` and select `Zelda_overworld.png`.
+2. Navigate to `bin/assets/adv/Tilemaps/Tiles/` and select `Zelda_overworld.png`.
 3. The tileset appears in the **Texture** floating window.
 
 ### Dungeon Tiles
@@ -68,7 +68,9 @@ Switch the **Tile Properties** dropdown to `Zelda_overworld`.
 The `.map` file records each tile as:
 
 ```
-tiles <asset_id> <src_w> <src_h> <src_x> <src_y> <layer> <dst_x> <dst_y> <scale_x> <scale_y> <flip>
+tiles <asset_id> <src_w> <src_h> <src_x> <src_y> <layer> <dst_x> <dst_y> <scale_x> <scale_y>
+      <has_collider> [<box_w> <box_h> <off_x> <off_y>]
+      <is_animated> [<num_frames> <frame_speed> <vertical> <looped> <frame_offset>]
 ```
 
 The three Zelda tiles in TestProject all use the top-left tile of the sheet (src 0,0) at 1× scale:
@@ -135,7 +137,7 @@ Zoom with the scroll wheel over the canvas (not over an ImGui window) to inspect
 
 Press **Ctrl+S** (or **File → Save**).
 
-A file dialog opens. Navigate to `example_maps/` and save as `TestProject`. The editor writes:
+A file dialog opens. Navigate to `example_map/` and save as `TestProject`. The editor writes:
 
 | File | Contents |
 |---|---|
@@ -149,16 +151,16 @@ project = {
     assets = {
         [0] = {
             asset_id = "Dungeon_Tiles",
-            file_path = "./assets/adv/Tilemaps/Tiles/Dungeon_Tiles.png"
+            file_path = "./bin/assets/adv/Tilemaps/Tiles/Dungeon_Tiles.png"
         },
         [1] = {
             asset_id = "Zelda_overworld",
-            file_path = "./assets/adv/Tilemaps/Tiles/Zelda_overworld.png"
+            file_path = "./bin/assets/adv/Tilemaps/Tiles/Zelda_overworld.png"
         }
     },
     maps = {
         [0] = {
-            file_path = "./example_maps/TestProject.map"
+            file_path = "./example_map/TestProject.map"
         },
     },
     canvas = {
@@ -169,7 +171,7 @@ project = {
 }
 ```
 
-Paths are relative to the editor binary in `bin/`.
+Paths are relative to `editor/`, the directory the editor runs from.
 
 ---
 
@@ -187,6 +189,6 @@ Once your map is ready, go to **File → Save To Lua Table**. This writes a sing
 
 ## Next Steps
 
-- Add box colliders: go to **Tools → Create Colliders** and left-click the canvas to place invisible collision boxes. See `ColTest.lua` in `example_maps/` for an example with colliders.
+- Add box colliders: go to **Tools → Create Colliders** and left-click the canvas to place invisible collision boxes. See `TestProject_colliders.map` in `example_map/` for an example with colliders.
 - Animate tiles: check **Animation** in **Tile Properties** and set **Num Frames** and **Frame Speed** before painting.
 - Load multiple maps in one project: add additional entries to the `maps` table in the `.lua` file.

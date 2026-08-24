@@ -6,12 +6,12 @@
 
 ### Key Features
 - **ECS Architecture**: Clean separation of entities, components, systems, and pools with automatic memory management
-- **Cross-Platform**: Desktop (Windows/Linux/macOS), Android, Nintendo Switch homebrew support
-- **Asset Management**: Built-in texture loading from SDL_image, XML-based asset configuration
+- **Cross-Platform**: Linux desktop, Windows (MinGW-w64 cross-compile), Android, Nintendo Switch homebrew
+- **Asset Management**: Cached textures (SDL_image), fonts (SDL_ttf) and sounds (SDL_mixer), XML-based asset configuration
 - **Game State Machine**: Robust state management with deferred deletion to prevent use-after-free bugs
-- **Input Handling**: Keyboard/mouse, touch controls for mobile, and platform-specific input abstractions
-- **Rendering**: Full SDL2 integration with custom RenderSystem for efficient sprite rendering
-- **Collision Detection**: AABB-based collision system with configurable collider components
+- **Input Handling**: Keyboard/mouse, a `Gamepad` wrapper over SDL_GameController, touch controls for mobile
+- **Rendering**: Full SDL2 integration with custom RenderSystem for efficient sprite rendering, plus header-only `Text` for one-line SDL_ttf drawing
+- **Contact Detection**: AABB `ContactSystem` reports overlaps as `{a, b, normal, depth}` and acts on none of them; a pair filter carries layers, masks and sensors
 
 ---
 
@@ -21,31 +21,45 @@
 
 #### ECS Foundation
 ```cpp
-// Entity: unique identifier, owns all its components and systems
-Entity entity;
+// Entity: a 16-byte handle (id + registry back-pointer). Only
+// Registry::CreateEntity() produces a valid one.
+Entity player = registry.CreateEntity();
 
 // Component: data attached to an entity
-TransformComponent transform;
-SpriteComponent sprite;
-BoxColliderComponent collider;
+player.AddComponent<TransformComponent>(glm::vec2(100, 200));
+player.AddComponent<SpriteComponent>("player-sprite", 64, 64, 1);
+player.AddComponent<BoxColliderComponent>(64, 64);
 
-// System: logic that operates on entities with matching signatures
-void MoveSystem(Entity& e) { ... }
+// System: a class that declares the components an entity must have
+class MoveSystem : public System {
+public:
+  MoveSystem() { RequireComponent<TransformComponent>(); }
+  void Update(double dt) {
+    for (auto &entity : GetSystemEntities()) { /* ... */ }
+  }
+};
+registry.AddSystem<MoveSystem>();
 ```
 
 #### Asset Management (AssetStore)
 - **Texture Loading**: `IMG_Load` + `SDL_CreateTextureFromSurface` with error handling
+- **Font and Sound Caches** (v1.3+): `AddFont(id, path, ptSize)` / `GetFont(id)`, `AddSound(id, path)` / `GetSound(id)`. A font is rasterised at one point size, so one id per size
 - **XML Parsing**: `XmlLoader` for asset configuration files
-- **Memory Management**: Automatic cleanup on entity destruction or state transition
+- **Null-safe Getters**: every getter returns `nullptr` for a missing id rather than throwing, so callers null-check and nothing aborts under the Switch build's `-fno-exceptions`
+- **Teardown Order**: `ClearAssets()` frees textures, fonts and sounds, and must run *before* `TTF_Quit()` / `Mix_CloseAudio()` / `SDL_Quit()` - those calls free the same handles themselves
 
 #### Game State Machine
 - **State Ownership**: States are owned by the GameStateMachine (pass `new` states, don't delete)
 - **Deferred Deletion**: Prevents use-after-free bugs during state transitions
 - **Transition Hooks**: `onEnter()`, `onExit()` called on state changes
 - **Stack Management**: Supports nested states with proper cleanup
+- **Frame Pacing** (v1.3+): protected non-virtual `double CapFrameRate(double maxDeltaSeconds = 0.05)` sleeps out the 60 FPS budget, returns the frame time in seconds and rolls `millisecondsPreviousFrame` forward. Pass `0` to leave the delta unclamped
 
 #### Input Handling
 - **Keyboard/Mouse**: SDL2 event loop abstraction
+- **Gamepad** (v1.3+):
+  - `Gamepad`: SDL_GameController wrapper - `OpenFirstAttached()`, `HandleEvent()`, `Update()`, `Down`/`Pressed`/`Released`, `Current()`, `Connected()`, `Name()`, `SetDeadzone()`, `Shutdown()`
+  - `GamepadButton`, `GamepadState`, and the free `GamepadDown`/`GamepadPressed`/`GamepadReleased`/`GamepadNormaliseStick` helpers
 - **Touch Controls** (v1.2+): 
   - `TouchZone`: Rectangular hit-test zones
   - `VirtualGamepad`: Circular D-pad + SNES-style action diamond
@@ -55,11 +69,38 @@ void MoveSystem(Entity& e) { ... }
 
 ## Version History (from CHANGELOG.md)
 
-> **Current release: v1.2.6.** The entries below stop at v1.2.0 and are kept
-> only as a summary of the early line. `CHANGELOG.md` is authoritative and
-> covers v1.2.1 through v1.2.6 — the safe accessors (`TryGetComponent`,
-> `IsAlive`, `DoesTagExist`), the `kNetControlClose` wire-format change, the
+> **Current release: v1.3.0.** The entries below cover v1.3.0 and then stop at
+> v1.2.0; the older ones are kept only as a summary of the early line.
+> `CHANGELOG.md` is authoritative and is the only place v1.2.1 through v1.2.6
+> are written up - the safe accessors (`TryGetComponent`, `IsAlive`,
+> `DoesTagExist`), the `kNetControlClose` wire-format change, the
 > `TileMapLoader` failure reporting, and the v1.2.6 build fixes.
+
+### v1.3.0 - 2026-08-23
+**Major Update**: Contact reporting, cached fonts and sounds, an engine gamepad, and an installable starter game
+
+> **Upgrading from 1.2.x needs a REBUILD, not just a relink.** `AssetStore`
+> gained font and sound caches, so `sizeof(AssetStore)` went 112 → 208 bytes.
+> Games allocate the store themselves, so a binary built against 1.2.x headers
+> allocates 112 bytes and hands them to a 1.3.0 constructor. This is a
+> deliberate, one-off exception to the 1.x layout promise.
+
+#### Added
+- `common/systems/contact.h` - `ContactSystem`: reports AABB overlaps as `Contact{a, b, normal, depth}`, sorted by `(a.id, b.id)` with `a` always the lower id. `SetOnBeginContact`/`SetOnEndContact` fire once per pair on transitions; `SetPairFilter` skips pairs, which is where layers, masks and sensors live. It never kills, moves or writes anything
+- `common/text.h` - `Text::Draw` / `DrawCentred` / `Measure`, header-only, null-safe, no engine types
+- `common/input/gamepad.h` - `Gamepad`, `GamepadButton`, `GamepadState` and the free button/stick helpers
+- `AssetStore::AddFont`/`GetFont` and `AddSound`/`GetSound`; `ClearAssets()` now frees all three kinds
+- `GameState::CapFrameRate(double maxDeltaSeconds = 0.05)` - the frame-pacing block seven states had written out by hand
+- `stormengine2.pc.in` - `make install` generates `$(PREFIX)/lib/pkgconfig/stormengine2.pc` and installs a starter game to `$(PREFIX)/share/stormengine2/template`
+- Suite expanded: 319 → 369 specs (contacts, contact events, pair filtering, gamepad, text, frame pacing, font and sound caching)
+
+#### Changed
+- `CollisionSystem` is **deprecated**. Behaviour is byte-identical - it still kills both movable entities on contact - but it is now a thin shim over `ContactSystem::BoundsOf`. Its overlap test stays inclusive, where `ContactSystem::Overlaps` is strict: a shared edge is not a contact
+- `shooter` moved onto `ContactSystem` with a pair filter; `shooter` and `strategy` deleted their local `gamepad.h` copies
+- `sports` rebuilt the rink boards as six collider entities and bounces with `glm::reflect` about the contact normal; `RL`/`RT`/`RR`/`RB` are gone
+- `puzzle`, `jrpg`, `netplay-checkers` and `sports` draw through the AssetStore font cache and `Text`; `netplay-checkers` also uses `AddSound`
+- `platformer`, `nx-platformer`, `android-platformer`, `shooter`, `puzzle` and `jrpg` call `CapFrameRate()`; five of them deleted a shadowed `millisecondsPreviousFrame_`
+- Every example is now clang-format clean
 
 ### v1.2.0 — 2026-07-10
 **Major Update**: Virtual gamepad promoted from Android example to engine core
@@ -138,38 +179,84 @@ void MoveSystem(Entity& e) { ... }
 ### Core Engine (common/)
 | File | Purpose |
 |------|---------|
-| `ecs.h/cpp` | Entity, Component, System, Pool classes |
+| `ecs.h/cpp` | Entity, Component, System, Pool and Registry classes |
 | `gameStateMachine.h/cpp` | State management with deferred deletion |
-| `assetStore.h/cpp` | Texture loading and asset management |
+| `states/gameState.h` | GameState base class, `FPS`/`MILLISECS_PER_FRAME`, `CapFrameRate()` |
+| `assetStore.h/cpp` | Texture, font and sound caching |
+| `text.h` | One-line SDL_ttf drawing: `Draw`, `DrawCentred`, `Measure` |
 | `logger.h/cpp` | Console logging with color codes |
-| `registry.h/cpp` | ECS registration system |
-| `tilemapLoader.h/cpp` | Editor map format parsing |
+| `tilemapLoader.h/cpp` | Map parsing; editor and legacy CSV formats, auto-detected |
 | `xmlLoader.h/cpp` | XML configuration parser |
+| `net/net.h` | UDP client-server networking, ported from Teeworlds 0.7.5 |
+
+### Systems (systems/)
+| File | Purpose |
+|------|---------|
+| `contact.h` | `ContactSystem`: AABB contact reporting, begin/end callbacks, pair filter |
+| `collision.h` | `CollisionSystem`: **deprecated**; kills both movable entities on overlap |
+| `movement.h` | `MovementSystem`: integrates `RigidBodyComponent` velocity by delta time |
+| `render.h` | `RenderSystem`: z-sorted sprite drawing with optional camera offset |
+| `animation.h` | `AnimationSystem`: advances the sprite source rect, looped or one-shot |
+| `renderCollider.h` | `RenderColliderSystem`: debug collider outlines |
 
 ### Input (input/)
 | File | Purpose |
 |------|---------|
+| `gamepad.h` | `Gamepad`: SDL_GameController wrapper, button edges, stick deadzone |
 | `touchControls.h` | Touch primitives: TouchZone, TouchPoint |
 | `virtualGamepad.h` | Mobile D-pad + action diamond layout |
 
 ### Examples
-- **android-platformer**: APK build with touch controls
+- **platformer**: Scrolling 2-D platformer - tilemap, gravity, AABB resolution, camera
+- **android-platformer**: APK build driven by the engine's virtual gamepad
 - **nx-platformer**: Nintendo Switch homebrew example
-- **shooter**: Alien Attack-style scrolling shooter
-- **puzzle**: Tetris-style ECS demonstration
-- **jrpg**: RPG state machine examples
-- **strategy**: Tank/truck collision game
+- **shooter**: *1945*, a vertical shoot-'em-up - three-state stack, HUD, gamepad, `ContactSystem`
+- **puzzle**: *Storm Tetris*, Tetris-style ECS demonstration
+- **jrpg**: Top-down RPG - tilemap world, NPC interaction, typewriter dialogue
+- **sports**: *Storm Hockey*, top-down hockey - custom physics systems and gamepad support
+- **strategy**: *Realms*, a *Dragon Force*-style campaign map with pushed side-on battles
+- **netchat / netrepl / netplay-checkers**: networking demos - console chat, 60 Hz snapshot deltas, and graphical authoritative-netplay checkers
 
 ---
 
 ## Build System
 
-### Desktop (Windows/Linux/macOS)
+### Desktop (Debian/Ubuntu)
+
+There is no CMake build and no plain `Makefile` at the repo root - every root
+invocation needs `-f Makefile.debian`.
+
 ```bash
-# Prerequisites: SDL2, SDL_image, tinyxml2, glm
-mkdir build && cd build
-cmake .. -DCMAKE_BUILD_TYPE=Release
-make -j$(nproc)
+# Prerequisites: SDL2, SDL_image, SDL_ttf, SDL_mixer, tinyxml2, glm, GTK3,
+# plus Igloo + snowhouse built from source for the specs (see README.md)
+make -f Makefile.debian            # runs the spec suite, then builds ./bin/libstormenginev2.so
+make -f Makefile.debian target     # library only
+sudo make -f Makefile.debian install
+```
+
+`install` writes the headers, the `.so`, `lib/pkgconfig/stormengine2.pc` and a
+starter game under `share/stormengine2/template`. Both `PREFIX` (default
+`/usr/local`) and `DESTDIR` are honoured; the release workflow packages the
+`.deb` by staging through `DESTDIR`.
+
+Build a game against the installed engine through pkg-config. `-lstormenginev2`
+on its own fails the moment the game calls SDL directly:
+
+```bash
+g++ -std=c++17 mygame.cpp $(pkg-config --cflags --libs stormengine2) -o mygame
+```
+
+Or start from the installed template:
+
+```bash
+cp -r /usr/local/share/stormengine2/template ~/mygame
+cd ~/mygame && make run
+```
+
+### Windows (MinGW-w64 cross-compile from Linux)
+```bash
+sudo apt install mingw-w64 cmake
+make -f Makefile.win        # build/win/libstormenginev2.dll + build/win/tests.exe
 ```
 
 ### Android
@@ -180,7 +267,10 @@ cd examples/android-platformer/
 ```
 
 ### Nintendo Switch (devkitPro only, not released)
-- Build with `build-nx` script in devkitPro environment
+```bash
+export DEVKITPRO=/opt/devkitpro     # the makefile hard-errors without it
+cd examples/nx-platformer && make
+```
 - Assets embedded via romfs
 - Controller input via libnx PadState
 
@@ -192,16 +282,26 @@ The project uses a comprehensive test suite organized by feature:
 
 | Test Suite | Specs | Purpose |
 |------------|-------|---------|
-| `registry.spec.cpp` | 20+ | Component/system registration, entity management |
-| `gameStateMachine.spec.cpp` | 35+ | State transitions, deferred deletion, ownership |
-| `tilemapLoaderEditor.spec.cpp` | 15+ | Map format parsing and rendering |
-| `components/animation.spec.cpp` | 8+ | Animation frame handling, loop control |
-| `components/sprite.spec.cpp` | 7+ | Sprite flipping, offset, fixed positioning |
-| `input/touchControls.spec.cpp` | 10+ | Touch zone hit-testing, multi-finger evaluation |
+| `registry.spec.cpp` | 39 | Component/system registration, entity management |
+| `ecs.spec.cpp` | 36 | Entity handles, component misses, the 32-component ceiling |
+| `states/gameStateMachine.spec.cpp` | 17 | State transitions, deferred deletion, ownership |
+| `states/gameState.spec.cpp` | 5 | `CapFrameRate` pacing, delta clamping, unseeded timestamp |
+| `systems/contact.spec.cpp` + `contactEvents` + `contactFiltering` | 23 | Manifolds and ordering, begin/end events, pair filtering |
+| `systems/collision.spec.cpp` | 4 | The deprecated kill-on-overlap behaviour, pinned |
+| `input/gamepad.spec.cpp` | 11 | Button edges, deadzone and stick normalisation |
+| `input/touchControls.spec.cpp` + `virtualGamepad` | 15 | Touch zone hit-testing, d-pad sectors, action diamond |
+| `text.spec.cpp` | 6 | Null-safe measure and draw |
+| `assetStore.spec.cpp` | 8 | Texture, font and sound caching, and clearing |
+| `net/*.spec.cpp` | 111 | Packets, varints, snapshots, connections, loopback |
+| `tilemapLoaderEditor.spec.cpp` | 8 | Editor map format parsing |
 
-**Total**: 319 specs as of v1.2.6, all passing. The per-file counts above were
-taken at v1.2.0 and have not been retallied; run `make -f Makefile.debian test`
-for the current figure.
+**Total**: 369 specs as of v1.3.0, all passing. Counts above are `It(` tallies
+per file; run `make -f Makefile.debian test` for the authoritative figure.
+
+The suite covers `common/` only - `TESTSRCS` is `find specs` plus `find
+common`, so nothing under `editor/` or `examples/` is compiled into
+`./bin/tests`. Run `./bin/tests` from the repo root; several specs hardcode
+`./specs/assets/...` paths.
 
 ---
 
@@ -210,18 +310,65 @@ for the current figure.
 ### Creating an Entity with Components
 ```cpp
 auto entity = registry.CreateEntity();
-entity.AddComponent<TransformComponent>(vec2{0, 0});
-entity.AddComponent<SpriteComponent>("player.png");
-entity.AddComponent<BoxColliderComponent>({48, 48});
+entity.AddComponent<TransformComponent>(glm::vec2(0, 0), glm::vec2(1, 1), 0.0);
+entity.AddComponent<SpriteComponent>("player-sprite", 48, 48, 1);  // id, w, h, zIndex
+entity.AddComponent<BoxColliderComponent>(48, 48);                 // w, h
 ```
+
+Add every component the entity will ever need before the `registry.Update()`
+that admits it: system membership is computed once, and a component added later
+will not move the entity into a matching system.
 
 ### Adding a System
 ```cpp
-void MySystem(Entity& e) {
-    auto& transform = e.GetComponent<TransformComponent>();
-    // Process entity...
+class HealthSystem : public System {
+public:
+  HealthSystem() { RequireComponent<HealthComponent>(); }
+
+  void Update() {
+    for (auto &entity : GetSystemEntities()) {
+      auto &health = entity.GetComponent<HealthComponent>();
+      // Process entity...
+    }
+  }
+};
+
+registry.AddSystem<HealthSystem>();          // register BEFORE creating entities
+registry.GetSystem<HealthSystem>().Update(); // no scheduler; call it yourself
+```
+
+### Reacting to Contacts
+```cpp
+registry.AddSystem<ContactSystem>();
+auto &contacts = registry.GetSystem<ContactSystem>();
+
+// Layers, masks and sensors live in the filter - skipped pairs never build a
+// manifold and never fire an event.
+contacts.SetPairFilter([](const Entity &a, const Entity &b) {
+  return a.HasComponent<BulletComponent>() || b.HasComponent<BulletComponent>();
+});
+
+contacts.Update();  // reports; never kills or moves anything
+for (const auto &c : contacts.GetContacts()) {
+  // c.a always holds the lower id; c.normal points from a toward b along the
+  // axis of least penetration, and c.depth is the overlap on that axis.
 }
-registry.AddSystem<MySystem>({"Transform", "Sprite"});
+```
+
+### Pacing a Frame and Drawing Text
+```cpp
+void PlayState::update() {
+  const double dt = CapFrameRate();  // sleeps out the 60 FPS budget, clamps a hitch
+  registry_.Update();                // flush pending adds and kills FIRST
+  registry_.GetSystem<MovementSystem>().Update(dt);
+}
+
+// onEnter(): one font id per point size.
+assetStore_->AddFont("hud-24", "./assets/font.ttf", 24);
+
+// render():
+Text::DrawCentred(renderer_, assetStore_->GetFont("hud-24"), "Score: 100",
+                  windowWidth_ / 2, 24, SDL_Color{255, 255, 255, 255});
 ```
 
 ### State Machine Usage
@@ -237,17 +384,23 @@ gameMachine.changeState(state);  // State is owned by machine, don't delete!
 
 1. **README.md** - Project overview, build instructions, example list
 2. **TUTORIAL.md** - Complete ECS tutorial with working code examples
-3. **CHANGELOG.md** - Version history and feature tracking
-4. **Specs Directory** - Unit test specifications for all core features
+3. **CHANGELOG.md** - Version history, feature tracking and behavioural contracts
+4. **KNOWN_ISSUES.md** - Real defects deliberately left unfixed in the 1.x line
+5. **CODING.md** - Duplication and cohesion tenets the engine is written to
+6. **docs/networking.md** - The `net/` module in depth
+7. **docs/TECH_DEBT.md** - Ranked technical-debt ledger
+8. **editor/README.md** + **editor/TUTORIAL.md** - The tilemap and collider painter
+9. **template/README.md** - The starter game `make install` ships
+10. **Specs Directory** - Unit test specifications for all core features
 
 ---
 
 ## License & Credits
 
-- **License**: MIT (check LICENSE file)
-- **Dependencies**: SDL2, SDL_image, tinyxml2, glm (all vendored or pinned versions)
+- **License**: WTFPL (see `LICENSE.md`). `common/net/` is a port of Teeworlds 0.7.5 networking, zlib-licensed
+- **Dependencies**: SDL2, SDL_image, SDL_ttf, SDL_mixer, tinyxml2, glm (apt on desktop; pinned submodules for the Android build)
 - **Contributors**: See GitHub contributors and commit history
 
 ---
 
-*Last updated: 2026-07-10 (v1.2.0)*
+*Last updated: 2026-08-23 (v1.3.0)*

@@ -35,3 +35,10 @@ Per-axis resolution. Resolving x and y in one step lets a corner shove the
 player sideways along a flat floor. Also that the model does not register
 `MovementSystem` for a player it integrates by hand — that double-integrates
 the position.
+
+The second trap is reaching for the engine's collision systems here.
+`CollisionSystem` kills on contact, which is fatal. `ContactSystem` (v1.3.0+)
+is safe to register, but building the tile layer out of one collider entity per
+tile does not work either: its manifold is per box, so a player sliding along a
+floor picks up a sideways normal from the next tile along and is shoved out of
+the wall. The grid has to be resolved by hand, which is what the task asks for.

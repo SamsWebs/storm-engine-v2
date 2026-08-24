@@ -33,3 +33,9 @@ Tests entity lifecycle: creation, deferred flush, and killing entities safely.
 `registry_.Update()`. A model that assumes immediate removal will double-count
 a coin. Also whether it copies the group vector before killing while iterating
 it.
+
+If it uses `ContactSystem` (v1.3.0+) for the pickup test rather than a hand
+distance check, the same trap shows up one level down: a killed coin stays in
+the system's entity vector, and so can still turn up in a contact, until that
+next flush. Registering `CollisionSystem` instead is a fail: it would kill the
+player along with the coin.

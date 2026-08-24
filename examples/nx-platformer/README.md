@@ -23,7 +23,7 @@ export PATH=$DEVKITPRO/devkitA64/bin:$DEVKITPRO/tools/bin:$PATH
 make
 ```
 
-Output: `nx-platformer.nro`
+Output: `bin/nx-platformer.nro` (the Makefile's `BUILD` directory is `bin`)
 
 ## Running
 
@@ -39,7 +39,7 @@ make run EMULATOR=/path/to/Suyu.AppImage
 
 **On hardware (homebrew-enabled Switch):**
 
-Copy `nx-platformer.nro` to `switch/` on your SD card and launch it from the Homebrew Menu.
+Copy `bin/nx-platformer.nro` to `switch/` on your SD card and launch it from the Homebrew Menu.
 
 ## Controls
 
@@ -58,7 +58,7 @@ Copy `nx-platformer.nro` to `switch/` on your SD card and launch it from the Hom
 | Input | SDL keyboard events | libnx `PadState` / `HidNpadButton_*` |
 | Assets | `./assets/` (relative path) | `romfs:/assets/` (embedded romfs) |
 | Engine | Links `-lstormenginev2` (.so) | Compiles `common/` sources directly (no shared lib on NX) |
-| Lua | Linked | Not used (no Switch portlib available) |
+| Solid tiles | Only tiles the map flags with a collider | Every painted tile (`SpawnTiles()` has no `hasCollider` check) |
 | Build system | `examples.mk` (shared) | devkitPro `switch_rules` |
 
 ## Assets
@@ -71,11 +71,13 @@ Assets live in `romfs/` and are embedded into the `.nro` at build time via the `
 nx-platformer/
 ├── Makefile
 ├── README.md
+├── screenshot.png
+├── bin/                                     ← build output: nx-platformer.nro and friends
 ├── include/stormengine2 -> ../../../common  ← symlink: engine sources + <stormengine2/...> includes
 ├── romfs/
-│   └── assets/
+│   └── assets/                              ← copies of examples/platformer/assets/
 │       ├── gfx/
-│       │   └── player.png
+│       │   └── rabbit.png                   ← the player strip the game loads
 │       └── tilemaps/
 │           ├── 16x16-platformer.png
 │           └── platformer.map

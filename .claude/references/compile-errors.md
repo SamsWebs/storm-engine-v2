@@ -10,6 +10,31 @@ the scaffold in `references/new-game-scaffold/`.
 
 ## Stale install: the API moved and your headers did not
 
+### `'ContactSystem' was not declared in this scope`
+
+### `'class AssetStore' has no member named 'AddFont'` / `'GetFont'` / `'AddSound'` / `'GetSound'`
+
+### `'CapFrameRate' was not declared in this scope`
+
+### `stormengine2/text.h: No such file or directory`
+
+### `stormengine2/input/gamepad.h: No such file or directory`
+
+All five arrived in **v1.3.0**. Your `/usr/local/include/stormengine2/` predates
+it.
+
+```bash
+ls /usr/local/include/stormengine2/systems/contact.h   # missing == stale
+pkg-config --modversion stormengine2                   # 1.3.0 or nothing
+cd /path/to/storm-engine-v2 && make -f Makefile.debian target && sudo make -f Makefile.debian install
+```
+
+`ContactSystem` also reaches you transitively through
+`<stormengine2/states/gameState.h>` (it includes `systems/collision.h`, which
+includes `contact.h`), so a missing declaration means stale headers rather than
+a missing `#include`. `text.h` and `input/gamepad.h` are **not** transitive, so
+include them yourself.
+
 ### `'class Registry' has no member named 'DoesTagExist'; did you mean 'DoesGroupExist'?` **(observed)**
 
 `DoesTagExist`, `IsAlive` and `TryGetComponent` arrived in **v1.2.2**. The
@@ -72,6 +97,29 @@ the header when a sprite samples the wrong cell.
 
 ## Build system
 
+### `Package stormengine2 was not found in the pkg-config search path`
+
+The `.pc` file is v1.3.0+. Either the install predates it, or it went somewhere
+`pkg-config` does not look. `make install` writes it to
+`$(PREFIX)/lib/pkgconfig/stormengine2.pc`, so a non-default `PREFIX` needs
+`PKG_CONFIG_PATH` set to match.
+
+```bash
+ls /usr/local/lib/pkgconfig/stormengine2.pc
+export PKG_CONFIG_PATH=/usr/local/lib/pkgconfig:$PKG_CONFIG_PATH
+```
+
+Linking only `-lstormenginev2` by hand is what the `.pc` exists to replace: the
+linker will not let a game borrow the engine's transitive libraries, so the
+moment the game calls SDL directly you get
+
+```
+undefined reference to symbol 'SDL_Init'
+libSDL2-2.0.so.0: error adding symbols: DSO missing from command line
+```
+
+Name them yourself, or use `$(pkg-config --cflags --libs stormengine2)`.
+
 ### Bare `make` at the repo root fails
 
 There is no default `Makefile` — name one:
@@ -95,23 +143,25 @@ flag from `base.mk`, not to symlink a `liblua.so` into place.
 ### `/usr/bin/ld: cannot find -lnfd`
 
 NFD is editor-only and vendored (`vendor/nfd/nfd.h`); only
-`editor/src/utilities/FileDialogWin.cpp` uses it. `Makefile.debian` already
-strips it from the library and test builds with
-`LIB := $(filter-out -lnfd,$(LIB))`. Seeing this error from a *game* build means
-the game inherited the engine's `LIB` — link SDL2 and `-lstormenginev2` only, as
-the scaffold's Makefile does.
+`editor/src/utilities/FileDialogWin.cpp` uses it. `base.mk` keeps it out of the
+shared `LIB` entirely and in a separate `EDITOR_LIB` that only `editor/Makefile`
+puts on a link line, so nothing else should ever see this. Seeing it from a
+*game* build means the game inherited the engine's link flags from somewhere:
+link SDL2 and `-lstormenginev2` yourself (as the scaffold's Makefile does), or
+use `pkg-config --libs stormengine2`.
 
 ### `Package gtk+-3.0 was not found by pkg-config`
 
-`base.mk` links GTK3 and Lua unconditionally, even for headless examples, so
-the engine build needs them present:
+`base.mk` links GTK3 unconditionally, even for headless examples, so the engine
+build needs it present. (`-llua` was dropped, see the entry above, and `-lnfd`
+now lives in `EDITOR_LIB`.)
 
 ```bash
-sudo apt install libgtk-3-dev liblua5.4-dev libnfd-dev
+sudo apt install libgtk-3-dev
 ```
 
-A **standalone game** does not need any of them — see the scaffold's Makefile,
-which links SDL2 and the engine only.
+A **standalone game** does not need it; see the scaffold's Makefile, which
+links SDL2 and the engine only.
 
 ### Edits to a header have no effect / stale objects
 
@@ -196,6 +246,48 @@ Count the sheet's dimensions against the frame size to tell which you have:
 `AssetStore::GetTexture` returns `nullptr` for a missing id instead of throwing.
 Check at load time, next to `AddTexture`, where you still know the path.
 
+### A 1.2.x game crashes in the constructor, or corrupts the heap, after an engine upgrade
+
+Not a build problem and not a code bug: **v1.3.0 changed `sizeof(AssetStore)`
+from 112 to 208 bytes** when it gained the font and sound caches. Games allocate
+the store in their own code (`std::make_unique<AssetStore>()`), so the size is
+emitted at the game's call site. A binary compiled against 1.2.x headers
+allocates 112 bytes and then calls a 1.3.0 constructor that initialises out to
+208. That is a heap overflow, with nothing warning at any layer.
+
+Rebuild the game against the installed headers. Never swap
+`libstormenginev2.so` underneath an already-built binary.
+
+### Text draws nothing and reports no error
+
+`Text::Draw` returns `{0, 0}` and draws nothing for a null renderer, a null
+font, or an empty string. That is by design, so a missing asset does not crash.
+A null
+font is what `AssetStore::GetFont` hands back for an id that was never
+registered, or whose `AddFont` failed. `AddFont` also fails silently-ish (a
+`Logger::Err` line) when `TTF_Init()` was never called: `AssetStore` does not
+initialise SDL_ttf or SDL_mixer.
+
+### The process crashes during shutdown, after the game has already exited cleanly
+
+Teardown order. `TTF_Quit()`, `Mix_CloseAudio()` and `SDL_Quit()` free every
+open font and chunk themselves, so an `AssetStore` destroyed *after* them hands
+already-freed pointers to `TTF_CloseFont` / `Mix_FreeChunk`. Call
+`ClearAssets()` first. The same rule applies to `Gamepad`: call `Shutdown()`
+before `SDL_Quit()`/`SDL_QuitSubSystem()`, because `SDL_GameControllerQuit`
+force-closes every controller.
+
+### Two entities are touching but no contact is reported
+
+`ContactSystem::Overlaps` is **strict**: a shared edge is a zero-area overlap
+with no meaningful normal, so it is not a contact. `CollisionSystem::isCollision`
+is inclusive and counts one; the two deliberately disagree here.
+
+The other silent cause is membership: system membership is computed once, when
+`Registry::Update()` admits the entity, so a `BoxColliderComponent` added to an
+already-live entity never gets it into `ContactSystem`. Create the entity with
+its collider.
+
 ### `./bin/tests` fails on missing files
 
 Run it from the repo root — the specs hardcode `./specs/assets/...`.
@@ -211,4 +303,6 @@ Under the Switch build's `-fno-exceptions`, the ECS paths that use `std::map::at
 By design. System membership is computed exactly once, when `Registry::Update()`
 flushes the entity. `AddComponent` and `RemoveComponent` only flip signature
 bits and never re-evaluate membership. Kill and recreate the entity, or use the
-`RemoveEntityFromSystems` / `AddEntityToSystems` pair above.
+`RemoveEntityFromSystems` / `AddEntityToSystems` pair above. This bites
+`ContactSystem` in particular: a collider added after the flush is invisible to
+it, with no error anywhere.

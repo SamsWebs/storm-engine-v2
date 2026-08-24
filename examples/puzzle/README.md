@@ -1,6 +1,6 @@
 # Storm Tetris
 
-A Tetris-style puzzle game built as a storm-engine-v2 example. Demonstrates custom ECS components and systems, entity reuse, deferred entity lifecycle, and SDL_ttf rendering - all wired together through the engine's Registry.
+A Tetris-style puzzle game built as a storm-engine-v2 example. Demonstrates custom ECS components and systems, entity reuse, deferred entity lifecycle, and text drawn from the engine's cached fonts - all wired together through the engine's Registry.
 
 ![Storm Engine v2 puzzle example](screenshot.png)
 
@@ -9,8 +9,8 @@ A Tetris-style puzzle game built as a storm-engine-v2 example. Demonstrates cust
 From the `examples/puzzle/` directory:
 
 ```bash
-make        # build and launch
-make run    # launch without rebuilding
+make        # build
+make run    # launch
 ```
 
 The binary is written to `bin/tetris`.
@@ -60,6 +60,16 @@ This keeps the ECS data (board position) cleanly separated from the rendering da
 ### Engine Systems Used
 
 - **`RenderSystem`** - draws all entities with `TransformComponent` + `SpriteComponent`, sorted by z-index (ghost pieces at 1 → locked/active blocks at 2)
+
+### Cached Fonts and Text
+
+`onEnter()` opens the HUD font into the `AssetStore` once per point size (`AddFont`), and `RenderText` is a one-line wrapper over the engine's `Text::Draw`, which is handed the cached `TTF_Font *` from `GetFont`. The earlier version re-opened the font from disk on every one of its call sites, every frame.
+
+Teardown order matters: the destructor calls `assetStore_->ClearAssets()` **before** `TTF_Quit()`. `ClearAssets()` now closes fonts as well as destroying textures, and the other order would have it close fonts that `TTF_Quit()` has already freed.
+
+### Frame Pacing
+
+`update()` opens with the engine's `GameState::CapFrameRate()`, which sleeps out the rest of the ~16 ms budget and rolls `millisecondsPreviousFrame` forward. This state ignores the delta it returns and wants only the pacing.
 
 ### Entity Lifecycle Patterns
 

@@ -111,7 +111,7 @@ app/jni/CMakeLists.txt   Builds vendored SDL2/SDL_image (shared) + tinyxml2 (sta
 app/build.gradle         CMake wiring (targets 'main'), SDL Java shim from the submodule, assets reused from ../platformer
 app/src/main/java/...    PlatformerActivity - extracts APK assets to internal storage, then SDLActivity loads SDL2, SDL2_image, main
 src/                     Game code (shares playerComponent.h with the desktop example)
-include/stormengine2     Symlink to ../../common so engine includes resolve without an installed lib
+include/stormengine2     Symlink to ../../../common so engine includes resolve without an installed lib
 ```
 
 The native side `chdir()`s to `SDL_AndroidGetInternalStoragePath()` at boot, so

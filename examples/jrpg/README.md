@@ -139,6 +139,15 @@ struct DialogueState {
 
 `UpdateDialogue()` increments `visibleChars` each `typeInterval` seconds. The first confirm press skips to the full text; the second closes the box. `RenderDialogueBox()` draws a semi-transparent background, the speaker name in gold, and the visible substring of the dialogue in white.
 
+Every line goes through the state's own `DrawText()`, which is one call to the engine's `Text::Draw()` with the font the `AssetStore` opened once at startup:
+
+```cpp
+assetStore_->AddFont("hud-18", "./assets/fonts/font.ttf", 18);   // constructor
+Text::Draw(renderer_, assetStore_->GetFont("hud-18"), text, x, y, color);
+```
+
+`onExit()` calls `assetStore_->ClearAssets()` **before** `TTF_Quit()` - `TTF_Quit()` closes every open font itself, so clearing a store that holds fonts afterwards would hand already-freed pointers to `TTF_CloseFont`.
+
 ### Camera
 
 A `glm::vec2 camera_` follows the player's centre each frame, clamped to the level bounds so the camera never shows empty space:
@@ -156,6 +165,7 @@ camera_.y = std::max(0.f, std::min(playerCY - windowHeight_ / 2.f, LEVEL_H - win
 jrpg/
 ├── Makefile
 ├── README.md
+├── screenshot.png
 ├── assets/
 │   ├── README.md                       ← artwork credit and licence
 │   ├── fonts/
@@ -168,6 +178,8 @@ jrpg/
 │   └── tilemaps/
 │       ├── jrpg.map                    ← editor tile map (1248×640 canvas), generated
 │       ├── jrpg_colliders.map          ← solid list (worldX/worldY/colW/colH per entry)
+│       ├── jrpg.lua                    ← editor project file, never read by the game
+│       ├── README.txt                  ← tileset source link
 │       └── retile.py                   ← regenerates jrpg.map; do not hand-edit the map
 └── src/
     ├── main.cpp

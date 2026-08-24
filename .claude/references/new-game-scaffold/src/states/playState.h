@@ -47,10 +47,12 @@ private:
 
     Registry registry_;
 
-    // Held in an optional rather than a bare Entity member: Entity's default
-    // constructor does not initialise its registry pointer, so a
-    // default-constructed member is unusable until assigned and any method call
-    // on it is undefined behaviour. optional gives it a real empty state.
+    // Held in an optional rather than a bare Entity member: Entity has no
+    // default constructor at all -- only Entity(std::size_t) -- so a bare
+    // `Entity player_;` member does not compile. optional gives it a real empty
+    // state. (A hand-built Entity(id) is not UB on v1.2.2+ either: its registry
+    // pointer is null-initialised and every forwarder null-checks and no-ops.
+    // It still does nothing useful.)
     //
     // This is safe here only because nothing in the scaffold kills the player.
     // Entity ids are recycled and Entity carries no generation, so once your

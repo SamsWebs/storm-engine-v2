@@ -53,9 +53,16 @@ conditions is a smoke test, not an eval.
 
 ## Baseline
 
-Record results in `results.md` as you go: date, model, conditions, score per
-task, first error. Trends across skill revisions are the point; a single run is
-noise.
+Record results in `results.md` as you go: date, model, conditions, engine
+version, score per task, first error. Trends across skill revisions are the
+point; a single run is noise.
+
+Note the **engine version** explicitly from v1.3.0 onwards. It changes what a
+correct answer looks like (`ContactSystem`, `Text`, `Gamepad` and
+`CapFrameRate` only exist there), so a score against a 1.2.x install is not
+comparable to one against 1.3.0. `pkg-config --modversion stormengine2`, or
+`ls /usr/local/include/stormengine2/systems/contact.h`, tells you which you are
+on.
 
 ---
 
@@ -99,9 +106,11 @@ good enough to work without the headers to fall back on.
 
 Mode A is hard to achieve and easy to get wrong. Denying
 `~/Projects/storm-engine-v2` is **not enough**: `make install` copies `common/*`
-to `/usr/local/include/stormengine2/`, byte for byte, so the engine source is
-still on disk under a second path. A model that cats those headers has bypassed
-the skill entirely while your audit reports clean.
+to `/usr/local/include/stormengine2/` and then deletes only `*.o`, `*.d` and
+`*.cpp` from the copy, so every engine **header** is still on disk under a
+second path, byte for byte. Templates and inline bodies live in the headers, so
+that is most of the ECS. A model that cats them has bypassed the skill entirely
+while your audit reports clean.
 
 Real Mode A needs a container with neither the repo nor `/usr/local/include/
 stormengine2` mounted. Anything short of that, label the run Mode B and move on

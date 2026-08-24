@@ -57,6 +57,6 @@ Rules are standard draughts:
 - **Net module**: `NetServer`/`NetClient` rooms, reliable ordered `NetMessageWriter` chunks, a custom message protocol (`kMsgLobby`, `kMsgSeat`, `kMsgGame`, `kMsgMove`, `kMsgCmd`, `kMsgChat`), and host-authoritative validation of every move.
 - **Late-joiner sync**: the host broadcasts the full `CheckersState` (turn, winner, chain state, 64-cell board) whenever anything changes, so a client that connects mid-game renders the current position.
 - **ECS + RenderSystem**: board, pieces, and highlight marks are `Transform` + `Sprite` entities with z-index layering, rebuilt by the host after each move.
-- **AssetStore**: PNG textures for board/pieces/marks, TTF HUD font, and SDL_mixer SFX for moves, captures, and the win fanfare (audio degrades gracefully when no device is available).
+- **AssetStore**: PNG textures for board/pieces/marks, the HUD font at each of the five point sizes the panel draws at (a `TTF_Font` is rasterised at one size, so `hud-14` through `hud-40` are five separate ids), and SDL_mixer SFX for moves, captures, and the win fanfare (audio degrades gracefully when no device is available). Text is drawn with the engine's `Text::Draw()`, and `onExit()` calls `ClearAssets()` before `TTF_Quit()` and `Mix_CloseAudio()` - both of those free everything they own, so clearing afterwards would double-free.
 
 The server is the same binary as the client - `host`/join is decided by the command line, and the engine's net module runs on both sides.

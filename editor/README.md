@@ -13,7 +13,7 @@ make        # build and launch
 make run    # launch without rebuilding
 ```
 
-The binary is written to `bin/editor`. All runtime assets (fonts, sample tilesets, Lua files) are in `bin/assets/` and must stay there — the clean rule does not touch them.
+The binary is written to `bin/editor`, but it runs with `editor/` as the working directory - it loads `fonts/fontawesome-webfont.ttf` and `./assets/mouse_hand.png` from there, which is what both `make` and `make run` do. The sample tilesets and Lua files under `bin/assets/` are starting material for the file dialogs; the clean rule does not touch any of it.
 
 ## Interface Overview
 
@@ -133,13 +133,13 @@ Zoom range is 0.4× to 2.2×, interpolated smoothly.
 
 ### Save
 
-**Ctrl+S** (or **File → Save**) writes three files next to your project file:
+**Ctrl+S** (or **File → Save**) writes up to three files next to your project file:
 
 | File | Contents |
 |---|---|
 | `<name>.lua` | Project metadata: canvas size, tile size, loaded tileset paths |
-| `<name>_tiles.map` | Tile placement data |
-| `<name>_colliders.map` | Collider placement data |
+| `<name>.map` | Tile placement data |
+| `<name>_colliders.map` | Collider placement data (written only when the project has colliders) |
 
 ### Save To Lua Table
 

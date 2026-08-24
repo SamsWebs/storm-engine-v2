@@ -31,6 +31,11 @@ drive the ECS, read input, and resolve collisions by hand.
 ## What this is really testing
 
 Whether the model registers systems before creating entities, calls
-`registry_.Update()` before running systems, and — the trap — knows not to use
-`CollisionSystem`, which **kills** entities with a `RigidBodyComponent` on
-contact instead of bouncing them.
+`registry_.Update()` before running systems, and - the trap - picks the right
+collision path. `CollisionSystem` **kills** entities with a
+`RigidBodyComponent` on contact instead of bouncing them, and is deprecated as
+of engine v1.3.0. On 1.3.0+ the correct answer is `ContactSystem`: register it,
+call its `Update()`, and reverse the ball's x-velocity from `GetContacts()`
+(`Contact` carries a normal and a penetration depth, and `c.a` is always the
+lower entity id). Hand-rolled AABB is also acceptable. Registering
+`CollisionSystem` is not.

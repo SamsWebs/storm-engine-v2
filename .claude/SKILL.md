@@ -12,14 +12,26 @@ date_added: "2026-08-03"
 
 # Storm! Engine v2
 
-> **Current release: v1.2.6** — public API stable for the 1.x line.
+> **Current release: v1.3.0** - public API stable for the 1.x line.
 > Repo: `github.com/WillSams/storm-engine-v2` · License: WTFPL
 >
 > Since v1.2.1: v1.2.2 added the safe accessors (`TryGetComponent`, `IsAlive`,
 > `DoesTagExist`), `VPadStyle`, and the MinGW-w64 cross-build; v1.2.4 changed
 > the `kNetControlClose` wire format (see **Networking Rules**) and made
 > `TileMapLoader` report failures; v1.2.5 was documentation only; v1.2.6 fixed
-> the build only — no API change. `CHANGELOG.md` is authoritative.
+> the build only - no API change. v1.3.0 added `ContactSystem` (and deprecated
+> `CollisionSystem`), `Text`, a physical `Gamepad`, `AssetStore` font and sound
+> caches, `GameState::CapFrameRate()`, a `pkg-config` file and an installed
+> starter game at `$(PREFIX)/share/stormengine2/template`. `CHANGELOG.md` is
+> authoritative.
+>
+> **v1.3.0 is a deliberate one-off ABI break: upgrading needs a REBUILD, not
+> just a relink.** `sizeof(AssetStore)` went from 112 to 208 bytes to hold the
+> font and sound maps, and every game allocates the store in its own code
+> (`std::make_unique<AssetStore>()`), so a binary compiled against 1.2.x headers
+> allocates 112 bytes and then runs a 1.3.0 constructor that initialises out to
+> 208. Nothing warns. Never swap `libstormenginev2.so` underneath an
+> already-built game.
 
 ---
 
@@ -51,11 +63,13 @@ is no engine quit API.
 |--------|-----------|---------|
 | **ECS** | `<stormengine2/ecs.h>` | Entity-Component-System registry, entities, systems |
 | **Game State Machine** | `<stormengine2/gameStateMachine.h>`, `<stormengine2/states/gameState.h>` | Stack-based state management with deferred cleanup |
-| **Asset Store** | `<stormengine2/assetStore.h>` | Texture loading and caching by string ID |
+| **Asset Store** | `<stormengine2/assetStore.h>` | Texture, font and sound loading and caching by string ID |
 | **Tilemap Loader** | `<stormengine2/tilemapLoader.h>` | Load `.map` files (editor or CSV format) |
 | **XML Loader** | `<stormengine2/xmlLoader.h>` | Parse XML asset/entity definitions via tinyxml2 |
 | **Logger** | `<stormengine2/logger.h>` | Timestamped, color-coded logging with callback hooks |
+| **Text** | `<stormengine2/text.h>` | Header-only one-line SDL_ttf drawing: `Draw` / `DrawCentred` / `Measure`. Null-safe, leak-free, opens no font |
 | **Networking** | `<stormengine2/net/net.h>` | UDP host/join: reliable chunks, snapshots, kick/ban |
+| **Gamepad** | `<stormengine2/input/gamepad.h>` | One physical `SDL_GameController`: `Down`/`Pressed`/`Released`, deadzone-rescaled sticks. Not the same file as `virtualGamepad.h` |
 | **Touch Input** | `<stormengine2/input/touchControls.h>`, `<stormengine2/input/virtualGamepad.h>` | SDL-free touch primitives and virtual gamepad layout. `MakeVPadLayout(w, h, style)` takes an optional `VPadStyle`, defaulting to `VPadStyle::Xbox` (Y top, X left, B right, A bottom); pass `VPadStyle::Snes` for the older arrangement. Touch-target positions are identical under both — only the lettering moves. |
 
 ---
@@ -85,7 +99,7 @@ player.AddComponent<SpriteComponent>("player", 64, 64, 1);
 registry.AddSystem<MovementSystem>();
 registry.AddSystem<RenderSystem>();
 registry.AddSystem<AnimationSystem>();
-registry.AddSystem<CollisionSystem>();
+registry.AddSystem<ContactSystem>();  // CollisionSystem is deprecated in 1.3.0
 
 // Reference accessor — PRECONDITION: the entity has the component. On a miss it
 // logs (throttled) and returns a shared default-constructed fallback.
@@ -186,8 +200,66 @@ These are the biggest correctness traps — understand them before writing ECS c
 | `MovementSystem` | Transform + RigidBody | Moves entities by `velocity * deltaTime` |
 | `RenderSystem` | Transform + Sprite | Draws sprites sorted by `zIndex`; applies the camera offset except to sprites with `isFixed` (HUD/screen-space), and honours `sprite.offset`, `transform.scale`, `transform.rotation` and `sprite.flip` |
 | `AnimationSystem` | Sprite + Animation | Advances sprite sheet frames. **`vertical == true` (the default) advances `srcRect.y`; `false` advances `srcRect.x`.** Mismatching the flag against the sheet's layout is silent — the sprite samples outside the texture and draws nothing, or sits on frame 0. `examples/platformer`'s `rabbit.png` is a vertical strip (37x1026) and passes `true`; the scaffold's sheet is horizontal and passes `false`. |
-| `CollisionSystem` | Transform + BoxCollider | AABB collision detection; kills entities with RigidBody on contact |
+| `ContactSystem` | Transform + BoxCollider | **Preferred since 1.3.0.** Reports AABB overlaps with a normal and a penetration depth, plus begin/end callbacks and a pair filter. Never kills, moves or writes anything |
+| `CollisionSystem` | Transform + BoxCollider | AABB collision detection; kills entities with RigidBody on contact. **Deprecated in 1.3.0** - behaviour byte-identical, kept for source compatibility with 1.0-1.2 games |
 | `RenderColliderSystem` | Transform + BoxCollider | Debug overlay: draws collider outlines in green |
+
+### Contacts
+
+`ContactSystem` (`<stormengine2/systems/contact.h>`) detects overlaps and
+*reports* them. It never kills an entity, never moves one and never writes a
+component, because the engine has no system scheduler - what a contact means,
+and in what order to respond, is the game's call.
+
+```cpp
+registry_.AddSystem<ContactSystem>();
+auto &contacts = registry_.GetSystem<ContactSystem>();
+
+// Skip pairs you never care about. This is where layers, masks and sensors
+// live, and it costs no component slot. The filter runs BEFORE the manifold is
+// built, which is what keeps a dense volley cheap.
+contacts.SetPairFilter([](const Entity &a, const Entity &b) {
+    return !(a.BelongsToGroup("bullets") && b.BelongsToGroup("bullets"));
+});
+
+// Once per pair on the transition, not once per frame while touching.
+contacts.SetOnBeginContact([](const Contact &c) { /* c.normal, c.depth */ });
+contacts.SetOnEndContact([](const Entity &a, const Entity &b) { /* ... */ });
+
+// In update(), after registry_.Update():
+contacts.Update();
+for (const auto &c : contacts.GetContacts()) {
+    // c.a always holds the LOWER entity id, so c.normal is a stable unit axis
+    // pointing a -> b along the axis of least penetration, and c.depth > 0.
+    c.a.GetComponent<TransformComponent>().position -=
+        ContactSystem::MinimumTranslation(c);
+}
+```
+
+Rules to know before you use it:
+
+- **`GetContacts()` is sorted by `(a.id, b.id)`** and is invalidated by the next
+  `Update()`. `Update()` is safe to call twice in a frame: the second call
+  reports the same contacts and fires nothing new.
+- **`Overlaps` is strict - a shared edge is not a contact**, because a
+  zero-area overlap has no meaningful normal. `CollisionSystem::isCollision` is
+  inclusive and deliberately still is, so the two disagree on touching boxes.
+- **`SetOnEndContact` silently drops a pair whose entity died.**
+  `Registry::Update()` returns a killed id to the free list in the same pass
+  that removes it from the system, so handing it back would be KNOWN_ISSUES #1.
+- **Membership is still computed once.** Adding a `BoxColliderComponent` to a
+  live entity never gets it into `ContactSystem`; create the entity with its
+  collider.
+- **`BoundsOf`, `Overlaps`, `Manifold` and `MinimumTranslation` are static** -
+  usable with no system registered. `CollisionSystem` now calls `BoundsOf` too,
+  so there is exactly one copy of the bounds math.
+- **The broadphase sweeps X only.** Everything stacked in one column degrades to
+  all-pairs. Fine for a puck and six boards, or bullets and enemies.
+- **Do not build tilemap collision out of one collider entity per tile.** The
+  manifold picks the axis of least penetration *per box*, so a character sliding
+  along adjacent tile colliders picks up a sideways normal from a tile it barely
+  overlaps and is shoved out of the wall - the ghost-vertex problem. Snap to a
+  solid grid instead (see the platformer block below).
 
 ### Custom Components and Systems
 
@@ -264,9 +336,11 @@ public:
 
 **Important:** `GameState` transitively pulls in `ecs.h`, `assetStore.h`,
 `logger.h`, `tilemapLoader.h`, every component in `common/components/` and every
-system in `common/systems/`. It does **not** include `common/input/`
-(`touchControls.h`, `virtualGamepad.h`) or `common/net/`; states using touch, the
-virtual gamepad, or networking must include those themselves.
+system in `common/systems/` (`ContactSystem` included, since `collision.h`
+includes `contact.h`). It does **not** include `common/input/`
+(`touchControls.h`, `virtualGamepad.h`, `gamepad.h`), `common/text.h` or
+`common/net/`; states using touch, either gamepad, `Text`, or networking must
+include those themselves.
 
 Do not *rely* on that transitive reach — include what you use. The breadth of
 this header is a documented defect (`KNOWN_ISSUES.md` §8: ~713 headers and ~145k
@@ -322,19 +396,22 @@ Rules to code against:
 The `Game` class owns the window, renderer, and main loop. It delegates to
 the state machine. **The engine ships no Game class** — the game writes it.
 
-Timestep is variable dt with a 60 FPS **cap**: each state computes
-`MILLISECS_PER_FRAME - elapsed` and `SDL_Delay`s the remainder. Nothing
-enforces a minimum frame rate. Games typically stack two throttles:
-`SDL_RENDERER_PRESENTVSYNC` *and* the state's own delay budget.
+Timestep is variable dt with a 60 FPS **cap**. Since 1.3.0 that pacing lives in
+`GameState::CapFrameRate()` instead of being retyped in every state: it sleeps
+out the rest of `MILLISECS_PER_FRAME`, returns the elapsed seconds, and rolls
+`millisecondsPreviousFrame` forward. Nothing enforces a minimum frame rate.
+Games typically stack two throttles: `SDL_RENDERER_PRESENTVSYNC` *and* the
+state's own delay budget.
 
-There is **no keyboard or physical-gamepad abstraction** — nothing under
-`common/` references `SDL_Keycode`, `SDL_SCANCODE`, `SDL_GameController` or
-`SDL_Joystick`. `common/input/` holds the touch primitives
-(`touchControls.h`: `TouchZone`/`TouchPoint`/`TouchZones`/`TouchInput`) and the
-SDL-free virtual gamepad (`virtualGamepad.h`: `MakeVPadLayout(w, h, style =
+There is **no keyboard abstraction** - nothing under `common/` references
+`SDL_Keycode` or `SDL_SCANCODE`, so keyboard/quit handling is raw
+`SDL_PollEvent` inside each state's `processInput()`. `common/input/` holds
+three separate things: the touch primitives (`touchControls.h`:
+`TouchZone`/`TouchPoint`/`TouchZones`/`TouchInput`), the SDL-free on-screen
+virtual gamepad (`virtualGamepad.h`: `MakeVPadLayout(w, h, style =
 VPadStyle::Xbox)`, `EvalVPad`, `VPadState`, `VPadLayout`, `enum class VPadStyle
-{ Xbox, Snes }`). Keyboard/quit handling is raw `SDL_PollEvent` inside each
-state's `processInput()`.
+{ Xbox, Snes }`), and, since 1.3.0, a real controller wrapper (`gamepad.h`:
+`Gamepad` over `SDL_GameController`).
 
 ```cpp
 void Game::Run() {
@@ -347,53 +424,107 @@ void Game::Run() {
 }
 ```
 
-### Fixed Timestep in States
+### Frame Pacing in States
 
-States manage their own frame timing:
+Since 1.3.0 the pacing lives on `GameState` itself. `CapFrameRate` is protected,
+non-virtual and adds no member, so it changes neither the layout nor the vtable:
 
 ```cpp
 void PlayState::update() {
-    int wait = MILLISECS_PER_FRAME - (SDL_GetTicks() - millisecondsPreviousFrame);
-    if (wait > 0 && wait <= MILLISECS_PER_FRAME) SDL_Delay(wait);
-    double deltaTime = (SDL_GetTicks() - millisecondsPreviousFrame) / 1000.0;
-    millisecondsPreviousFrame = SDL_GetTicks();
+    // Sleeps out the rest of the 60 FPS budget, rolls
+    // millisecondsPreviousFrame forward, and returns how long the frame took
+    // in seconds. The default clamps a hitch to 0.05 s so one long frame (a
+    // level load, a breakpoint, a window drag) cannot teleport everything
+    // through a wall. Pass 0 for the raw, unclamped delta.
+    const double deltaTime = CapFrameRate();
 
     registry_.Update();  // flush deferred adds/kills FIRST
     registry_.GetSystem<MovementSystem>().Update(deltaTime);
     registry_.GetSystem<AnimationSystem>().Update();
-    registry_.GetSystem<CollisionSystem>().Update();
+    registry_.GetSystem<ContactSystem>().Update();
 }
 ```
 
-The `millisecondsPreviousFrame` used above is a protected `int` on `GameState`
-(alongside `m_loadingComplete`, `m_exiting` and `m_textureIDList`) — inherit it,
-don't redeclare it. `GameState`'s constructor is protected and its destructor is
+`millisecondsPreviousFrame` is a protected `int` on `GameState` (alongside
+`m_loadingComplete`, `m_exiting` and `m_textureIDList`) - inherit it, don't
+redeclare it. Shadowing it with a `millisecondsPreviousFrame_` of your own is
+exactly what `CapFrameRate` exists to stop: seven in-repo states had written the
+budget out by hand and five of them carried that shadow member, and all five
+have dropped it. `GameState`'s constructor is protected and its destructor is
 virtual.
 
 `MILLISECS_PER_FRAME` is defined as `1000 / 60` (targeting 60 FPS) in
-`gameState.h`.
+`gameState.h`, and `CapFrameRate` is written against it. Hand-rolling the same
+loop still works if you want a different budget.
 
 ---
 
 ## Asset Store
 
-Textures are loaded and cached by string ID. `GetTexture` returns `nullptr`
-for a missing id (it does not throw) — null-check it.
+Textures, fonts and sounds are loaded and cached by string ID. Every getter
+returns `nullptr` for a missing id (none of them throw) - null-check the result.
 
 ```cpp
 assetStore->AddTexture(renderer, "player", "./assets/gfx/player.png");
 SDL_Texture *tex = assetStore->GetTexture("player");
-assetStore->ClearAssets();  // free all (also called in destructor)
+
+// A TTF_Font is rasterised at ONE point size, so register one id per size you
+// draw at ("hud-18", "title-32"). Requires TTF_Init() to have been called.
+assetStore->AddFont("hud-18", "./assets/fonts/font.ttf", 18);
+TTF_Font *font = assetStore->GetFont("hud-18");
+
+// Requires Mix_OpenAudio() to have been called.
+assetStore->AddSound("jump", "./assets/sfx/jump.wav");
+Mix_PlayChannel(-1, assetStore->GetSound("jump"), 0);
+
+assetStore->ClearAssets();  // frees textures, fonts AND sounds (also in dtor)
 ```
 
-Re-adding an existing id destroys the previous texture, so any `SDL_Texture *`
-you cached from an earlier `GetTexture` for that id dangles. A failed load logs
-via `Logger::Err` and returns — the id simply stays unmapped, and `GetTexture`
-keeps returning `nullptr`.
+**Call `ClearAssets()` before `TTF_Quit()`, `Mix_CloseAudio()` or `SDL_Quit()`.**
+Those calls free every open font and chunk themselves, so a store destroyed
+afterwards hands already-freed pointers to `TTF_CloseFont` / `Mix_FreeChunk`.
+The store is usually owned by the `Game` and outlives the state that shut the
+subsystems down, which is exactly the order that goes wrong. The store does not
+initialise SDL_ttf or SDL_mixer: a game that never calls `TTF_Init()` or
+`Mix_OpenAudio()` gets a logged failure and a `nullptr`, not a crash.
+
+Re-adding an existing id destroys the previous asset, so any `SDL_Texture *`,
+`TTF_Font *` or `Mix_Chunk *` you cached from an earlier getter for that id
+dangles. A failed load logs via `Logger::Err` and returns - the id simply stays
+unmapped, and the getter keeps returning `nullptr`.
+
+`sizeof(AssetStore)` went from 112 to 208 bytes in 1.3.0 to hold the two new
+maps. That is a deliberate one-off 1.x ABI break: rebuild consuming games rather
+than relinking them.
 
 The `AssetStore_Ptr` (`std::unique_ptr<AssetStore>`) is typically created in
 `Game` and moved into the first state via `std::move`. Pass raw pointers or
 references to subsequent states.
+
+### Text
+
+`<stormengine2/text.h>` is the five-call SDL_ttf dance (render a surface, make a
+texture, query its size, copy it, free both) written once. Header-only and free
+of engine types, so it costs nothing to a TU that does not include it and it
+reaches every platform target. It is null-safe: a null renderer or font, or an
+empty string, draws nothing and returns `{0, 0}` - which is exactly what
+`GetFont` hands back for an unregistered id. It never opens or closes a font,
+and never leaks the surface or texture on any path, including the failure ones.
+
+```cpp
+#include <stormengine2/text.h>
+
+TTF_Font *font = assetStore_->GetFont("hud-18");
+Text::Draw(renderer_, font, "Score: 400", 10, 10, SDL_Color{255, 255, 255, 255});
+Text::DrawCentred(renderer_, font, "GAME OVER", windowWidth_ / 2, 200,
+                  SDL_Color{255, 210, 50, 255});
+SDL_Point size = Text::Measure(font, "Score: 400");  // layout without drawing
+```
+
+`DrawCentred` replaces the hand-guessed `windowWidth / 2 - 30` offsets, which
+drift the moment the string or the point size changes. Both drawing calls create
+and destroy a texture per call, so cache the result yourself for a long string
+that is on screen every frame.
 
 ---
 
@@ -577,6 +708,58 @@ registers when it exceeds `tan(22.5°)` of the other.
 
 ---
 
+## Physical Gamepad
+
+`<stormengine2/input/gamepad.h>` wraps one real `SDL_GameController`. This is
+**not** `virtualGamepad.h`, which is the SDL-free on-screen touch pad above.
+Hold a `Gamepad` by value in your `Game` and pass a pointer to the states that
+need it.
+
+```cpp
+#include <stormengine2/input/gamepad.h>
+
+Gamepad pad;                 // in Game, by value (non-copyable: it holds a handle)
+pad.OpenFirstAttached();     // SDL does not always emit CONTROLLERDEVICEADDED
+                             // for a pad that was already plugged in
+
+// In processInput(), feed it device add/remove events:
+while (SDL_PollEvent(&event)) { pad.HandleEvent(event); /* ... */ }
+
+// Then sample it once, after the event loop. Polled, not accumulated, so a pad
+// unplugged mid-hold cannot latch a direction on.
+pad.Update();
+
+if (pad.Down(GamepadButton::Right)) { /* held this frame */ }
+if (pad.Pressed(GamepadButton::A))  { /* only the frame it went down */ }
+if (pad.Released(GamepadButton::A)) { /* only the frame it came up */ }
+
+const float x = pad.Current().leftX;          // -1..1, deadzone removed
+const float t = pad.Current().triggerRight;   // 0..1
+```
+
+- **`Down()` is true for the d-pad *or* the left stick past half travel**, so a
+  game binds a direction once and either input drives it. Read
+  `Current().leftX` when you want the analog value instead.
+- **Call `Shutdown()` before `SDL_Quit()` / `SDL_QuitSubSystem()`.**
+  `SDL_GameControllerQuit` force-closes and frees every open controller, so a
+  `Gamepad` destroyed afterwards calls `SDL_GameControllerClose` on freed
+  memory. The destructor is then a harmless second call.
+- **The deadzone is radial and rescaled**, not a threshold: `SetDeadzone()`
+  overrides the 8000 default (~24% of the `Sint16` range). Thresholding alone
+  makes the stick jump to a quarter speed the instant it crosses; the rescale
+  gives a continuous ramp from a standstill, and being radial rather than
+  per-axis keeps the reachable set a circle.
+- **`GamepadState`, `GamepadDown`, `GamepadPressed`, `GamepadReleased` and
+  `GamepadNormaliseStick` are SDL-free and pure**, so the edge detection and
+  deadzone maths are spec'd with no device attached.
+- Only the first pad is taken; a second one plugging in is ignored rather than
+  stealing control mid-game. `Connected()` and `Name()` report what is open.
+
+`examples/shooter`, `examples/strategy` and `examples/sports` are the in-repo
+consumers; the first two deleted their own diverging copies of this file for it.
+
+---
+
 ## Platforms
 
 | Platform | How it works |
@@ -683,8 +866,10 @@ under Wine, not an error message. Examples cross-build through
   into a root `Makefile` that does not exist.
 - **`cd editor && make` launches the editor** — the link rule executes the
   binary. Examples do *not* auto-launch.
-- **GTK3 and Lua are linked unconditionally**, even for headless networking
-  examples. `pkg-config gtk+-3.0` must resolve or nothing compiles.
+- **GTK3 is linked unconditionally**, even for headless networking examples, so
+  `pkg-config gtk+-3.0` must resolve or nothing compiles. `-llua` was dropped
+  from `base.mk`: nothing in `common/`, `specs/` or `editor/` includes a Lua
+  header or references a `lua_`/`luaL_` symbol.
 
 ### CI
 
@@ -698,8 +883,9 @@ are not built at all: neither toolchain is in the image, and `.dockerignore`
 keeps both trees out of the build context. The Windows cross-build is not in CI
 either.
 
-The script overrides `LIB` on the command line to drop `-lnfd` and GTK; no
-example calls either.
+The script still overrides `LIB` on the command line to drop GTK, which no
+example calls. `-lnfd` no longer needs stripping: `base.mk` keeps it in a
+separate `EDITOR_LIB` that only `editor/Makefile` puts on a link line.
 
 ### Tests
 
@@ -740,10 +926,10 @@ networking builds there.
 - GLM (math)
 - tinyxml2 (XML loading)
 - Igloo + snowhouse (test framework, must be built from source)
-- GTK3 and Lua (linked unconditionally on desktop, even for headless examples)
-- NFD (`-lnfd`, editor-only — `Makefile.debian` filters it back out of the
-  library and test links, and CI overrides `LIB` for the examples; `vendor/nfd`
-  ships only `nfd.h` and a LICENSE, so nothing can actually link it on Debian)
+- GTK3 (linked unconditionally on desktop, even for headless examples)
+- NFD (`-lnfd`, editor-only - `base.mk` keeps it out of the shared `LIB` and in
+  `EDITOR_LIB`, which only `editor/Makefile` uses; `vendor/nfd` ships only
+  `nfd.h` and a LICENSE, so nothing can actually link it on Debian)
 - zlib (`-lz`)
 
 ---
@@ -752,7 +938,7 @@ networking builds there.
 
 1. **ECS over inheritance** — entities are IDs, components are plain data, systems are logic. No deep inheritance hierarchies.
 2. **Deferred entity lifecycle** — creation and destruction are batched and flushed on `registry.Update()` to avoid invalidating iterators mid-loop.
-3. **System membership is computed once** — `AddComponent`/`RemoveComponent` only flip bits; they never re-evaluate system membership. Kill-and-recreate is the only fix.
+3. **System membership is computed once** - `AddComponent`/`RemoveComponent` only flip bits; they never re-evaluate system membership. Kill-and-recreate is the usual fix; the manual alternative is the public `RemoveEntityFromSystems` + `AddEntityToSystems` pair (see ECS Traps 1).
 4. **State machine owns events** — `SDL_PollEvent` is called only in the active state, never in the game loop.
 5. **Deferred state deletion** — discarded states survive the `changeState`/`popState` call that removes them, preventing use-after-free.
 6. **No main loop, no Game class** — the engine ships `GameStateMachine` only; the game writes the loop, window, and renderer setup.
@@ -857,7 +1043,7 @@ General 2D game dev principles, mapped to how Storm Engine v2 implements them.
 |-----------|-------------------------------|
 | **Tile size** — 16x16, 32x32, 64x64 | `TileMapLoader` constructor takes `tileSize` (default 32). The JRPG example uses 8 to preserve exact editor pixel coordinates. |
 | **Auto-tiling** — use for terrain | Not built in. The tile editor is manual paint/erase. Auto-tiling is a game-side concern. |
-| **Collision** — simplified shapes | `TileMapLoader` parses `hasCollider` + `colliderW`/`colliderH` into each `Tile` and creates **no entities at all** — its whole output is `const Map &getMap()`. The game iterates `getMap()` and adds `BoxColliderComponent` itself; `CollisionSystem` then does AABB. |
+| **Collision** - simplified shapes | `TileMapLoader` parses `hasCollider` + `colliderW`/`colliderH` into each `Tile` and creates **no entities at all** - its whole output is `const Map &getMap()`. The game iterates `getMap()` and decides. Prefer a solid-grid array plus per-axis snapping over one collider entity per tile: `ContactSystem`'s per-box manifold catches on the seams between adjacent tiles, and `CollisionSystem` would kill the player outright. |
 | **Animated tiles** — editor-authored | Not supported at runtime. The editor writes animation fields into `.map` files and `TileMapLoader` parses and discards them, because `Tile` has nowhere to put them (fixing that changes `sizeof(Tile)`, an ABI break). Drive tile animation from game code with `AnimationComponent`. |
 
 | Layer | Content | Engine support |
@@ -876,8 +1062,8 @@ General 2D game dev principles, mapped to how Storm Engine v2 implements them.
 | Capsule | Characters | Not built in — implement as custom component + custom system |
 | Polygon | Complex shapes | Not built in — implement as custom component + custom system |
 
-- **Pixel-perfect vs physics-based:** pick one approach per game. The engine's `CollisionSystem` kills entities with `RigidBodyComponent` on contact — it's a simple arcade collision, not a physics solver.
-- **Fixed timestep for consistency:** the engine does no frame pacing at all — `common/states/gameState.h` defines `FPS`/`MILLISECS_PER_FRAME` and nothing else; there is not a single `SDL_Delay` in `common/`. Every state re-implements the variable-dt loop with a 60 FPS `SDL_Delay` budget itself, so a game wanting a deterministic fixed timestep simply writes a different loop. (This is the same point as Key Design Decision 6, "no main loop".)
+- **Pixel-perfect vs physics-based:** pick one approach per game. `ContactSystem` gives you detection plus a manifold (unit normal along the axis of least penetration, and the depth on that axis); the response is yours to write. The deprecated `CollisionSystem` kills entities with `RigidBodyComponent` on contact - simple arcade collision, not a physics solver, and not one you can steer.
+- **Fixed timestep for consistency:** the engine paces a frame but does not schedule one. `GameState::CapFrameRate()` is the only `SDL_Delay` in `common/` (`common/states/gameState.h`): it sleeps out the 60 FPS budget defined by `FPS`/`MILLISECS_PER_FRAME` and hands back a variable, hitch-clamped dt. There is still no fixed-step accumulator, so a game wanting a deterministic timestep writes its own loop on top. (Related to Key Design Decision 6, "no main loop".)
 - **Layers for filtering:** use entity groups (`registry.GroupEntity`) to partition entities for collision logic. Note: one group per entity and one tag per entity. `GroupEntity` calls `RemoveEntityGroup` first, so re-grouping *moves* an entity rather than adding a second membership; groups are not a bitmask layer system.
 
 ### Camera Systems
@@ -904,7 +1090,7 @@ different engine capabilities and game-side patterns.
 - **Coyote time** (leniency after edge) — game-side timer in your state's `update()`
 - **Jump buffering** — game-side input queue
 - **Variable jump height** — game-side: track button hold time, modify `RigidBodyComponent.velocity.y`
-- **Tile collision** — `BoxColliderComponent` on tiles + entities; `CollisionSystem` kills on contact, so platformers typically need a custom collision system that resolves instead of killing
+- **Tile collision** - resolve against a solid-tile grid by hand. `ContactSystem` reports overlaps but never resolves one, and its per-box manifold catches on seams between adjacent tiles; `CollisionSystem` kills on contact, which is fatal here
 
 All four are game-side state on the `PlayState`, not engine features. Members:
 
@@ -961,9 +1147,13 @@ rb.velocity.y += GRAVITY * static_cast<float>(deltaTime);
 `MovementSystem` integrates `velocity * deltaTime` and nothing else — there is
 no gravity, no ground, and no resolution in the engine. `CollisionSystem`
 detects AABB overlap and **kills** entities carrying a `RigidBodyComponent`,
-which is fatal for a platformer, so do not register it. Resolve against the
-tile grid yourself, one axis at a time — resolving both at once lets a corner
-push the player sideways off a flat floor:
+which is fatal for a platformer, so do not register it. `ContactSystem` is safe
+to register (it only reports), but do not build the tile layer out of one
+collider entity per tile: the manifold is per box, so a player sliding along a
+floor picks up a sideways normal from the next tile along and gets shoved out of
+the wall. Keep `ContactSystem` for the handful of distinct bodies (pickups,
+hazards, triggers) and resolve the grid yourself, one axis at a time. Resolving
+both at once lets a corner push the player sideways off a flat floor:
 
 ```cpp
 // solidGrid_[row][col] mirrors the tilemap; TILE_PX is tileSize * scale.
@@ -1039,10 +1229,34 @@ The `android-platformer` variant is not a pure port: it is the reference consume
 - **Bullet spawning** — create entities on input, add `RigidBodyComponent` with fixed velocity, `Kill()` when off-screen
 - **Periodic enemy waves** — spawn entities on a timer, use tags/groups to distinguish factions
 - **Scrolling background layers** — multiple `SpriteComponent` entities at different `zIndex` values, scroll at different rates for parallax (game-side)
-- **Collision as gameplay** — `CollisionSystem` kills on contact, which works for arcade-style "one hit = death" shooters
+- **Collision as gameplay** - register `ContactSystem` and act on `GetContacts()`; a bullet-vs-enemy hit needs a score bump and an explosion, not just two deaths
 
-This is the one genre where the built-in `CollisionSystem` is an asset rather
-than a problem: kill-on-contact *is* the rule you want.
+`CollisionSystem` looks like a fit here ("one hit = death") and is not: it kills
+**both** entities, so the player dies on any enemy touch, and it gives you no
+hook to score the kill or spawn the explosion. `examples/shooter` moved to
+`ContactSystem` with a pair filter:
+
+```cpp
+registry_.AddSystem<ContactSystem>();
+registry_.GetSystem<ContactSystem>().SetPairFilter(
+    [](const Entity &a, const Entity &b) {
+        // Only bullet-vs-enemy and player-vs-enemy mean anything here.
+        const bool aEnemy = a.BelongsToGroup("enemies");
+        const bool bEnemy = b.BelongsToGroup("enemies");
+        if (aEnemy == bEnemy) return false;   // enemy-vs-enemy, or neither
+        const Entity &other = aEnemy ? b : a;
+        return other.BelongsToGroup("bullets") || other.HasTag("player");
+    });
+```
+
+Rejecting in the filter rather than in your own loop is what keeps a dense
+volley cheap: without it every bullet pairs with every other bullet, and the
+manifold for each of those is built and then thrown away. Two more things to
+respect when you walk `GetContacts()`: a killed entity stays in the system's
+vector until the next `registry_.Update()`, so track what has died by id or a
+second bullet scores the same enemy twice; and contacts arrive sorted by entity
+id, so give bullets their own pass ahead of the player's rather than letting the
+two interleave.
 
 ```cpp
 void PlayState::SpawnBullet() {
@@ -1113,8 +1327,8 @@ The engine's `shooter` example (Alien Attack) demonstrates this pattern.
 - **Grid logic is entirely game-side** — the engine has no grid abstraction; represent the board as a 2D array in your state
 - **Entity reuse** — the `puzzle` example reuses a pool of block entities rather than creating/destroying each frame, avoiding `registry.Update()` churn
 - **Custom components for game state** — e.g., `CellComponent` with grid coordinates, `ShapeComponent` for tetromino identity
-- **SDL_ttf for text** — score, level, next-piece preview. The `puzzle` example demonstrates SDL_ttf integration
-- **No physics needed** — blocks snap to grid; `RigidBodyComponent` and `CollisionSystem` are typically unused
+- **Text for the HUD** - score, level, next-piece preview. Cache the font once with `AssetStore::AddFont` and draw with `Text::Draw`/`Text::DrawCentred`; the `puzzle` example does exactly that and no longer opens a font by hand
+- **No physics needed** - blocks snap to grid; `RigidBodyComponent`, `ContactSystem` and `CollisionSystem` are all typically unused
 
 The board is a plain array — the ECS holds only what is *drawn*. Keeping the
 rules out of the ECS is what makes a puzzle game testable:
@@ -1198,7 +1412,7 @@ The engine's `puzzle` example (Storm Tetris) demonstrates custom ECS components,
 
 - **Tile-based world** — `TileMapLoader` with small tile size (the `jrpg` example uses 8px to preserve exact editor coordinates)
 - **NPC interaction** — game-side proximity check against tagged entities, trigger dialogue state
-- **Typewriter dialogue** — game-side text rendering with SDL_ttf, character-by-character reveal
+- **Typewriter dialogue** - game-side character-by-character reveal, drawn with `Text::Draw` over a font cached in the `AssetStore`
 - **State transitions** — push a `DialogueState` over the `PlayState` for conversations; pop when done
 - **No real-time physics** — movement is grid-based or tile-based, not velocity-driven
 
@@ -1230,8 +1444,9 @@ Both must be **default-constructible** — component pools are dense
 you never touched. Note these two alone spend 2 of your 32 process-wide
 component ids.
 
-Interaction is a proximity scan over a group. Do not use `CollisionSystem` for
-this — it kills on contact:
+Interaction is a proximity scan over a group, not a contact query: you want the
+*closest* NPC inside a radius, which neither collision system reports. Do not
+reach for `CollisionSystem` here - it kills on contact:
 
 ```cpp
 // Returns the closest NPC in range, or nullopt. Pure query, no side effects.
@@ -1301,21 +1516,15 @@ void DialogueState::processInput() {
 }
 
 void DialogueState::render() {
-    // SDL_ttf renders a whole string; substr to the revealed prefix. Skip the
-    // blit entirely at length 0 -- TTF_RenderUTF8_Blended returns nullptr on an
-    // empty string and SDL_CreateTextureFromSurface(nullptr) is a crash.
-    if (revealed_ == 0) return;
-    const std::string shown = text_.substr(0, revealed_);
-    SDL_Surface *surf = TTF_RenderUTF8_Blended(font_, shown.c_str(), colour_);
-    if (!surf) return;
-    SDL_Texture *tex = SDL_CreateTextureFromSurface(renderer_, surf);
-    SDL_FreeSurface(surf);
-    if (!tex) return;
-    SDL_Rect dst{ boxX_, boxY_, 0, 0 };
-    SDL_QueryTexture(tex, nullptr, nullptr, &dst.w, &dst.h);
-    SDL_RenderCopy(renderer_, tex, nullptr, &dst);
-    SDL_DestroyTexture(tex);   // per-frame create/destroy: cache it if the
-                               // string is long or the box is always up
+    // SDL_ttf renders a whole string; substr to the revealed prefix. Text::Draw
+    // absorbs the rest: it returns {0, 0} rather than blitting at length 0 (a
+    // hand-rolled version has to skip it, because TTF_Render* returns nullptr
+    // on an empty string and SDL_CreateTextureFromSurface(nullptr) crashes),
+    // and it never leaks the intermediate surface or texture on any path.
+    Text::Draw(renderer_, assetStore_->GetFont("dialogue-18"),
+               text_.substr(0, revealed_), boxX_, boxY_, colour_);
+    // Still a create/destroy per frame -- cache the texture yourself if the
+    // string is long or the box is always up.
 }
 ```
 
@@ -1324,7 +1533,7 @@ The engine's `jrpg` example demonstrates tile-based world loading, NPC interacti
 #### Sports (Top-down action)
 
 - **Custom AI components** — player decision-making, positioning tables, reaction logic (e.g., the `sports` example's hockey AI)
-- **Puck/ball physics** — custom component for the game object with velocity, friction, bounce — the engine's `RigidBodyComponent` + `MovementSystem` handle basic velocity, but sports games need custom collision resolution (not kill-on-contact)
+- **Puck/ball physics** - custom component for the game object with velocity, friction, bounce - the engine's `RigidBodyComponent` + `MovementSystem` handle basic velocity, but the bounce is yours. Make the walls ordinary collider entities, then push the puck out by `contact.depth` and mirror it about the normal `ContactSystem` reported: `puck.velocity = glm::reflect(puck.velocity, normal)`. `Contact::normal` points `a -> b` and `a` is always the lower entity id, so negate it on the frames where your object is `b`. `examples/sports` does exactly this, which retired four hardcoded axis-aligned bounce cases and the rink-edge constants behind them
 - **Team management** — use groups to partition teams (`registry.GroupEntity`), query with `GetEntitiesByGroup`
 - **Camera follows the play** — center on the ball or midpoint of key entities
 - **Set pieces** — kickoff, throw-in, etc. are game states or sub-states within the match state
@@ -1465,6 +1674,13 @@ The engine's `netplay-checkers` example demonstrates graphical, authoritative-ne
 | Delete states inline on transition | Use the state machine's push/pop/change (deferred deletion) |
 | Add components before registering systems | Register systems first, then create entities |
 | `AddComponent` on a live entity to get it into a system | Kill and recreate the entity — membership is computed once |
+| Register `CollisionSystem` in new code | Register `ContactSystem`: it reports overlaps with a normal and depth and touches nothing. `CollisionSystem` is deprecated in 1.3.0 and can only respond by killing both movable entities |
+| Build tilemap collision from one collider entity per tile | Keep a solid-grid array and resolve per axis; a per-box manifold catches on the seam between adjacent tiles |
+| Retype the `SDL_Delay` budget, or shadow `millisecondsPreviousFrame` with your own member | Call `CapFrameRate()` at the top of `update()`: protected, non-virtual, returns the dt and rolls the timestamp forward |
+| Hand-roll the `TTF_Render*` / `CreateTextureFromSurface` / free dance, or re-open a font per draw | Cache the font with `AssetStore::AddFont` and draw with `Text::Draw` / `Text::DrawCentred` |
+| Destroy the `AssetStore` after `TTF_Quit()` / `Mix_CloseAudio()` / `SDL_Quit()` | Call `ClearAssets()` first; those calls have already freed every open font and chunk |
+| Let a `Gamepad` outlive `SDL_Quit()` / `SDL_QuitSubSystem()` | Call `Shutdown()` first; `SDL_GameControllerQuit` has already freed the controller |
+| Relink a 1.2.x game against the 1.3.0 `.so` | Rebuild it: `sizeof(AssetStore)` changed from 112 to 208 and the game allocates the store in its own code |
 | Call bare `make` at repo root — there is no default `Makefile` | Name the makefile: `-f Makefile.debian` for the Linux `.so` + spec suite, `-f Makefile.win` for the MinGW-w64 cross-build (`build/win/libstormenginev2.dll`, `tests.exe` under Wine) |
 | Run `./bin/tests` from outside the repo root | Run from repo root — specs hardcode relative paths |
 | Forget `Update()` before `Poll()` in networking | `NetConnection` caches the clock in `Update` only |
@@ -1488,7 +1704,7 @@ Load these when the task calls for them rather than reading them up front.
 
 | File | Use it when |
 |------|-------------|
-| `references/new-game-scaffold/` | Starting a new standalone game. A complete compiling project: real Makefile (the in-repo examples' 2-line Makefile does **not** work outside `examples/`), the `Game` class and main loop the engine does not ship, and a `PlayState` demonstrating system-registration order, deferred flush, input ownership and render. Compiles against any 1.x install. Read its `README.md` first. |
+| `references/new-game-scaffold/` | Starting a new standalone game. A complete compiling project: real Makefile (the in-repo examples' 2-line Makefile does **not** work outside `examples/`), the `Game` class and main loop the engine does not ship, and a `PlayState` demonstrating system-registration order, deferred flush, input ownership and render. Compiles against any 1.x install. Read its `README.md` first. (Since 1.3.0 the engine also *installs* a starter game at `$(PREFIX)/share/stormengine2/template`, built with `pkg-config`; that one targets 1.3.0 and uses `ContactSystem`, `AddFont` and `Text`.) |
 | `references/eval/` | Asking whether a model can actually build a game from this skill. Three task specs, a scoring harness (`run-eval.sh`), and recorded results. Read `eval/README.md` for the method; the failures it surfaces are what should become new rules here. |
 | `references/compile-errors.md` | A build fails. Real compiler and linker output mapped to cause and fix, including the stale-install signatures (`no member named 'DoesTagExist'`, `RenderSystem::Update` arity) and the runtime failures that look like build problems. |
 
@@ -1522,15 +1738,19 @@ the game's own headers.
 - This skill covers the engine's public API and common patterns. For
   game-specific logic (e.g., sports simulation, AI, match flow), refer to the
   consuming project's own code and documentation.
-- The engine does not provide audio playback — games handle SDL_mixer
-  initialization and music/SFX themselves.
-- No built-in physics engine — `CollisionSystem` does simple AABB detection
-  only. Games needing complex physics implement their own. It does not merely
-  *detect*: on an overlap it calls `Kill()` on each entity that has a
-  `RigidBodyComponent` (static scenery survives). There is no callback, no event
-  queue, no event bus — `common/systems/collision.h:32` carries the
-  `// TODO: emit an event`. Any game needing bounce, damage, triggers or pickups
-  hand-rolls its own overlap pass.
+- The engine does not play audio - `AssetStore::AddSound`/`GetSound` cache and
+  free `Mix_Chunk`s, but `Mix_OpenAudio`, `Mix_PlayChannel` and music are the
+  game's job, and nothing in `common/` calls them.
+- No built-in physics engine - AABB only, and no solver. Since 1.3.0
+  `ContactSystem` *detects* and reports (unit normal, penetration depth,
+  once-per-pair begin/end transitions) and never touches an entity, so bounce,
+  damage, triggers and pickups are all writable, but every response is still
+  written by the game, and `MinimumTranslation` is a value it hands you rather
+  than something it applies. The deprecated `CollisionSystem` is the opposite
+  trade: it acts and cannot be observed, calling `Kill()` on each entity that
+  has a `RigidBodyComponent` (static scenery survives). There is still no event
+  bus and no event queue (`KNOWN_ISSUES.md` #10), and the broadphase sweeps one
+  axis.
 - **Thirty-two component types, process-wide.** `MAX_COMPONENTS` is 32 and
   `Signature` is `std::bitset<32>`; ids come from one global counter, so the cap
   is per binary, not per `Registry`. Overflow no longer throws — the id is
@@ -1540,12 +1760,14 @@ the game's own headers.
 - No built-in scene editor beyond the tile map editor. Entity placement is
   code-driven or XML-driven.
 - The engine ships no main loop, no Game class, no window management.
-- No keyboard or *physical* gamepad abstraction — games read SDL (or libnx
-  `PadState` on Switch) themselves. `common/input/` ships SDL-free touch
-  primitives (`touchControls.h`) plus the on-screen virtual gamepad
-  (`virtualGamepad.h`): `MakeVPadLayout(w, h, VPadStyle = VPadStyle::Xbox)` /
-  `EvalVPad`, lettered Xbox-style by default (Y top, X left, B right, A bottom)
-  or `VPadStyle::Snes` on request.
+- No keyboard abstraction - games read SDL (or libnx `PadState` on Switch)
+  themselves. `common/input/` ships SDL-free touch primitives
+  (`touchControls.h`), the on-screen virtual gamepad (`virtualGamepad.h`:
+  `MakeVPadLayout(w, h, VPadStyle = VPadStyle::Xbox)` / `EvalVPad`, lettered
+  Xbox-style by default with Y top, X left, B right and A bottom, or
+  `VPadStyle::Snes` on request), and since 1.3.0 a real controller wrapper
+  (`gamepad.h`: `Gamepad`), which covers one pad at a time and still no
+  keyboard.
 - `common/net/` is absent from the **Switch** build only:
   `examples/nx-platformer/Makefile` globs `$(wildcard $(dir)/*.cpp)` over
   `include/stormengine2` (a symlink to `common/`), which is non-recursive and

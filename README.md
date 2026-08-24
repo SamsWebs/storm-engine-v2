@@ -2,7 +2,7 @@
 
 A lightweight, ECS-based 2D game engine built on SDL2 - made for game jams and personal projects.
 
-> **"v2" is the second-generation engine; the current release is v1.2.6.** The public API is considered stable for the 1.x line. See [CHANGELOG.md](CHANGELOG.md) for release notes.
+> **"v2" is the second-generation engine; the current release is v1.3.0.** The public API is considered stable for the 1.x line. See [CHANGELOG.md](CHANGELOG.md) for release notes.
 
 ![Storm Engine v2 platformer example](examples/platformer/screenshot.png)
 
@@ -12,9 +12,12 @@ A lightweight, ECS-based 2D game engine built on SDL2 - made for game jams and p
 - **Sprite rendering** with camera, z-index sorting, and flip support
 - **Tilemap support** - load maps painted with the built-in tile editor (`.map` format, auto-detected)
 - **Box collider** components with debug overlay
-- **Asset store** for textures
-- **Game state machine** for managing scenes
+- **Contact detection** - AABB overlaps reported as `Contact{a, b, normal, depth}`, with begin/end callbacks and a pair filter that is where layers, masks and sensors live (`<stormengine2/systems/contact.h>`); the older kill-on-contact `CollisionSystem` still works but is deprecated
+- **Asset store** for textures, fonts and sounds
+- **Text drawing** - `Text::Draw` / `DrawCentred` / `Measure` over SDL_ttf, header-only and null-safe (`<stormengine2/text.h>`)
+- **Game state machine** for managing scenes, with frame pacing built in (`GameState::CapFrameRate()`)
 - **Logger** utility
+- **Gamepad** support - an `SDL_GameController` wrapper with edge-detected `Pressed`/`Released` and a configurable stick deadzone (`<stormengine2/input/gamepad.h>`), used by the shooter, strategy and sports examples
 - **Virtual gamepad** for touch devices - d-pad + action-button layout, pure and spec'd (`<stormengine2/input/virtualGamepad.h>`), driven by `examples/android-platformer`
 - **UDP networking** - host/join LAN play: reliable + unreliable chunks, kick/ban/timeout, snapshot replication with per-client deltas and a prediction cache (`<stormengine2/net/net.h>`, see [docs/networking.md](docs/networking.md))
 - Built-in **tile map editor** with drag-to-paint, drag-to-erase, and layer support
@@ -57,6 +60,15 @@ sudo dpkg -i libstormenginev2_<version>_amd64.deb
 ```bash
 sudo dpkg -i libstormenginev2_<version>_arm64.deb
 ```
+
+> **Upgrading from 1.2.x is a rebuild, not a relink.** `AssetStore` grew font
+> and sound caches in 1.3.0, so `sizeof(AssetStore)` went from 112 to 208
+> bytes. Every game allocates the store in its own code, so a binary compiled
+> against 1.2.x headers reserves the smaller size and then calls a 1.3.0
+> constructor that initialises out past it. The `.deb` ships the headers and
+> the `.so` together, so installing the package and rebuilding the game is
+> safe - swapping `libstormenginev2.so` underneath an already-built game is
+> not.
 
 ### Building a game against the installed engine
 
@@ -197,12 +209,13 @@ NPC interaction and Final Fantasy-style typewriter dialogue are handled via `Npc
 
 ```bash
 cd editor
-make && make run
+make        # build and launch (the link rule runs the binary)
+make run    # launch without rebuilding
 ```
 
 - **Left-click / drag** - paint tiles
 - **Right-click / drag** - erase tiles
-- **D** - toggle collider debug overlay
+- **C** - toggle collider debug overlay
 - The editor saves `.map` files that `TileMapLoader` can load directly in your game
 
 ## Windows / WSL

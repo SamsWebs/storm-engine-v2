@@ -109,5 +109,4 @@ private:
   Uint32 jumpBufferedAt_ = 0; // SDL ticks of the last unconsumed jump press
   bool animWalking_ = false;  // which run of the strip is playing
 
-  int millisecondsPreviousFrame_ = 0;
 };

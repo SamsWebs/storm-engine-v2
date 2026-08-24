@@ -103,5 +103,4 @@ private:
   // change (restarting the clock every frame would freeze it on frame 0).
   bool animWalking_ = false;
 
-  int millisecondsPreviousFrame_ = 0;
 };

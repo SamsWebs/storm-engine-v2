@@ -41,5 +41,4 @@ private:
   Registry registry_;
 
   int selected_ = 0; // 0 = PLAY GAME ... 4 = QUIT
-  Uint32 lastFrame_ = 0;
 };

@@ -125,5 +125,4 @@ private:
 
   DialogueState dialogue_;
 
-  int millisecondsPreviousFrame_ = 0;
 };

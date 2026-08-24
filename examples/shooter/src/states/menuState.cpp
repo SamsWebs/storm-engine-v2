@@ -40,13 +40,13 @@ bool MenuState::onEnter() {
   // changeState would otherwise show an empty screen for one frame.
   registry_.Update();
 
-  lastFrame_ = SDL_GetTicks();
+  millisecondsPreviousFrame = SDL_GetTicks();
   return true;
 }
 
 // resume() is called when a pushed state pops. It must NOT re-run onEnter():
 // that would rebuild the attract planes and leak the first set.
-void MenuState::resume() { lastFrame_ = SDL_GetTicks(); }
+void MenuState::resume() { millisecondsPreviousFrame = SDL_GetTicks(); }
 
 bool MenuState::onExit() { return true; } // Game owns the assets; do not clear
 
@@ -130,12 +130,8 @@ void MenuState::update() {
     }
   }
 
-  int wait = MILLISECS_PER_FRAME - (SDL_GetTicks() - lastFrame_);
-  if (wait > 0 && wait <= MILLISECS_PER_FRAME) {
-    SDL_Delay(wait);
-  }
-  const double dt = (SDL_GetTicks() - lastFrame_) / 1000.0;
-  lastFrame_ = SDL_GetTicks();
+  // 0 keeps the delta unclamped, which is what this state has always done.
+  const double dt = CapFrameRate(0.0);
 
   registry_.Update(); // flush deferred adds/kills before any system runs
   registry_.GetSystem<MovementSystem>().Update(dt);

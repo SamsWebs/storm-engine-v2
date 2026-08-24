@@ -49,6 +49,25 @@
   It carries the two rules that otherwise bite first: register systems before
   creating entities, and let only the active state poll events.
 
+- **`GameState::CapFrameRate()` - frame pacing, written once.** Seven states
+  had spelled out the same delay-compute-reset block by hand, and five of them
+  shadowed the base class's own `millisecondsPreviousFrame` with a member of
+  their own to do it. One call replaces the block:
+
+      const double dt = CapFrameRate();
+
+  It sleeps out what is left of the budget, returns the frame time in seconds,
+  and rolls the timestamp forward. `maxDeltaSeconds` (default 0.05) clamps a
+  hitch so a level load or a window drag cannot teleport everything through a
+  wall on the next frame; pass 0 to leave the delta alone.
+
+  `FPS` and `MILLISECS_PER_FRAME` have always been declared in
+  `states/gameState.h` while the engine never used them - the constants were
+  there and the behaviour was not.
+
+  Non-virtual, and it adds no member, so it changes neither `GameState`'s
+  layout nor its vtable.
+
 - **`Gamepad` (`common/input/gamepad.h`) - one physical controller, polled.**
   `examples/shooter` and `examples/strategy` each carried a copy of this, and
   the copies were literal: identical comments, including the hard-won ones

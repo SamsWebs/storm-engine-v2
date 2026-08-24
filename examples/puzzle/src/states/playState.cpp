@@ -346,11 +346,8 @@ void PlayState::processInput() {
 // ─── Update ──────────────────────────────────────────────────────────────────
 
 void PlayState::update() {
-  int timeToWait =
-      MILLISECS_PER_FRAME - (SDL_GetTicks() - millisecondsPreviousFrame);
-  if (timeToWait > 0 && timeToWait <= MILLISECS_PER_FRAME)
-    SDL_Delay(timeToWait);
-  millisecondsPreviousFrame = SDL_GetTicks();
+  // This state never used the delta; it only wants the pacing.
+  CapFrameRate();
 
   if (isPaused_ || gameOver_)
     return;

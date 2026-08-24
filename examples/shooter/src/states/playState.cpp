@@ -82,7 +82,7 @@ bool PlayState::onEnter() {
 
   lastShotMs_ = SDL_GetTicks();
   lastWaveMs_ = SDL_GetTicks();
-  millisecondsPreviousFrame_ = SDL_GetTicks();
+  millisecondsPreviousFrame = SDL_GetTicks();
   return true;
 }
 
@@ -288,15 +288,9 @@ void PlayState::processInput() {
 }
 
 void PlayState::update() {
-  // Variable dt with a 60 FPS cap. Nothing enforces a minimum frame rate.
-  int wait =
-      MILLISECS_PER_FRAME - (SDL_GetTicks() - millisecondsPreviousFrame_);
-  if (wait > 0 && wait <= MILLISECS_PER_FRAME) {
-    SDL_Delay(wait);
-  }
-  const double deltaTime =
-      (SDL_GetTicks() - millisecondsPreviousFrame_) / 1000.0;
-  millisecondsPreviousFrame_ = SDL_GetTicks();
+  // Variable dt with a 60 FPS cap. Nothing enforces a minimum frame rate, and
+  // 0 keeps the delta unclamped, which is what this state has always done.
+  const double deltaTime = CapFrameRate(0.0);
   const Uint32 now = SDL_GetTicks();
 
   // A changeState is queued; this object is off the stack and its deletion

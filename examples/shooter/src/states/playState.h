@@ -80,5 +80,4 @@ private:
 
   glm::vec2 playerStart_;
 
-  int millisecondsPreviousFrame_ = 0;
 };

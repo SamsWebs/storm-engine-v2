@@ -221,10 +221,10 @@ player.Kill();
 
 ```cpp
 void PlayState::update() {
-    int wait = MILLISECS_PER_FRAME - (SDL_GetTicks() - millisecondsPreviousFrame);
-    if (wait > 0 && wait <= MILLISECS_PER_FRAME) SDL_Delay(wait);
-    double deltaTime = (SDL_GetTicks() - millisecondsPreviousFrame) / 1000.0;
-    millisecondsPreviousFrame = SDL_GetTicks();
+    // Sleeps out the rest of the 60 FPS budget and hands back how long the
+    // frame took. The default clamps a hitch to 50ms so nothing teleports;
+    // pass 0 if you want the raw delta.
+    const double deltaTime = CapFrameRate();
 
     registry.Update(); // flush pending entity adds/kills first
     registry.GetSystem<MovementSystem>().Update(deltaTime);

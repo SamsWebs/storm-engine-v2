@@ -105,5 +105,4 @@ private:
   PadState pad_;
 #endif
 
-  int millisecondsPreviousFrame_ = 0;
 };

@@ -42,7 +42,7 @@ PlayState::PlayState(SDL_Renderer *renderer, int windowWidth, int windowHeight,
            Direction::Down);
 
   registry_.Update();
-  millisecondsPreviousFrame_ = SDL_GetTicks();
+  millisecondsPreviousFrame = SDL_GetTicks();
 }
 
 PlayState::~PlayState() { onExit(); }
@@ -277,15 +277,8 @@ void PlayState::processInput() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 void PlayState::update() {
-  int timeToWait =
-      MILLISECS_PER_FRAME - (SDL_GetTicks() - millisecondsPreviousFrame_);
-  if (timeToWait > 0 && timeToWait <= MILLISECS_PER_FRAME)
-    SDL_Delay(timeToWait);
-
-  float dt = (SDL_GetTicks() - millisecondsPreviousFrame_) / 1000.0f;
-  if (dt > 0.05f)
-    dt = 0.05f;
-  millisecondsPreviousFrame_ = SDL_GetTicks();
+  // Paces the frame and clamps a hitch to 50ms, as the hand-rolled version did.
+  float dt = static_cast<float>(CapFrameRate());
 
   if (dialogue_.active) {
     UpdateDialogue(dt);

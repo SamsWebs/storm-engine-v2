@@ -6,8 +6,8 @@
 #include <stormengine2/gameStateMachine.h>
 #include <stormengine2/logger.h>
 
-#include <stormengine2/input/gamepad.h>
 #include "world.h"
+#include <stormengine2/input/gamepad.h>
 
 // The engine ships no Game class, no main loop and no window management -- only
 // GameStateMachine. Every game writes this file.
@@ -24,38 +24,38 @@
 // data sits above both of them.
 class Game {
 public:
-    // Which screen the game opens on. Anything but Menu is a testing shortcut.
-    enum class StartState { Menu, Overworld, Battle, GameOver };
+  // Which screen the game opens on. Anything but Menu is a testing shortcut.
+  enum class StartState { Menu, Overworld, Battle, GameOver };
 
-    Game();
-    ~Game();
+  Game();
+  ~Game();
 
-    void Initialize(StartState start = StartState::Menu);
-    void ProcessInput();
-    void Update();
-    void Render();
-    // False when initialisation failed and the game never ran, so main() can
-    // exit non-zero.
-    bool Run(StartState start = StartState::Menu);
-    void Destroy();
+  void Initialize(StartState start = StartState::Menu);
+  void ProcessInput();
+  void Update();
+  void Render();
+  // False when initialisation failed and the game never ran, so main() can
+  // exit non-zero.
+  bool Run(StartState start = StartState::Menu);
+  void Destroy();
 
 private:
-    bool LoadAssets();
+  bool LoadAssets();
 
-    bool isRunning_   = false;
-    bool isDebugging_ = false;
+  bool isRunning_ = false;
+  bool isDebugging_ = false;
 
-    SDL_Window   *window_   = nullptr;
-    SDL_Renderer *renderer_ = nullptr;
+  SDL_Window *window_ = nullptr;
+  SDL_Renderer *renderer_ = nullptr;
 
-    GameStateMachine gameStateMachine_;
-    Gamepad          gamepad_;
-    Logger_Ptr       logger_;
-    AssetStore_Ptr   assetStore_;
-    world::Campaign  campaign_;
+  GameStateMachine gameStateMachine_;
+  Gamepad gamepad_;
+  Logger_Ptr logger_;
+  AssetStore_Ptr assetStore_;
+  world::Campaign campaign_;
 
-    // 16x12 tiles of 64px. The overworld map is authored to exactly this size
-    // so the whole campaign is visible without a camera.
-    int windowWidth_  = 1024;
-    int windowHeight_ = 768;
+  // 16x12 tiles of 64px. The overworld map is authored to exactly this size
+  // so the whole campaign is visible without a camera.
+  int windowWidth_ = 1024;
+  int windowHeight_ = 768;
 };

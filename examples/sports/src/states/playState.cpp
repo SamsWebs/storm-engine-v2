@@ -286,7 +286,6 @@ void PlayState::processInput() {
         break;
       }
       break;
-
     }
 
     // Device add/remove only; buttons and sticks are polled below.
@@ -651,7 +650,7 @@ void PlayState::DrawHUD() {
 
   // Controls hint
   DrawText(pad_.Connected() ? "STICK/DPAD: move   A: shoot   START: quit"
-                : "WASD: move   SPACE: shoot   ESC: quit",
+                            : "WASD: move   SPACE: shoot   ESC: quit",
            RINK_X, RINK_B + 10, {160, 160, 160, 255});
 
   // Goal message

@@ -8,12 +8,12 @@
 #include <glm/glm.hpp>
 #include <stormengine2/assetStore.h>
 #include <stormengine2/ecs.h>
+#include <stormengine2/input/gamepad.h>
 #include <stormengine2/logger.h>
 #include <stormengine2/states/gameState.h>
-#include <stormengine2/input/gamepad.h>
 #include <stormengine2/systems/contact.h>
-#include <stormengine2/text.h>
 #include <stormengine2/systems/render.h>
+#include <stormengine2/text.h>
 
 #include "../components/puckComponent.h"
 #include "../components/skaterComponent.h"
@@ -131,5 +131,4 @@ private:
   bool gameOver_ = false;
 
   Uint32 lastTick_ = 0;
-
 };

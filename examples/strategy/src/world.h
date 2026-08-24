@@ -36,50 +36,60 @@ constexpr int kMaxStartTroops = 50;
 // Multiplier applied to `attacker`'s damage when fighting `defender`.
 // Warrior > Archer > Spearman > Warrior.
 inline float Counter(Troop attacker, Troop defender) {
-    const bool strong = (attacker == Troop::Warrior  && defender == Troop::Archer)   ||
-                        (attacker == Troop::Archer   && defender == Troop::Spearman) ||
-                        (attacker == Troop::Spearman && defender == Troop::Warrior);
-    const bool weak   = (defender == Troop::Warrior  && attacker == Troop::Archer)   ||
-                        (defender == Troop::Archer   && attacker == Troop::Spearman) ||
-                        (defender == Troop::Spearman && attacker == Troop::Warrior);
-    // 1.5x, not 1.1x: a ten-percent edge is invisible in a battle that lasts
-    // twenty seconds, and an invisible mechanic may as well not be there.
-    if (strong) return 1.5f;
-    if (weak)   return 1.0f / 1.5f;
-    return 1.0f;
+  const bool strong =
+      (attacker == Troop::Warrior && defender == Troop::Archer) ||
+      (attacker == Troop::Archer && defender == Troop::Spearman) ||
+      (attacker == Troop::Spearman && defender == Troop::Warrior);
+  const bool weak =
+      (defender == Troop::Warrior && attacker == Troop::Archer) ||
+      (defender == Troop::Archer && attacker == Troop::Spearman) ||
+      (defender == Troop::Spearman && attacker == Troop::Warrior);
+  // 1.5x, not 1.1x: a ten-percent edge is invisible in a battle that lasts
+  // twenty seconds, and an invisible mechanic may as well not be there.
+  if (strong)
+    return 1.5f;
+  if (weak)
+    return 1.0f / 1.5f;
+  return 1.0f;
 }
 
 inline const char *TroopName(Troop t) {
-    switch (t) {
-    case Troop::Warrior:  return "Warrior";
-    case Troop::Archer:   return "Archer";
-    case Troop::Spearman: return "Spearman";
-    }
-    return "?";
+  switch (t) {
+  case Troop::Warrior:
+    return "Warrior";
+  case Troop::Archer:
+    return "Archer";
+  case Troop::Spearman:
+    return "Spearman";
+  }
+  return "?";
 }
 
 // Which sprite folder a side draws from. Neutral castles borrow the third set.
 inline const char *OwnerDir(Owner o) {
-    switch (o) {
-    case Owner::Blue: return "blue";
-    case Owner::Red:  return "red";
-    default:          return "neutral";
-    }
+  switch (o) {
+  case Owner::Blue:
+    return "blue";
+  case Owner::Red:
+    return "red";
+  default:
+    return "neutral";
+  }
 }
 
 struct Castle {
-    glm::ivec2 tile;      // position on the overworld grid
-    Owner      owner = Owner::Neutral;
+  glm::ivec2 tile; // position on the overworld grid
+  Owner owner = Owner::Neutral;
 };
 
 struct General {
-    Owner  side       = Owner::Blue;
-    Troop  troop      = Troop::Warrior;
-    int    troops     = 0;
-    int    atCastle   = 0;    // index into castles; where it sits or came from
-    int    toCastle   = -1;   // -1 when idle, else the march destination
-    float  marchDays  = 0.0f; // days remaining on the current march
-    bool   alive      = true;
+  Owner side = Owner::Blue;
+  Troop troop = Troop::Warrior;
+  int troops = 0;
+  int atCastle = 0;       // index into castles; where it sits or came from
+  int toCastle = -1;      // -1 when idle, else the march destination
+  float marchDays = 0.0f; // days remaining on the current march
+  bool alive = true;
 };
 
 // Set by BattleState immediately before it pops, read by
@@ -87,59 +97,60 @@ struct General {
 // applies a result it is still expecting, so a spurious resume() (from any
 // other state being popped later) cannot re-award a castle.
 struct BattleResult {
-    bool  pending      = false;
-    int   attacker     = -1;   // general index
-    int   defender     = -1;   // general index, or -1 for an empty castle
-    int   castle       = -1;
-    Owner winner       = Owner::Neutral;
-    int   winnerTroops = 0;
+  bool pending = false;
+  int attacker = -1; // general index
+  int defender = -1; // general index, or -1 for an empty castle
+  int castle = -1;
+  Owner winner = Owner::Neutral;
+  int winnerTroops = 0;
 };
 
 struct Campaign {
-    std::array<Castle, kCastleCount>   castles;
-    std::array<General, kGeneralCount> generals;
-    BattleResult                       result;
-    int                                day = 1;
+  std::array<Castle, kCastleCount> castles;
+  std::array<General, kGeneralCount> generals;
+  BattleResult result;
+  int day = 1;
 
-    // Road graph. Authored here rather than derived from the tilemap: the map
-    // is decoration, the graph is the rules, and deriving one from the other
-    // would make a cosmetic tile edit silently change the campaign.
-    //
-    //      0 --- 1 --- 2
-    //      |     |     |
-    //      3 --- 4 --- 5
-    bool Adjacent(int a, int b) const {
-        static const int kEdges[][2] = {{0, 1}, {1, 2}, {0, 3}, {1, 4},
-                                        {2, 5}, {3, 4}, {4, 5}};
-        for (const auto &e : kEdges) {
-            if ((e[0] == a && e[1] == b) || (e[0] == b && e[1] == a)) {
-                return true;
-            }
-        }
-        return false;
+  // Road graph. Authored here rather than derived from the tilemap: the map
+  // is decoration, the graph is the rules, and deriving one from the other
+  // would make a cosmetic tile edit silently change the campaign.
+  //
+  //      0 --- 1 --- 2
+  //      |     |     |
+  //      3 --- 4 --- 5
+  bool Adjacent(int a, int b) const {
+    static const int kEdges[][2] = {{0, 1}, {1, 2}, {0, 3}, {1, 4},
+                                    {2, 5}, {3, 4}, {4, 5}};
+    for (const auto &e : kEdges) {
+      if ((e[0] == a && e[1] == b) || (e[0] == b && e[1] == a)) {
+        return true;
+      }
     }
+    return false;
+  }
 
-    int CountOwned(Owner o) const {
-        int n = 0;
-        for (const auto &c : castles) {
-            if (c.owner == o) ++n;
-        }
-        return n;
+  int CountOwned(Owner o) const {
+    int n = 0;
+    for (const auto &c : castles) {
+      if (c.owner == o)
+        ++n;
     }
+    return n;
+  }
 
-    // The general sitting at a castle, or -1. Marching generals are in transit
-    // and do not defend the castle they left.
-    int GarrisonAt(int castle) const {
-        for (int i = 0; i < kGeneralCount; ++i) {
-            const auto &g = generals[i];
-            if (g.alive && g.toCastle < 0 && g.atCastle == castle) {
-                return i;
-            }
-        }
-        return -1;
+  // The general sitting at a castle, or -1. Marching generals are in transit
+  // and do not defend the castle they left.
+  int GarrisonAt(int castle) const {
+    for (int i = 0; i < kGeneralCount; ++i) {
+      const auto &g = generals[i];
+      if (g.alive && g.toCastle < 0 && g.atCastle == castle) {
+        return i;
+      }
     }
+    return -1;
+  }
 
-    void Reset();
+  void Reset();
 };
 
 } // namespace world

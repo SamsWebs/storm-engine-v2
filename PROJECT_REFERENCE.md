@@ -181,7 +181,8 @@ registry.AddSystem<MoveSystem>();
 |------|---------|
 | `ecs.h/cpp` | Entity, Component, System, Pool and Registry classes |
 | `gameStateMachine.h/cpp` | State management with deferred deletion |
-| `states/gameState.h` | GameState base class, `FPS`/`MILLISECS_PER_FRAME`, `CapFrameRate()` |
+| `states/gameStateBase.h` | The `GameState` interface alone - 80,265 preprocessed lines. Include this when the game does not use the ECS |
+| `states/gameState.h` | `gameStateBase.h` plus the convenience includes (every component, every system, AssetStore, Logger, TileMapLoader) - 146,748 lines |
 | `assetStore.h/cpp` | Texture, font and sound caching |
 | `text.h` | One-line SDL_ttf drawing: `Draw`, `DrawCentred`, `Measure` |
 | `logger.h/cpp` | Console logging with color codes |

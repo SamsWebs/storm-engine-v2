@@ -348,6 +348,15 @@ preprocessed lines to declare a 23-line interface) and trimming it is a v3 goal,
 so code leaning on the transitive path breaks when it is fixed. Listing your own
 includes costs nothing and makes that upgrade a no-op.
 
+**If the game does not use the ECS, include
+`<stormengine2/states/gameStateBase.h>` instead** (1.3.0+). Same `GameState`
+interface, none of the extras: 80,265 preprocessed lines against `gameState.h`'s
+146,748, a 45% saving per TU. `gameStateMachine.h` is on the base header too, so
+including both stays slim — that was deliberate, since leaving the machine on
+the convenience header would have handed the whole engine back and made the slim
+path pointless. `gameState.h` includes the base, so the two cannot drift and a
+game can switch either way at any time.
+
 **Critical:** Never call `SDL_PollEvent` in both `Game::ProcessInput` and a
 state's `processInput`. The event queue is shared — let the active state own
 all event polling.
@@ -1669,7 +1678,7 @@ The engine's `netplay-checkers` example demonstrates graphical, authoritative-ne
 |-------|-----|
 | Call `SDL_PollEvent` in both Game and State | Let the active state own all event polling |
 | Forget `registry.Update()` before systems | Always flush deferred adds/kills first |
-| Lean on `gameState.h`'s transitive includes instead of including what you use | It is true that `gameState.h` drags in SDL2 and every component/system — ~713 headers, ~145k preprocessed lines, to declare a 23-line interface — but that path is a documented defect (KNOWN_ISSUES #8) and goes away in v3. Include what you use in your own headers. |
+| Lean on `gameState.h`'s transitive includes instead of including what you use | It is true that `gameState.h` drags in SDL2 and every component/system — ~713 headers, ~145k preprocessed lines, to declare a 23-line interface — but that path is a documented defect (KNOWN_ISSUES #8) and goes away in v3. Include what you use in your own headers. On 1.3.0+, a game that does not use the ECS should include `states/gameStateBase.h` instead: same interface, 80,265 lines, 45% less. |
 | Move `AssetStore_Ptr` to multiple states | Move once to first state, pass raw ptr/ref after |
 | Delete states inline on transition | Use the state machine's push/pop/change (deferred deletion) |
 | Add components before registering systems | Register systems first, then create entities |

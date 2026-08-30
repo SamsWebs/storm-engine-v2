@@ -628,158 +628,180 @@ git commit -m "Report a system registered after matching entities were admitted"
 
 ### Task 4: Report a `Registry` whose `Update()` is never called
 
+**Design revised after review.** The original design counted pending entities and reported once the count crossed a threshold inside `CreateEntity`. That was wrong: batch-spawning many entities and flushing once afterwards is what a level loader does, and the engine's own `specs/ecs.spec.cpp` creates 151 entities before a single `Update()`. Entity count is not a signal of misuse at all.
+
+The revised trigger is the destructor. A registry that reaches the end of its life having **never** flushed is unambiguously misused — no entity ever joined a system, so nothing it owned ever rendered or moved. There is no legitimate program with that shape, so the diagnostic cannot false-positive. It fires at state exit rather than at the moment of the mistake, which is later than ideal but still puts an explanation in the log under the broken screen.
+
 **Files:**
-- Modify: `common/ecs.cpp` — side table, `Update`, `CreateEntity`, `~Registry`
-- Modify: `common/ecs.h` — the threshold constant, and move `~Registry` out of line
+- Modify: `common/ecs.cpp` — side table, `Update`, `~Registry`
+- Modify: `common/ecs.h` — move `~Registry` out of line
 - Test: `specs/registry.spec.cpp`
 
 **Interfaces:**
 - Consumes: `EcsShouldReport`, `EcsReportErr`
-- Produces: no public API. `ECS_PENDING_ENTITY_WARNING_THRESHOLD` is a new public constant.
+- Produces: no public API.
 
-- [ ] **Step 1: Write the failing tests**
+- [ ] **Step 1: The side table must outlive every `Registry`**
 
-Append to `specs/registry.spec.cpp`:
+`Registry::instance` (`common/ecs.cpp:4`) is a namespace-scope `std::unique_ptr<Registry>`, constant-initialised before `main`. A function-local `static` map inside `DiagnosticsTable()` is constructed during `main`, so reverse-order teardown destroys **the map first** and then runs `~Registry` for the singleton — which reaches into a destroyed `std::unordered_map`. That is undefined behaviour, and the editor hits it: it uses `Registry::Instance()` throughout and never resets it.
+
+Give the table a lifetime that cannot end:
+
+```cpp
+std::unordered_map<const Registry *, RegistryDiagnostics> &DiagnosticsTable() {
+  // Intentionally leaked. ~Registry reaches into this map, and the editor's
+  // Registry::Instance() singleton is destroyed during static teardown — after
+  // a function-local static would already have been destroyed. Leaking it
+  // makes the destructor safe at any point in the program's life. One map,
+  // freed by the OS at exit.
+  static auto &table = *new std::unordered_map<const Registry *, RegistryDiagnostics>();
+  return table;
+}
+```
+
+The same reasoning applies to whatever `Logger` the destructor's report goes through: it must not be destroyed before the last `~Registry` runs. `EcsReportErr` uses a function-local `static Logger`; leak that one too, for the same reason and with a comment saying so. `Logger::messages` is a namespace-scope static in another translation unit, so its order relative to `Registry::instance` is unspecified — say plainly in the comment that a report from static teardown is best-effort.
+
+- [ ] **Step 2: Write the failing tests**
+
+Replace the three threshold-based cases. `ECS_PENDING_ENTITY_WARNING_THRESHOLD` is no longer needed — remove the constant and every reference to it.
 
 ```cpp
 Describe(MissingUpdateSpec) {
-  It(should_report_a_registry_whose_update_was_never_called) {
-    Registry registry;
+  It(should_report_a_registry_destroyed_without_ever_flushing) {
     Logger::messages.clear();
-
-    for (unsigned int i = 0; i < ECS_PENDING_ENTITY_WARNING_THRESHOLD + 1;
-         ++i) {
+    {
+      Registry registry;
       (void)registry.CreateEntity();
-    }
+      (void)registry.CreateEntity();
+    } // destroyed here, Update() never called
 
     Assert::That(SpecRegistryErrorCount(),
                  Is().GreaterThanOrEqualTo(static_cast<std::size_t>(1)));
     Logger::messages.clear();
   };
 
-  It(should_stay_silent_once_update_has_been_called) {
-    Registry registry;
-    registry.Update();
+  It(should_stay_silent_when_update_was_called) {
     Logger::messages.clear();
-
-    for (unsigned int i = 0; i < ECS_PENDING_ENTITY_WARNING_THRESHOLD + 1;
-         ++i) {
+    {
+      Registry registry;
+      (void)registry.CreateEntity();
+      registry.Update();
       (void)registry.CreateEntity();
     }
 
     Assert::That(SpecRegistryErrorCount(), Equals(static_cast<std::size_t>(0)));
   };
 
-  It(should_stay_silent_below_the_threshold) {
-    Registry registry;
+  It(should_stay_silent_for_a_registry_that_never_created_an_entity) {
+    // A registry built and dropped without being used is not a mistake.
     Logger::messages.clear();
+    { Registry registry; }
 
-    for (unsigned int i = 0; i < ECS_PENDING_ENTITY_WARNING_THRESHOLD - 1;
-         ++i) {
-      (void)registry.CreateEntity();
+    Assert::That(SpecRegistryErrorCount(), Equals(static_cast<std::size_t>(0)));
+  };
+
+  It(should_stay_silent_for_a_large_batch_flushed_once) {
+    // The pattern the previous design got wrong: a level loader spawning a
+    // burst and flushing once afterwards is correct, not a misuse.
+    Logger::messages.clear();
+    {
+      Registry registry;
+      for (int i = 0; i < 200; ++i) {
+        (void)registry.CreateEntity();
+      }
+      registry.Update();
     }
 
     Assert::That(SpecRegistryErrorCount(), Equals(static_cast<std::size_t>(0)));
   };
-};
+
+  It(should_not_inherit_diagnostic_state_from_a_destroyed_registry) {
+    // The side table is keyed on `this`, and an allocator hands the same
+    // address back readily. Without the erase in ~Registry, this second
+    // registry inherits the first's updateCalls and the diagnostic silently
+    // stops working for it. Deleting the erase(this) line MUST fail this case.
+    const Registry *firstAddress = nullptr;
+    {
+      Registry first;
+      firstAddress = &first;
+      (void)first.CreateEntity();
+      first.Update();          // marks this address as having flushed
+    }
+
+    Logger::messages.clear();
+    {
+      Registry second;
+      // Assert the address was actually reused, so the case cannot pass by
+      // testing nothing. If it was not, the test is inconclusive rather than
+      // passing — say so loudly.
+      Assert::That(&second == firstAddress, Equals(true));
+      (void)second.CreateEntity();
+    } // never flushed — must report, despite `first` having flushed
+
+    Assert::That(SpecRegistryErrorCount(),
+                 Is().GreaterThanOrEqualTo(static_cast<std::size_t>(1)));
+    Logger::messages.clear();
+  };
+}
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+The last case is the one that matters, and it is the reason this task exists in the form it does — Task 13 reuses this side-table pattern for `NetServer`, so the erasure needs proven coverage here.
+
+**If the address is not reused** and that assertion fails, do not weaken it into a no-op. Report it: the case needs a different construction (for instance, allocating both registries with `new`/`delete` at a controlled address) to exercise the same path deterministically.
+
+- [ ] **Step 3: Run the tests to verify they fail**
 
 Run: `make -f Makefile.debian clean && make -f Makefile.debian test`
-Expected: compile error — `'ECS_PENDING_ENTITY_WARNING_THRESHOLD' was not declared`.
+Expected: the first and last cases FAIL. The three silence cases pass already and are the regression net.
 
-- [ ] **Step 3: Add the constant and take the destructor out of line**
+- [ ] **Step 4: Implement**
 
-In `common/ecs.h`, beside `ECS_MAX_DIAGNOSTIC_REPORTS` (line 29):
-
-```cpp
-// A registry holding this many entities that have never been flushed has
-// almost certainly never had Registry::Update() called on it — in which case
-// no entity has joined any system and nothing renders. Well above any
-// plausible single-frame spawn burst, so a game that flushes once a frame
-// never reaches it.
-constexpr unsigned int ECS_PENDING_ENTITY_WARNING_THRESHOLD = 64;
-```
-
-The destructor is currently defined inline at line 279:
+In `common/ecs.cpp`, inside the existing anonymous namespace:
 
 ```cpp
-  ~Registry() { logger.Log("Registry destructor called."); }
-```
-
-Replace it with a declaration so it can clear the side table:
-
-```cpp
-  ~Registry();
-```
-
-This changes no layout and adds no virtual — `Registry` has no virtual functions and is not a base class anywhere in the tree. Confirm with `grep -rn "public Registry\|: Registry" common/ editor/ examples/` before proceeding; expect no hits.
-
-- [ ] **Step 4: Implement the side table**
-
-At the top of `common/ecs.cpp`, after the existing includes:
-
-```cpp
-namespace {
-
-// Per-Registry diagnostic state that cannot live on Registry itself: games
-// embed a Registry by value in their states, so sizeof(Registry) is ABI and
-// 1.x may not add a member to it. Keyed on `this` and erased by ~Registry.
-//
-// Not thread-safe, in keeping with the rest of the ECS.
 struct RegistryDiagnostics {
   unsigned long updateCalls = 0;
-  unsigned int missingUpdateReports = 0;
+  unsigned long entitiesCreated = 0;
+  unsigned int reports = 0;
 };
+```
 
-std::unordered_map<const Registry *, RegistryDiagnostics> &
-DiagnosticsTable() {
-  static std::unordered_map<const Registry *, RegistryDiagnostics> table;
-  return table;
-}
+`Registry::Update()` increments `updateCalls`. `Registry::CreateEntity()` increments `entitiesCreated` and does nothing else — no reporting on that path at all.
 
-} // namespace
+`~Registry()` reports and then erases:
 
+```cpp
 Registry::~Registry() {
+  RegistryDiagnostics &diagnostics = DiagnosticsTable()[this];
+  if (diagnostics.updateCalls == 0 && diagnostics.entitiesCreated > 0 &&
+      EcsShouldReport(diagnostics.reports)) {
+    EcsReportErr(
+        "~Registry: this registry created " +
+        std::to_string(diagnostics.entitiesCreated) +
+        " entities and Registry::Update() was never called on it, so none of "
+        "them ever joined a system — nothing it owned rendered or moved. Call "
+        "registry.Update() once per frame, first, in your state's update()." +
+        EcsSuppressionNote(diagnostics.reports));
+  }
   DiagnosticsTable().erase(this);
   logger.Log("Registry destructor called.");
 }
 ```
 
-In `Registry::Update()` (line 231), as the first statement:
+- [ ] **Step 5: Revert the workaround in `specs/ecs.spec.cpp`**
 
-```cpp
-  ++DiagnosticsTable()[this].updateCalls;
-```
+The previous design forced an `Update()` call into an unrelated pre-existing spec to dodge its false positive. That workaround is no longer needed and must be removed, restoring the case to what it was — it is an ASan repro for reading past a component pool, and it should read exactly as it did before this task touched it.
 
-In `Registry::CreateEntity()` (line 126), after `entitiesToBeAdded.insert(entity);` (line 143):
-
-```cpp
-  RegistryDiagnostics &diagnostics = DiagnosticsTable()[this];
-  if (diagnostics.updateCalls == 0 &&
-      entitiesToBeAdded.size() >= ECS_PENDING_ENTITY_WARNING_THRESHOLD &&
-      EcsShouldReport(diagnostics.missingUpdateReports)) {
-    logger.Err(
-        "CreateEntity: " + std::to_string(entitiesToBeAdded.size()) +
-        " entities are waiting to be admitted and Registry::Update() has "
-        "never been called on this registry. No entity has joined any system, "
-        "so nothing will render or move. Call registry.Update() first in your "
-        "state's update()." +
-        EcsSuppressionNote(diagnostics.missingUpdateReports));
-  }
-```
-
-- [ ] **Step 5: Run the tests to verify they pass**
+- [ ] **Step 6: Run the tests to verify they pass**
 
 Run: `make -f Makefile.debian clean && make -f Makefile.debian test`
-Expected: all three new cases PASS.
+Expected: all five new cases PASS, `specs/ecs.spec.cpp` is back to its original form and still passes, and no other spec logs an error. Zero compiler warnings.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add common/ecs.h common/ecs.cpp specs/registry.spec.cpp
-git commit -m "Report a registry whose Update() has never been called"
+git add common/ecs.h common/ecs.cpp specs/registry.spec.cpp specs/ecs.spec.cpp
+git commit -m "Report a registry destroyed without ever flushing"
 ```
 
 ---

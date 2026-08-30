@@ -4,7 +4,11 @@ Defects that are **real, understood, and deliberately not fixed in the 1.x line*
 
 The 1.x public API is frozen. A game that compiles and links against 1.2.x must keep compiling and linking against every later 1.x release, which rules out changing a public signature, changing the layout of a type a game embeds or passes by value, or deleting a public member. Each entry below explains the defect, why the fix cannot be made without breaking that promise, and what to do in the meantime.
 
-Everything here is a candidate for **Storm! Engine v3**, where the compatibility promise resets. Items that *can* be fixed without a break live in the tech-debt ledger instead, not in this file.
+Everything here is a candidate for **2.0.0**, where the compatibility promise resets. Items that *can* be fixed without a break live in the tech-debt ledger instead, not in this file.
+
+**"2.0.0" is a RELEASE, not a new engine.** The product is Storm! Engine **v2** — that is the repo name, the package name (`libstormenginev2`) and the include path (`stormengine2/`), and none of them change. What changes is the semantic version, which is at 1.3.0 today. So the breaking release is *Storm! Engine v2, version 2.0.0*, and the two "2"s mean different things: the one in the name is the product generation, the one in the version is the compatibility epoch.
+
+This file previously called that release "Storm! Engine v3", which implied a whole new product line and a new package to install alongside the old one. It is a version bump, not a fork: games upgrade in place by rebuilding, exactly as 1.2.x → 1.3.0 required.
 
 **One deliberate exception has been taken.** 1.3.0 added font and sound caches to `AssetStore`, moving `sizeof(AssetStore)` from 112 to 208. Games allocate the store themselves via `std::make_unique<AssetStore>()`, so the size is emitted in game code and a 1.2.x binary relinked against a 1.3.0 `.so` overflows its allocation. It was taken knowingly: the `.deb` ships headers and library together, so the supported upgrade path - install the package, rebuild the game - is always consistent. It is recorded here so the next layout change is argued rather than assumed.
 
@@ -26,7 +30,7 @@ bullet.Kill();                              // destroys `pickup`
 
 **Why it stays.** The fix is a generation counter — `{ id, generation, registry }` — checked on every access. That takes `sizeof(Entity)` from 16 to 24. Games store `Entity` by value in their own containers and every `System` holds a `std::vector<Entity>`, so the layout is thoroughly baked into compiled game code.
 
-**Meanwhile.** Do not keep an `Entity` past the frame in which it might die. Re-look it up by tag or group, or null your own references when you kill something. Two specs (`specs/ecs.spec.cpp`, `specs/registry.spec.cpp`) pin this wrong behaviour deliberately, each carrying a comment to flip them when v3 fixes it.
+**Meanwhile.** Do not keep an `Entity` past the frame in which it might die. Re-look it up by tag or group, or null your own references when you kill something. Two specs (`specs/ecs.spec.cpp`, `specs/registry.spec.cpp`) pin this wrong behaviour deliberately, each carrying a comment to flip them when 2.0.0 fixes it.
 
 ## 2. A bare integer implicitly converts to an `Entity`
 
@@ -107,7 +111,7 @@ Animated tiles therefore render as static ones, and the editor's animation UI ha
 
 **Why it stays.** Trimming the includes to what the header actually needs is correct, but consuming games currently get SDL and the component headers *transitively* through it. Cutting them turns every game that relied on that into a wall of compile errors. Loud, fixable in a line or two per game — still a source break.
 
-**Meanwhile.** Include what you use in your own headers rather than leaning on the transitive path; that also makes the v3 upgrade a no-op for you.
+**Meanwhile.** Include what you use in your own headers rather than leaning on the transitive path; that also makes the 2.0.0 upgrade a no-op for you.
 
 **A way out landed in 1.3.0.** `common/states/gameStateBase.h` is the same
 `GameState` interface without the convenience includes - 80,265 preprocessed
@@ -116,7 +120,7 @@ lines against `gameState.h`'s 146,748, a 45% saving per translation unit.
 and the two cannot drift. A game that does not want the whole engine in every
 state includes the base header and includes what it uses. The defect itself
 stays: `gameState.h` still pulls everything, and trimming *that* is the source
-break v3 is for.
+break 2.0.0 is for.
 
 
 ## 9. Every engine type is a global symbol
@@ -137,9 +141,9 @@ Any game needing collision *response* — bouncing, damage, triggers, pickups �
 
 **Why it stays.** An event bus is new architecture, and changing what `CollisionSystem::Update()` does to entities is a silent behaviour break for anything relying on the current kill semantics.
 
-**Resolved for new code in 1.3.0.** `ContactSystem` (`common/systems/contact.h`) is the observe-without-acting path: it reports overlaps with a normal and penetration depth, fires begin/end callbacks once per pair, and never touches an entity. `CollisionSystem` is unchanged and stays unchanged for the whole 1.x line - the two share one copy of the bounds math via `ContactSystem::BoundsOf`. Deleting `CollisionSystem` is a v3 item, listed below.
+**Resolved for new code in 1.3.0.** `ContactSystem` (`common/systems/contact.h`) is the observe-without-acting path: it reports overlaps with a normal and penetration depth, fires begin/end callbacks once per pair, and never touches an entity. `CollisionSystem` is unchanged and stays unchanged for the whole 1.x line - the two share one copy of the bounds math via `ContactSystem::BoundsOf`. Deleting `CollisionSystem` is a 2.0.0 item, listed below.
 
-## Also on the v3 list
+## Also on the 2.0.0 list
 
 Not defects exactly — design decisions worth revisiting when compatibility is no longer binding:
 

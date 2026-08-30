@@ -344,7 +344,7 @@ include those themselves.
 
 Do not *rely* on that transitive reach — include what you use. The breadth of
 this header is a documented defect (`KNOWN_ISSUES.md` §8: ~713 headers and ~145k
-preprocessed lines to declare a 23-line interface) and trimming it is a v3 goal,
+preprocessed lines to declare a 23-line interface) and trimming it is a 2.0.0 goal,
 so code leaning on the transitive path breaks when it is fixed. Listing your own
 includes costs nothing and makes that upgrade a no-op.
 
@@ -1678,7 +1678,7 @@ The engine's `netplay-checkers` example demonstrates graphical, authoritative-ne
 |-------|-----|
 | Call `SDL_PollEvent` in both Game and State | Let the active state own all event polling |
 | Forget `registry.Update()` before systems | Always flush deferred adds/kills first |
-| Lean on `gameState.h`'s transitive includes instead of including what you use | It is true that `gameState.h` drags in SDL2 and every component/system — ~713 headers, ~145k preprocessed lines, to declare a 23-line interface — but that path is a documented defect (KNOWN_ISSUES #8) and goes away in v3. Include what you use in your own headers. On 1.3.0+, a game that does not use the ECS should include `states/gameStateBase.h` instead: same interface, 80,265 lines, 45% less. |
+| Lean on `gameState.h`'s transitive includes instead of including what you use | It is true that `gameState.h` drags in SDL2 and every component/system — ~713 headers, ~145k preprocessed lines, to declare a 23-line interface — but that path is a documented defect (KNOWN_ISSUES #8) and goes away in 2.0.0. Include what you use in your own headers. On 1.3.0+, a game that does not use the ECS should include `states/gameStateBase.h` instead: same interface, 80,265 lines, 45% less. |
 | Move `AssetStore_Ptr` to multiple states | Move once to first state, pass raw ptr/ref after |
 | Delete states inline on transition | Use the state machine's push/pop/change (deferred deletion) |
 | Add components before registering systems | Register systems first, then create entities |

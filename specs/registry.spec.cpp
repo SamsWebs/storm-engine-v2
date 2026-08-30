@@ -1,6 +1,7 @@
 #include <igloo/igloo_alt.h>
 
 #include "../common/ecs.h"
+#include "../common/logger.h"
 
 using namespace igloo;
 
@@ -405,5 +406,92 @@ Describe(RegistrySpec) {
       registry.Update();
       Assert::That(registry.DoesTagExist("player"), Equals(false));
     };
+  };
+};
+
+struct SpecLateSystemMarker { int value = 0; };
+
+class SpecLateRegisteredSystem : public System {
+public:
+  SpecLateRegisteredSystem() { RequireComponent<SpecLateSystemMarker>(); }
+};
+
+static std::size_t SpecRegistryErrorCount() {
+  std::size_t errors = 0;
+  for (const auto &entry : Logger::messages) {
+    if (entry.type == LogType::LOG_ERROR) {
+      ++errors;
+    }
+  }
+  return errors;
+}
+
+Describe(LateSystemRegistrationSpec) {
+  It(should_report_when_matching_entities_were_already_admitted) {
+    Registry registry;
+    Entity first = registry.CreateEntity();
+    first.AddComponent<SpecLateSystemMarker>();
+    Entity second = registry.CreateEntity();
+    second.AddComponent<SpecLateSystemMarker>();
+    registry.Update();
+
+    Logger::messages.clear();
+    registry.AddSystem<SpecLateRegisteredSystem>();
+
+    Assert::That(SpecRegistryErrorCount(),
+                 Is().GreaterThanOrEqualTo(static_cast<std::size_t>(1)));
+    Logger::messages.clear();
+  };
+
+  It(should_stay_silent_when_registered_before_any_entity_exists) {
+    Registry registry;
+    Logger::messages.clear();
+    registry.AddSystem<SpecLateRegisteredSystem>();
+
+    Entity entity = registry.CreateEntity();
+    entity.AddComponent<SpecLateSystemMarker>();
+    registry.Update();
+
+    Assert::That(SpecRegistryErrorCount(), Equals(static_cast<std::size_t>(0)));
+  };
+
+  It(should_stay_silent_when_no_existing_entity_matches) {
+    Registry registry;
+    Entity unrelated = registry.CreateEntity();
+    registry.Update();
+
+    Logger::messages.clear();
+    registry.AddSystem<SpecLateRegisteredSystem>();
+
+    Assert::That(SpecRegistryErrorCount(), Equals(static_cast<std::size_t>(0)));
+  };
+
+  It(should_backfill_the_admitted_entities_on_request) {
+    Registry registry;
+    Entity first = registry.CreateEntity();
+    first.AddComponent<SpecLateSystemMarker>();
+    Entity second = registry.CreateEntity();
+    second.AddComponent<SpecLateSystemMarker>();
+    registry.Update();
+
+    registry.AddSystem<SpecLateRegisteredSystem>();
+    Assert::That(
+        registry.GetSystem<SpecLateRegisteredSystem>().GetSystemEntities().size(),
+        Equals(static_cast<std::size_t>(0)));
+
+    const std::size_t admitted =
+        registry.AdmitExistingEntities<SpecLateRegisteredSystem>();
+
+    Assert::That(admitted, Equals(static_cast<std::size_t>(2)));
+    Assert::That(
+        registry.GetSystem<SpecLateRegisteredSystem>().GetSystemEntities().size(),
+        Equals(static_cast<std::size_t>(2)));
+    Logger::messages.clear();
+  };
+
+  It(should_admit_nothing_for_a_system_that_was_never_registered) {
+    Registry registry;
+    Assert::That(registry.AdmitExistingEntities<SpecLateRegisteredSystem>(),
+                 Equals(static_cast<std::size_t>(0)));
   };
 };

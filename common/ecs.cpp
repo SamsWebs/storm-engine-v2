@@ -161,6 +161,10 @@ bool Registry::IsAlive(Entity entity) const {
                    static_cast<int>(entityId)) == freeIds.end();
 }
 
+bool Registry::IsPendingAdmission(Entity entity) const {
+  return entitiesToBeAdded.find(entity) != entitiesToBeAdded.end();
+}
+
 const char *
 Registry::SystemMissedByLateComponent(Entity entity,
                                       std::size_t componentId) const {
@@ -174,7 +178,7 @@ Registry::SystemMissedByLateComponent(Entity entity,
   }
   // Still queued: Update() has not decided its membership yet, so adding a
   // component now is exactly the correct thing to do.
-  if (entitiesToBeAdded.find(entity) != entitiesToBeAdded.end()) {
+  if (IsPendingAdmission(entity)) {
     return nullptr;
   }
   // On its way out; its membership will never matter again.
@@ -207,6 +211,55 @@ Registry::SystemMissedByLateComponent(Entity entity,
     }
   }
   return nullptr;
+}
+
+namespace {
+
+// The entities a system registered now would have to be told about: live,
+// past admission, matching the signature, not already members.
+template <typename TVisitor>
+void ForEachMissedEntity(const Registry &registry, std::size_t numEntities,
+                         const std::vector<Signature> &signatures,
+                         const System &system, TVisitor &&visit) {
+  const Signature &required = system.GetComponentSignature();
+  const std::vector<Entity> &members =
+      const_cast<System &>(system).GetSystemEntities();
+
+  for (std::size_t id = 0; id < numEntities && id < signatures.size(); ++id) {
+    Entity entity(id);
+    if (!registry.IsAlive(entity)) {
+      continue;
+    }
+    if (registry.IsPendingAdmission(entity)) {
+      continue;
+    }
+    if ((signatures[id] & required) != required) {
+      continue;
+    }
+    if (std::find(members.begin(), members.end(), entity) != members.end()) {
+      continue;
+    }
+    visit(entity);
+  }
+}
+
+} // namespace
+
+std::size_t Registry::CountEntitiesMissedBySystem(const System &system) const {
+  std::size_t missed = 0;
+  ForEachMissedEntity(*this, numEntities, entityComponentSignatures, system,
+                      [&missed](Entity) { ++missed; });
+  return missed;
+}
+
+std::size_t Registry::AdmitExistingEntitiesTo(System &system) {
+  std::vector<Entity> toAdmit;
+  ForEachMissedEntity(*this, numEntities, entityComponentSignatures, system,
+                      [&toAdmit](Entity entity) { toAdmit.push_back(entity); });
+  for (Entity entity : toAdmit) {
+    system.AddEntityToSystem(entity);
+  }
+  return toAdmit.size();
 }
 
 void Registry::KillEntity(Entity entity) {

@@ -296,6 +296,10 @@ public:
   // `Registry` by value, so sizeof(Registry) is ABI. Tracked as P49.
   bool IsAlive(Entity entity) const;
 
+  // True while `entity` is queued for the next Registry::Update() and has not
+  // yet been given to any system.
+  bool IsPendingAdmission(Entity entity) const;
+
   // Names a registered system that `entity` would have joined had
   // `componentId` been present before Registry::Update() admitted it, or
   // nullptr when there is none. Call it *after* the signature bit is set.
@@ -354,6 +358,20 @@ public:
 
   template <typename TSystem> TSystem &GetSystem() const;
 
+  // How many live, already-admitted entities match `system`'s signature
+  // without being members of it. Non-zero means the system was registered too
+  // late to ever see them.
+  std::size_t CountEntitiesMissedBySystem(const System &system) const;
+
+  // Adds those entities to `system` and returns how many were added. Opt-in
+  // and never automatic: a game may register a system late on purpose, and a
+  // silent back-fill would change its behaviour.
+  std::size_t AdmitExistingEntitiesTo(System &system);
+
+  // AdmitExistingEntitiesTo for a system looked up by type. Returns 0 when
+  // TSystem is not registered.
+  template <typename TSystem> std::size_t AdmitExistingEntities();
+
   // Add and remove entities from their systems
   void AddEntityToSystems(Entity entity);
   void RemoveEntityFromSystems(Entity entity);
@@ -383,6 +401,21 @@ void Registry::AddSystem(Targs &&... args) {
   std::shared_ptr<TSystem> newSystem =
       std::make_shared<TSystem>(std::forward<Targs>(args)...);
   systems.insert(std::make_pair(std::type_index(typeid(TSystem)), newSystem));
+
+  // TSystem's constructor has run its RequireComponent calls by now, so the
+  // signature is final and the scan is meaningful.
+  static thread_local unsigned int lateSystemReports = 0;
+  if (lateSystemReports < ECS_MAX_DIAGNOSTIC_REPORTS) {
+    const std::size_t missed = CountEntitiesMissedBySystem(*newSystem);
+    if (missed > 0 && EcsShouldReport(lateSystemReports)) {
+      logger.Err("AddSystem: '" + std::string(typeid(TSystem).name()) +
+                 "' was registered after " + std::to_string(missed) +
+                 " matching entities were already admitted; it will never see "
+                 "them. Register every system before creating entities, or "
+                 "call Registry::AdmitExistingEntities<T>()." +
+                 EcsSuppressionNote(lateSystemReports));
+    }
+  }
 }
 
 template <typename TSystem> void Registry::RemoveSystem() {
@@ -401,6 +434,14 @@ template <typename TSystem> TSystem &Registry::GetSystem() const {
   // dereferencing end(). Check HasSystem() first if absence is expected.
   return *(std::static_pointer_cast<TSystem>(
       systems.at(std::type_index(typeid(TSystem)))));
+}
+
+template <typename TSystem> std::size_t Registry::AdmitExistingEntities() {
+  auto found = systems.find(std::type_index(typeid(TSystem)));
+  if (found == systems.end()) {
+    return 0;
+  }
+  return AdmitExistingEntitiesTo(*found->second);
 }
 
 template <typename TComponent, typename... Targs>

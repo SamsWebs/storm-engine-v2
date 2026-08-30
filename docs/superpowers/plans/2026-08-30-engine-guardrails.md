@@ -1654,7 +1654,7 @@ Either way, quote the actual compiler output rather than paraphrasing the error 
 Build and run each example under `examples/` that builds on this machine, plus `editor/` and `template/`. Capture stderr. Then:
 
 ```bash
-grep -n "RenderSystem: srcRect\|AddComponent: entity\|AddSystem:\|CreateEntity:\|GetSystem:\|GetComponent: entity" <captured-log>
+grep -n "RenderSystem: srcRect\|AddComponent: entity\|AddSystem:\|~Registry:\|GetSystem:\|GetComponent: entity" <captured-log>
 ```
 
 Write the full findings to the task report file, one line per example: which diagnostic, which source line caused it. An example that fires nothing gets a line saying so — that is the result for most of them, and recording it is what makes the ones that do fire trustworthy.
@@ -1668,7 +1668,7 @@ For each hit, fix the example, not the diagnostic. The four causes and their fix
 - `RenderSystem: srcRect ... outside texture` — the `SpriteComponent` `width`/`height` do not match the sheet cell, or `AnimationComponent.vertical` does not match the sheet layout. Correct whichever is wrong. Do not resize with `width`/`height`; those are the source rect. Screen size is `TransformComponent.scale`.
 - `AddComponent: entity ... was already admitted` — move the `AddComponent` call before the `registry_.Update()` that admits the entity.
 - `AddSystem: ... registered after N matching entities` — move the `AddSystem` call before the entity creation. Reach for `AdmitExistingEntities<T>()` only where the late registration is deliberate, and comment why.
-- `CreateEntity: ... Registry::Update() has never been called` — the state never flushes. Add `registry_.Update()` as the first call in its `update()`.
+- `~Registry: this registry created N entities and Registry::Update() was never called` — the state never flushes, so nothing ever joined a system. Add `registry_.Update()` as the first call in its `update()`. **Note this fires from the destructor, not from `CreateEntity`** — an earlier design counted pending entities in `CreateEntity` and was replaced because it false-positived on batch-spawn-then-flush. Grep for `~Registry:`, not `CreateEntity:`; the latter matches nothing in the engine.
 
 Each fix is its own commit, named for the example.
 

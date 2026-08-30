@@ -1582,19 +1582,31 @@ Item 9 (no namespaces) explicitly gets nothing. Add a sentence saying a namespac
 
 Also note under item 3 or in the preamble that `AssetStore_Ptr`, `Logger_Ptr` and the other `_Ptr` typedefs are `std::unique_ptr`, so they are move-only — hold the member, do not copy it.
 
-- [ ] **Step 4: Update `README.md`**
+- [ ] **Step 4: Purge the dangling references to deleted and changed API**
+
+Task 8 deleted `CollisionSystem`, and several documents still describe it as present. These are user-facing and currently assert something false:
+
+- `README.md:15` — "the older kill-on-contact `CollisionSystem` still works but is deprecated". It does not still work; it is gone. Rewrite the clause so the sentence describes `ContactSystem` alone.
+- `PROJECT_REFERENCE.md:98` — a paragraph describing `CollisionSystem` as deprecated-but-behaviour-identical, including the detail that its overlap test is inclusive where `ContactSystem::Overlaps` is strict. Delete the paragraph, but check first whether the inclusive/strict distinction is documented anywhere else; if it is not, that is real information about `ContactSystem` and should be kept in a sentence of its own.
+- `PROJECT_REFERENCE.md:197` — the `collision.h` row in the file table. Remove the row.
+
+**Do not edit historical `CHANGELOG.md` entries.** The mentions at lines 158, 183, 189, 192, 377 and 669 describe what shipped in past releases and were true when written. A changelog that is retroactively edited stops being a record. Only the new 2.0.0 entry is yours.
+
+`examples/strategy/README.md:69` also names "the deprecated `CollisionSystem`" in a comparative aside. Leave it to Task 12, which owns the examples.
+
+- [ ] **Step 5: Update `README.md`'s feature list and add a Diagnostics section**
 
 Add `keyboard.h` to whatever list enumerates `common/input/`, and add a short "Diagnostics" section: the engine reports a fixed number of occurrences of each misuse at `Err` level, they are on in every build, and a game seeing one has a real bug.
 
-- [ ] **Step 5: Verify the whole tree once more**
+- [ ] **Step 6: Verify the whole tree once more**
 
 Run: `make -f Makefile.debian clean && make -f Makefile.debian test`
 Expected: builds with no new warnings, every spec passes. Record the actual pass count in the commit message.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add docs/UPGRADING.md CHANGELOG.md KNOWN_ISSUES.md README.md
+git add docs/UPGRADING.md CHANGELOG.md KNOWN_ISSUES.md README.md PROJECT_REFERENCE.md
 git commit -m "Document the 2.0.0 guardrails and the upgrade path from 1.2.x"
 ```
 

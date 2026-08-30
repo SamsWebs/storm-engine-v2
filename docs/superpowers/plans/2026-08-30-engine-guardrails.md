@@ -1676,6 +1676,17 @@ Each fix is its own commit, named for the example.
 
 Re-run every example from Step 1. Expected: no diagnostic in any log. Paste the actual grep output — an empty result — into the report.
 
+- [ ] **Step 3b: Sweep the remaining `CollisionSystem` references**
+
+The class is deleted, but several documents still describe it in the present tense. These are yours because they live under `examples/` and the agent-facing docs, which no earlier task owned:
+
+- `examples/platformer/README.md:73` — "The engine's built-in `CollisionSystem` destroys both colliding entities - not suitable for player-vs-tile interaction." Present tense, now false. The *reasoning* is still valuable — it explains why `PlayState` keeps a `solidGrid_` mirror instead — so rewrite rather than delete: the engine has no kill-on-contact system, and `ContactSystem` reports overlaps without acting, which is why this example resolves collisions itself.
+- `examples/shooter/README.md:52` — describes `CollisionSystem` as "the older one, deliberately not registered". Rewrite to explain the same design choice without invoking a class that no longer exists.
+- `examples/strategy/README.md:69` — a comparative aside naming "the deprecated `CollisionSystem`". Trim to the point it is actually making, which is that this example registers no contact system at all.
+- `.claude/references/compile-errors.md:283` and `.claude/SKILL.md` — agent-facing docs that name the class. These matter more than they look: they are instructions a future coding agent reads as current fact. Fix the references; keep any technical content about `ContactSystem`'s strict-overlap behaviour.
+
+Do **not** touch historical `CHANGELOG.md` entries. They describe past releases and were true when written.
+
 - [ ] **Step 4: Adopt `Keyboard` in the template**
 
 The template is the canonical shape a new game copies, so it is where the input idiom has to be right. In `template/src/states/playState.cpp`, replace the raw `SDL_PollEvent` key handling with a `Keyboard` member fed from the state's existing poll loop:

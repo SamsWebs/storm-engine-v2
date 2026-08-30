@@ -1,5 +1,7 @@
 #include <igloo/igloo_alt.h>
 
+#include <new>
+
 #include "../common/ecs.h"
 #include "../common/logger.h"
 
@@ -497,42 +499,83 @@ Describe(LateSystemRegistrationSpec) {
 };
 
 Describe(MissingUpdateSpec) {
-  It(should_report_a_registry_whose_update_was_never_called) {
-    Registry registry;
+  It(should_report_a_registry_destroyed_without_ever_flushing) {
     Logger::messages.clear();
-
-    for (unsigned int i = 0; i < ECS_PENDING_ENTITY_WARNING_THRESHOLD + 1;
-         ++i) {
+    {
+      Registry registry;
       (void)registry.CreateEntity();
-    }
+      (void)registry.CreateEntity();
+    } // destroyed here, Update() never called
 
     Assert::That(SpecRegistryErrorCount(),
                  Is().GreaterThanOrEqualTo(static_cast<std::size_t>(1)));
     Logger::messages.clear();
   };
 
-  It(should_stay_silent_once_update_has_been_called) {
-    Registry registry;
-    registry.Update();
+  It(should_stay_silent_when_update_was_called) {
     Logger::messages.clear();
-
-    for (unsigned int i = 0; i < ECS_PENDING_ENTITY_WARNING_THRESHOLD + 1;
-         ++i) {
+    {
+      Registry registry;
+      (void)registry.CreateEntity();
+      registry.Update();
       (void)registry.CreateEntity();
     }
 
     Assert::That(SpecRegistryErrorCount(), Equals(static_cast<std::size_t>(0)));
   };
 
-  It(should_stay_silent_below_the_threshold) {
-    Registry registry;
+  It(should_stay_silent_for_a_registry_that_never_created_an_entity) {
+    // A registry built and dropped without being used is not a mistake.
     Logger::messages.clear();
+    { Registry registry; }
 
-    for (unsigned int i = 0; i < ECS_PENDING_ENTITY_WARNING_THRESHOLD - 1;
-         ++i) {
-      (void)registry.CreateEntity();
+    Assert::That(SpecRegistryErrorCount(), Equals(static_cast<std::size_t>(0)));
+  };
+
+  It(should_stay_silent_for_a_large_batch_flushed_once) {
+    // The pattern the previous design got wrong: a level loader spawning a
+    // burst and flushing once afterwards is correct, not a misuse.
+    Logger::messages.clear();
+    {
+      Registry registry;
+      for (int i = 0; i < 200; ++i) {
+        (void)registry.CreateEntity();
+      }
+      registry.Update();
     }
 
     Assert::That(SpecRegistryErrorCount(), Equals(static_cast<std::size_t>(0)));
+  };
+
+  It(should_not_inherit_diagnostic_state_from_a_destroyed_registry) {
+    // The side table is keyed on `this`, and an allocator hands the same
+    // address back readily — but not deterministically, so this places both
+    // registries in the same raw storage via placement new rather than
+    // relying on the heap to reuse a freed address. That controls the
+    // address while still exercising the real ~Registry / CreateEntity code
+    // paths. Without the erase in ~Registry, this second registry inherits
+    // the first's updateCalls and the diagnostic silently stops working for
+    // it. Deleting the erase(this) line MUST fail this case.
+    alignas(Registry) unsigned char storage[sizeof(Registry)];
+
+    Registry *first = new (storage) Registry();
+    (void)first->CreateEntity();
+    first->Update(); // marks this address as having flushed
+    first->~Registry();
+
+    Logger::messages.clear();
+
+    Registry *second = new (storage) Registry();
+    // Assert the address was actually reused, so the case cannot pass by
+    // testing nothing.
+    Assert::That(static_cast<void *>(second) == static_cast<void *>(storage),
+                 Equals(true));
+    (void)second->CreateEntity();
+    second->~Registry(); // never flushed — must report, despite `first`
+                         // having flushed
+
+    Assert::That(SpecRegistryErrorCount(),
+                 Is().GreaterThanOrEqualTo(static_cast<std::size_t>(1)));
+    Logger::messages.clear();
   };
 };

@@ -29,13 +29,6 @@ using Signature = std::bitset<MAX_COMPONENTS>;
 // Every ECS diagnostic reports its first few occurrences, then goes quiet.
 constexpr unsigned int ECS_MAX_DIAGNOSTIC_REPORTS = 4;
 
-// A registry holding this many entities that have never been flushed has
-// almost certainly never had Registry::Update() called on it — in which case
-// no entity has joined any system and nothing renders. Well above any
-// plausible single-frame spawn burst, so a game that flushes once a frame
-// never reaches it.
-constexpr unsigned int ECS_PENDING_ENTITY_WARNING_THRESHOLD = 64;
-
 // True for the first ECS_MAX_DIAGNOSTIC_REPORTS calls made against `counter`.
 // Gate a diagnostic on this *before* building its message — assembling the
 // message is most of the cost. `counter` must be a static owned by a single

@@ -10,7 +10,15 @@ const char *EcsSuppressionNote(unsigned int counter) {
 }
 
 void EcsReportErr(const std::string &message) {
-  static Logger ecsLogger;
+  // Intentionally leaked. Registry::instance (below) is a namespace-scope
+  // std::unique_ptr, so its ~Registry can run during static teardown, after
+  // a function-local static Logger here would already have been destroyed.
+  // Leaking it keeps EcsReportErr safe to call at any point in the program's
+  // life, including from ~Registry at exit. Logger::messages itself is a
+  // namespace-scope static in another translation unit, so its destruction
+  // order relative to Registry::instance is unspecified — a report emitted
+  // during static teardown is best-effort, not guaranteed to be observed.
+  static Logger &ecsLogger = *new Logger();
   ecsLogger.Err(message);
 }
 
@@ -132,12 +140,19 @@ namespace {
 // Not thread-safe, in keeping with the rest of the ECS.
 struct RegistryDiagnostics {
   unsigned long updateCalls = 0;
-  unsigned int missingUpdateReports = 0;
+  unsigned long entitiesCreated = 0;
+  unsigned int reports = 0;
 };
 
 std::unordered_map<const Registry *, RegistryDiagnostics> &
 DiagnosticsTable() {
-  static std::unordered_map<const Registry *, RegistryDiagnostics> table;
+  // Intentionally leaked. ~Registry reaches into this map, and the editor's
+  // Registry::Instance() singleton is destroyed during static teardown —
+  // after a function-local static would already have been destroyed.
+  // Leaking it makes the destructor safe at any point in the program's
+  // life. One map, freed by the OS at exit.
+  static auto &table =
+      *new std::unordered_map<const Registry *, RegistryDiagnostics>();
   return table;
 }
 
@@ -172,6 +187,17 @@ void ForEachMissedEntity(const Registry &registry, std::size_t numEntities,
 } // namespace
 
 Registry::~Registry() {
+  RegistryDiagnostics &diagnostics = DiagnosticsTable()[this];
+  if (diagnostics.updateCalls == 0 && diagnostics.entitiesCreated > 0 &&
+      EcsShouldReport(diagnostics.reports)) {
+    EcsReportErr(
+        "~Registry: this registry created " +
+        std::to_string(diagnostics.entitiesCreated) +
+        " entities and Registry::Update() was never called on it, so none of "
+        "them ever joined a system — nothing it owned rendered or moved. Call "
+        "registry.Update() once per frame, first, in your state's update()." +
+        EcsSuppressionNote(diagnostics.reports));
+  }
   DiagnosticsTable().erase(this);
   logger.Log("Registry destructor called.");
 }
@@ -195,18 +221,10 @@ Entity Registry::CreateEntity() {
   entity.registry = this;
   entitiesToBeAdded.insert(entity);
 
-  RegistryDiagnostics &diagnostics = DiagnosticsTable()[this];
-  if (diagnostics.updateCalls == 0 &&
-      entitiesToBeAdded.size() >= ECS_PENDING_ENTITY_WARNING_THRESHOLD &&
-      EcsShouldReport(diagnostics.missingUpdateReports)) {
-    logger.Err(
-        "CreateEntity: " + std::to_string(entitiesToBeAdded.size()) +
-        " entities are waiting to be admitted and Registry::Update() has "
-        "never been called on this registry. No entity has joined any system, "
-        "so nothing will render or move. Call registry.Update() first in your "
-        "state's update()." +
-        EcsSuppressionNote(diagnostics.missingUpdateReports));
-  }
+  // Counting only — see ~Registry for the diagnostic. A count-based report
+  // here false-positives on batch-spawn-then-flush (a level loader), so the
+  // actual misuse check happens at the registry's end of life instead.
+  ++DiagnosticsTable()[this].entitiesCreated;
 
   logger.Log("Entity created with id = " + std::to_string(entityId));
 

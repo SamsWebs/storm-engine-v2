@@ -240,23 +240,24 @@ Describe(SystemMembershipSpec) {
   // KNOWN_ISSUES.md §2 — Entity(std::size_t) is not explicit, so a bare
   // integer converts to an Entity at any call site that takes one.
   //
-  // PINS A KNOWN LIMITATION. Adding `explicit` is a source break, so it is
-  // frozen out of 1.x; a 2.0.0 that adds it must update this case deliberately.
+  // FIXED in 2.0.0: Entity's id constructor is now explicit, so the implicit
+  // conversion this block used to pin (registry.KillEntity(88) compiling) is
+  // now a compile error — pinned below as a static_assert at file scope
+  // instead. What survives here is the rest of the original case: KillEntity
+  // on an id that was never allocated is a no-op rather than corrupting
+  // memory. It now constructs the id explicitly, as callers must.
   //////////////////////////////////////////////////////////////////////////
   Describe(ImplicitEntityConversion) {
 
-    It(should_still_convert_a_bare_integer_to_an_entity) {
-      Assert::That(std::is_convertible<std::size_t, Entity>::value,
-                   Equals(true));
-
+    It(should_leave_a_live_entity_alone_when_killing_an_unallocated_id) {
       Registry registry;
       Entity real = registry.CreateEntity();
       registry.Update();
 
-      // The conversion at work: 88 is not an entity, and this still compiles.
-      // It is a no-op because KillEntity rejects an id that is not alive
-      // (common/ecs.cpp:175) — but it should never have been callable.
-      registry.KillEntity(88);
+      // 88 was never allocated by this registry. KillEntity rejects an id
+      // that is not alive (common/ecs.cpp:328), so this is a no-op rather
+      // than corrupting memory.
+      registry.KillEntity(Entity(88));
       registry.Update();
 
       Assert::That(registry.IsAlive(real), Equals(true));
@@ -285,3 +286,10 @@ Describe(SystemMembershipSpec) {
     };
   };
 };
+
+// KNOWN_ISSUES.md §2, fixed in 2.0.0: a bare integer must not implicitly
+// convert to an Entity. registry.KillEntity(88) used to compile; the
+// ImplicitEntityConversion case above now constructs Entity(88) explicitly
+// instead.
+static_assert(!std::is_convertible<std::size_t, Entity>::value,
+              "a bare size_t must not implicitly convert to an Entity");

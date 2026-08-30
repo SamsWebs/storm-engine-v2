@@ -112,7 +112,9 @@ private:
   std::size_t id;
 
 public:
-  Entity(std::size_t id) : id(id){};
+  // explicit since 2.0.0: without it any function taking an Entity silently
+  // accepted a bare number, so registry.KillEntity(88) compiled.
+  explicit Entity(std::size_t id) : id(id){};
   void Kill();
   std::size_t GetId() const;
 

@@ -1,4 +1,5 @@
 #include <igloo/igloo_alt.h>
+#include <type_traits>
 #include <typeinfo>
 
 #include "../common/ecs.h"
@@ -669,3 +670,11 @@ Describe(LateComponentSpec) {
     Assert::That(SpecErrorCount(), Equals(static_cast<std::size_t>(0)));
   };
 };
+
+// KNOWN_ISSUES.md item 2, fixed in 2.0.0: a bare integer must not become an
+// Entity. Direct initialisation — Entity(7) — stays legal and is how the
+// Registry builds them; only the implicit conversion goes away.
+static_assert(!std::is_convertible<std::size_t, Entity>::value,
+              "a bare size_t must not implicitly convert to an Entity");
+static_assert(std::is_constructible<Entity, std::size_t>::value,
+              "Entity must still be constructible from an id");

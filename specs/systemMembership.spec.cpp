@@ -2,7 +2,9 @@
 
 #include "../common/ecs.h"
 
+#include <string>
 #include <type_traits>
+#include <vector>
 
 using namespace igloo;
 
@@ -41,6 +43,18 @@ public:
     sortEntities(
         [](const Entity &a, const Entity &b) { return b.GetId() < a.GetId(); });
   }
+};
+
+// Systems used only by the AddSystem argument-passing cases below.
+struct SpecCountingSystem : public System {
+  int seed = 0;
+  explicit SpecCountingSystem(int seed) : seed(seed) {}
+};
+
+struct SpecNameCarryingSystem : public System {
+  std::vector<std::string> names;
+  explicit SpecNameCarryingSystem(std::vector<std::string> names)
+      : names(std::move(names)) {}
 };
 
 Describe(SystemMembershipSpec) {
@@ -247,6 +261,27 @@ Describe(SystemMembershipSpec) {
 
       Assert::That(registry.IsAlive(real), Equals(true));
       Assert::That(registry.IsAlive(Entity(88)), Equals(false));
+    };
+  };
+
+  Describe(AddSystemArgumentPassingSpec) {
+    It(should_accept_an_rvalue_constructor_argument) {
+      Registry registry;
+      registry.AddSystem<SpecCountingSystem>(5);
+      Assert::That(registry.HasSystem<SpecCountingSystem>(), Equals(true));
+      Assert::That(registry.GetSystem<SpecCountingSystem>().seed, Equals(5));
+    };
+
+    It(should_not_move_out_of_a_caller_lvalue) {
+      Registry registry;
+      std::vector<std::string> names{"first", "second"};
+      registry.AddSystem<SpecNameCarryingSystem>(names);
+
+      // The system got its own copy; the caller's vector is untouched.
+      Assert::That(names.size(), Equals(static_cast<std::size_t>(2)));
+      Assert::That(names[0], Equals("first"));
+      Assert::That(registry.GetSystem<SpecNameCarryingSystem>().names.size(),
+                   Equals(static_cast<std::size_t>(2)));
     };
   };
 };

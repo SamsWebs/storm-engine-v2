@@ -332,7 +332,7 @@ public:
 
   // System Management
   template <typename TSystem, typename... Targs>
-  void AddSystem(Targs &... args);
+  void AddSystem(Targs &&... args);
 
   template <typename TSystem> void RemoveSystem();
 
@@ -365,7 +365,7 @@ public:
 };
 
 template <typename TSystem, typename... Targs>
-void Registry::AddSystem(Targs &... args) {
+void Registry::AddSystem(Targs &&... args) {
   std::shared_ptr<TSystem> newSystem =
       std::make_shared<TSystem>(std::forward<Targs>(args)...);
   systems.insert(std::make_pair(std::type_index(typeid(TSystem)), newSystem));

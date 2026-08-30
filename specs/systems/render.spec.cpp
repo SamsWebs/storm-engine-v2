@@ -272,3 +272,94 @@ Describe(RenderSystemSpec) {
     Assert::That(target.DrawnPixelCount(), Equals(0));
   };
 };
+
+static std::size_t SpecRenderErrorCount() {
+  std::size_t errors = 0;
+  for (const auto &entry : Logger::messages) {
+    if (entry.type == LogType::LOG_ERROR) {
+      ++errors;
+    }
+  }
+  return errors;
+}
+
+Describe(SrcRectBoundsSpec) {
+  It(should_report_a_src_rect_past_the_bottom_of_the_texture) {
+    SpecSurfaceTarget target(32, 32);
+    AssetStore assetStore;
+    SDL_Texture *texture =
+        AddTintedTexture(assetStore, target.renderer, "sheet", 255, 255, 255);
+    Assert::That(texture == nullptr, Equals(false));
+
+    int textureW = 0, textureH = 0;
+    SDL_QueryTexture(texture, nullptr, nullptr, &textureW, &textureH);
+
+    Registry registry;
+    registry.AddSystem<RenderSystem>();
+    Entity entity = registry.CreateEntity();
+    entity.AddComponent<TransformComponent>();
+    entity.AddComponent<SpriteComponent>("sheet", textureW, textureH, 0, false,
+                                         0, textureH * 4);
+    registry.Update();
+
+    Logger::messages.clear();
+    registry.GetSystem<RenderSystem>().Update(target.renderer, assetStore);
+
+    Assert::That(SpecRenderErrorCount(),
+                 Is().GreaterThanOrEqualTo(static_cast<std::size_t>(1)));
+    Logger::messages.clear();
+  };
+
+  It(should_stay_silent_for_a_src_rect_inside_the_texture) {
+    SpecSurfaceTarget target(32, 32);
+    AssetStore assetStore;
+    SDL_Texture *texture =
+        AddTintedTexture(assetStore, target.renderer, "sheet", 255, 255, 255);
+    Assert::That(texture == nullptr, Equals(false));
+
+    int textureW = 0, textureH = 0;
+    SDL_QueryTexture(texture, nullptr, nullptr, &textureW, &textureH);
+
+    Registry registry;
+    registry.AddSystem<RenderSystem>();
+    Entity entity = registry.CreateEntity();
+    entity.AddComponent<TransformComponent>();
+    entity.AddComponent<SpriteComponent>("sheet", textureW, textureH, 0, false,
+                                         0, 0);
+    registry.Update();
+
+    Logger::messages.clear();
+    registry.GetSystem<RenderSystem>().Update(target.renderer, assetStore);
+
+    Assert::That(SpecRenderErrorCount(), Equals(static_cast<std::size_t>(0)));
+  };
+
+  It(should_throttle_the_report_for_a_permanently_broken_sprite) {
+    SpecSurfaceTarget target(32, 32);
+    AssetStore assetStore;
+    SDL_Texture *texture =
+        AddTintedTexture(assetStore, target.renderer, "sheet", 255, 255, 255);
+    Assert::That(texture == nullptr, Equals(false));
+
+    int textureW = 0, textureH = 0;
+    SDL_QueryTexture(texture, nullptr, nullptr, &textureW, &textureH);
+
+    Registry registry;
+    registry.AddSystem<RenderSystem>();
+    Entity entity = registry.CreateEntity();
+    entity.AddComponent<TransformComponent>();
+    entity.AddComponent<SpriteComponent>("sheet", textureW, textureH, 0, false,
+                                         0, textureH * 4);
+    registry.Update();
+
+    Logger::messages.clear();
+    for (int frame = 0; frame < 200; ++frame) {
+      registry.GetSystem<RenderSystem>().Update(target.renderer, assetStore);
+    }
+
+    Assert::That(SpecRenderErrorCount(),
+                 Is().LessThanOrEqualTo(
+                     static_cast<std::size_t>(ECS_MAX_DIAGNOSTIC_REPORTS)));
+    Logger::messages.clear();
+  };
+};

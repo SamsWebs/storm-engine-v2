@@ -1081,7 +1081,9 @@ Verified before this task was written: `grep -rn "AddSystem<CollisionSystem>" ex
 - Delete: `specs/systems/collision.spec.cpp`
 - Modify: `common/states/gameState.h` — remove the `#include "../systems/collision.h"` line
 - Modify: `TUTORIAL.md` — remove the `CollisionSystem` row
-- Modify: `Makefile.debian` — remove `specs/systems/collision.spec.o` if spec objects are listed rather than globbed
+- Modify: `common/systems/contact.h` — three comments reference `CollisionSystem` (lines 18, 176, 193)
+
+**No Makefile edit is needed.** `Makefile.debian:70` builds the spec list with `$(shell find specs -name '*.cpp')`, so a deleted spec file drops out on its own.
 
 **Interfaces:**
 - Consumes: nothing
@@ -1106,6 +1108,8 @@ git rm common/systems/collision.h specs/systems/collision.spec.cpp
 - [ ] **Step 3: Drop the include and the tutorial row**
 
 Remove the `#include "../systems/collision.h"` line from `common/states/gameState.h`. Leave every other include in that file alone — `gameState.h` deliberately pulls in the common engine surface, and trimming the rest is a separate, still-unmade decision.
+
+`common/systems/contact.h` refers to the deleted class in three comments — line 18 ("CollisionSystem (../systems/collision.h) is the older kill-on-contact..."), line 176, and line 193 ("CollisionSystem::isCollision is inclusive and..."). Rewrite each to stand on its own without naming a class that no longer exists. Line 193's comment documents a real inclusivity detail of the bounds comparison; keep the technical content and drop only the cross-reference. Do not delete these comments wholesale — they explain why `ContactSystem` behaves as it does.
 
 Remove the `CollisionSystem` row from `TUTORIAL.md`. If the surrounding prose refers to it, rewrite that sentence to name `ContactSystem` and what it does instead: reports overlaps with a normal and penetration depth, and never kills anything.
 
@@ -1308,7 +1312,7 @@ The trap is that the engine has no main loop and no keyboard abstraction, so gam
 **Files:**
 - Create: `common/input/keyboard.h`
 - Create: `specs/input/keyboard.spec.cpp`
-- Modify: `Makefile.debian` — add the new spec object if spec sources are listed explicitly rather than globbed (check `TESTOBJS` first)
+- No Makefile edit needed: `Makefile.debian:70` globs spec sources with `$(shell find specs -name '*.cpp')`, so a new file under `specs/` is picked up automatically.
 
 **Interfaces:**
 - Produces:
@@ -1500,9 +1504,9 @@ private:
 
 `std::bitset::test` throws for an out-of-range position, which aborts under the Switch build's `-fno-exceptions` — hence the range guard in `Test` and in `HandleEvent` rather than relying on the enum's declared range.
 
-- [ ] **Step 4: Make sure the spec is built**
+- [ ] **Step 4: Confirm the spec was picked up**
 
-Check how `Makefile.debian` collects spec sources (`TESTOBJS`, line 79 region). If they are globbed by directory, nothing to do — `specs/input/` is already covered. If they are listed, add `specs/input/keyboard.spec.o`.
+No Makefile edit is needed — `Makefile.debian:70` is `TESTSRCS := $(shell find specs -name '*.cpp')`. Just confirm the new file's cases appear in the run by checking the total rose by five.
 
 - [ ] **Step 5: Run the tests to verify they pass**
 
@@ -2148,6 +2152,10 @@ registry.KillEntity(88);        // compiles. 88 is not an entity.
 
 Every `Entity` member null-checks its registry pointer, so this no-ops and logs rather than dereferencing garbage — but it should never have compiled. This is `KNOWN_ISSUES.md` item 2, which records that `grep -rnE 'KillEntity\([0-9]|TagEntity\([0-9]' examples/ editor/ common/` is empty.
 
+**That grep never covered `specs/`, and there is exactly one in-tree site.** `specs/systemMembership.spec.cpp:259` contains `registry.KillEntity(88);` — a spec that deliberately pins the current bad behaviour, exactly as `KNOWN_ISSUES.md` describes it. It will stop compiling, which is the point.
+
+Do not delete that case. Read what it asserts first: it pins that a bare integer no-ops and logs rather than corrupting memory. Under `explicit` the mistake it guards against cannot be written at all, so the case's job is done by the compiler. Replace it with a `static_assert` in the same file recording that the conversion is now rejected, and carry the original comment's intent across so the history is not lost. If the case asserts anything *beyond* the implicit conversion — say, that `KillEntity` on a live-but-unowned entity no-ops — keep that part as a runtime case using `Entity(88)` explicitly.
+
 **Files:**
 - Modify: `common/ecs.h` — the constructor at line 108
 - Test: `specs/ecs.spec.cpp`
@@ -2193,7 +2201,7 @@ Run: `make -f Makefile.debian clean && make -f Makefile.debian test`
 
 Expected: clean. If anything fails to compile, the fix is almost always to write the construction explicitly — `Entity(id)` instead of a bare `id` — at the call site. **Do not fix a break by removing `explicit`.**
 
-One place to check specifically: `common/ecs.cpp` and `common/ecs.h` construct `Entity` internally in several places, and the earlier tasks in this release added more (`Entity entity(id);` inside the membership scans). Direct initialisation is unaffected by `explicit`, so those are fine — but a `return 0;` or a braced `{id}` in a function returning `Entity` would not be. Report anything you had to change.
+`Registry::CreateEntity` (`common/ecs.cpp:131`) and `Registry::GetEntityByTag` (`common/ecs.cpp:409`) both return `Entity` — check neither returns a bare integer or a braced initialiser. Beyond that, `common/ecs.cpp` and `common/ecs.h` construct `Entity` internally in several places, and the earlier tasks in this release added more (`Entity entity(id);` inside the membership scans). Direct initialisation is unaffected by `explicit`, so those are fine — but a `return 0;` or a braced `{id}` in a function returning `Entity` would not be. Report anything you had to change.
 
 - [ ] **Step 5: Commit**
 

@@ -88,6 +88,16 @@ Describe(EcsSpec) {
     };
   };
 
+  // P48 — the miss diagnostic's throttle counter is per-TComponent, static
+  // thread_local, and never reset within a process. This case must run before
+  // ComponentMissSpec exhausts the SpecMana/NoPool budget. Three tests share
+  // one counter: this case (1 report), should_not_leak_a_miss_across_registries
+  // (2 reports), and should_throttle_the_diagnostic_for_a_repeated_miss (needs
+  // >= 1 remaining). SpecMana is reused deliberately rather than declaring a
+  // fresh component type, because every type costs one of 32 process-wide ids.
+  // If the budget exhausts first, nothing logs, named stays false, and the
+  // assertion fails visibly — making order-position acceptable rather than
+  // dangerous.
   It(should_name_the_component_type_in_the_miss_diagnostic) {
     Registry registry;
     Entity live = registry.CreateEntity();

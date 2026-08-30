@@ -4,6 +4,7 @@
 #include <set>
 #include <string>
 #include <thread>
+#include <type_traits>
 #include <vector>
 
 #include <igloo/igloo_alt.h>
@@ -666,3 +667,23 @@ Describe(NetLoopbackSpec) {
                  Equals(false));
   };
 };
+
+// KNOWN_ISSUES item 6, fixed in 2.0.0: these four own a socket descriptor and
+// install callbacks capturing `this`. A copy gives two objects whose callbacks
+// point at the original and two destructors closing one descriptor.
+static_assert(!std::is_copy_constructible<NetServer>::value,
+              "NetServer must not be copy constructible");
+static_assert(!std::is_copy_assignable<NetServer>::value,
+              "NetServer must not be copy assignable");
+static_assert(!std::is_copy_constructible<NetClient>::value,
+              "NetClient must not be copy constructible");
+static_assert(!std::is_copy_assignable<NetClient>::value,
+              "NetClient must not be copy assignable");
+static_assert(!std::is_copy_constructible<NetConnection>::value,
+              "NetConnection must not be copy constructible");
+static_assert(!std::is_copy_assignable<NetConnection>::value,
+              "NetConnection must not be copy assignable");
+static_assert(!std::is_copy_constructible<NetSocket>::value,
+              "NetSocket must not be copy constructible");
+static_assert(!std::is_copy_assignable<NetSocket>::value,
+              "NetSocket must not be copy assignable");

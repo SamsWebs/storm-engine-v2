@@ -27,6 +27,12 @@ public:
 
   NetConnection() = default;
 
+  // Owns no socket, but installs callbacks capturing `this` via SetSendFunc:
+  // a copy would give two objects whose callbacks point at the original.
+  // KNOWN_ISSUES item 6, fixed in 2.0.0.
+  NetConnection(const NetConnection &) = delete;
+  NetConnection &operator=(const NetConnection &) = delete;
+
   void SetSendFunc(SendFunc fn) { send_ = fn; }
   // token = the nonce we issued, verified on incoming packets; peerToken =
   // the nonce the peer issued, stamped on outgoing packets. A peer that was

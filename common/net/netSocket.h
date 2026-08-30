@@ -16,6 +16,11 @@ public:
     NetSocket() = default;
     ~NetSocket();
 
+    // Owns a socket descriptor: a copy would give two objects and two
+    // destructors closing one descriptor. KNOWN_ISSUES item 6, fixed in 2.0.0.
+    NetSocket(const NetSocket &) = delete;
+    NetSocket &operator=(const NetSocket &) = delete;
+
     bool Open(uint16_t port); // 0 = OS-assigned ephemeral port
     void Close();
     bool IsOpen() const { return fd_ != -1; }

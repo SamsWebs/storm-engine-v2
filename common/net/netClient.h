@@ -27,6 +27,12 @@ public:
     NetClient();
     ~NetClient();
 
+    // Owns a socket descriptor and installs callbacks capturing `this`: a copy
+    // would give two objects whose callbacks point at the original, and two
+    // destructors closing one descriptor. KNOWN_ISSUES item 6, fixed in 2.0.0.
+    NetClient(const NetClient &) = delete;
+    NetClient &operator=(const NetClient &) = delete;
+
     bool Connect(const std::string &host, uint16_t port);
     void Disconnect(const std::string &reason = "");
     void Update();

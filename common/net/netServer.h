@@ -29,6 +29,12 @@ public:
     NetServer();
     ~NetServer();
 
+    // Owns a socket descriptor and installs callbacks capturing `this`: a copy
+    // would give two objects whose callbacks point at the original, and two
+    // destructors closing one descriptor. KNOWN_ISSUES item 6, fixed in 2.0.0.
+    NetServer(const NetServer &) = delete;
+    NetServer &operator=(const NetServer &) = delete;
+
     bool Start(uint16_t port, int maxClients = 8); // port 0 = ephemeral
     void Stop();
     void Update();

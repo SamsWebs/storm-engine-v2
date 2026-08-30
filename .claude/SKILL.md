@@ -12,7 +12,10 @@ date_added: "2026-08-03"
 
 # Storm! Engine v2
 
-> **Current release: v1.3.0** - public API stable for the 1.x line.
+> **Current release: v2.0.0~dev** (`Makefile.debian`) - the compatibility
+> promise that kept the 1.x line's public API stable no longer governs this
+> tree. 2.0.0 is the breaking release `KNOWN_ISSUES.md` describes; several of
+> its items are resolved here, and the rest stay open for a later release.
 > Repo: `github.com/WillSams/storm-engine-v2` · License: WTFPL
 >
 > Since v1.2.1: v1.2.2 added the safe accessors (`TryGetComponent`, `IsAlive`,
@@ -348,9 +351,10 @@ include those themselves.
 
 Do not *rely* on that transitive reach — include what you use. The breadth of
 this header is a documented defect (`KNOWN_ISSUES.md` §8: ~713 headers and ~145k
-preprocessed lines to declare a 23-line interface) and trimming it is a 2.0.0 goal,
-so code leaning on the transitive path breaks when it is fixed. Listing your own
-includes costs nothing and makes that upgrade a no-op.
+preprocessed lines to declare a 23-line interface); trimming it was ruled out
+of scope for 2.0.0 and is deferred to a later breaking release, so code
+leaning on the transitive path breaks when it eventually is fixed. Listing
+your own includes costs nothing and makes that upgrade a no-op.
 
 **If the game does not use the ECS, include
 `<stormengine2/states/gameStateBase.h>` instead** (1.3.0+). Same `GameState`
@@ -1684,7 +1688,7 @@ The engine's `netplay-checkers` example demonstrates graphical, authoritative-ne
 |-------|-----|
 | Call `SDL_PollEvent` in both Game and State | Let the active state own all event polling |
 | Forget `registry.Update()` before systems | Always flush deferred adds/kills first |
-| Lean on `gameState.h`'s transitive includes instead of including what you use | It is true that `gameState.h` drags in SDL2 and every component/system — ~713 headers, ~145k preprocessed lines, to declare a 23-line interface — but that path is a documented defect (KNOWN_ISSUES #8) and goes away in 2.0.0. Include what you use in your own headers. On 1.3.0+, a game that does not use the ECS should include `states/gameStateBase.h` instead: same interface, 80,265 lines, 45% less. |
+| Lean on `gameState.h`'s transitive includes instead of including what you use | It is true that `gameState.h` drags in SDL2 and every component/system — ~713 headers, ~145k preprocessed lines, to declare a 23-line interface — but that path is a documented defect (KNOWN_ISSUES #8), and trimming it was ruled out of scope for 2.0.0 (deferred to a later breaking release; this release even adds an include to that header). Include what you use in your own headers. On 1.3.0+, a game that does not use the ECS should include `states/gameStateBase.h` instead: same interface, 80,265 lines, 45% less. |
 | Move `AssetStore_Ptr` to multiple states | Move once to first state, pass raw ptr/ref after |
 | Delete states inline on transition | Use the state machine's push/pop/change (deferred deletion) |
 | Add components before registering systems | Register systems first, then create entities |
@@ -1793,14 +1797,17 @@ the game's own headers.
 - The editor's shadowing copy of `common/components/sprite.h` is gone;
   `editor/include/` was deleted and the editor now compiles against the
   installed engine headers with `#include <stormengine2/components/sprite.h>`.
-- Ten further defects are **real, understood and deliberately unfixed in 1.x**
-  because each needs a source or ABI break; they are tracked in
-  `KNOWN_ISSUES.md` with a workaround apiece. Highlights: recycled entity ids
-  with no generation counter, implicit `Entity(std::size_t)` conversion,
-  component set frozen at admission, copyable `NetServer`/`NetClient`, tile
-  animation fields discarded by the loader, and **no namespaces — every engine
-  type (`Entity`, `Registry`, `Logger`, `Tile`…) is a global symbol**, so a game
-  declaring its own collides. (`docs/TECH_DEBT.md` is gitignored and local-only;
+- Ten further defects were **real, understood and deliberately unfixed in
+  1.x** because each needed a source or ABI break; they are tracked in
+  `KNOWN_ISSUES.md` with a workaround apiece. 2.0.0 closes several of them:
+  `Entity(std::size_t)` is now `explicit`, `NetServer`/`NetClient`/
+  `NetConnection`/`NetSocket` are no longer copyable, and item 10's collision
+  half is closed (`CollisionSystem` is deleted — its event-bus half stays
+  open). Highlights of what remains: recycled entity ids with no generation
+  counter, component set frozen at admission, tile animation fields discarded
+  by the loader, and **no namespaces — every engine type (`Entity`,
+  `Registry`, `Logger`, `Tile`…) is a global symbol**, so a game declaring its
+  own collides. (`docs/TECH_DEBT.md` is gitignored and local-only;
   `KNOWN_ISSUES.md` is the tracked record.)
 
 

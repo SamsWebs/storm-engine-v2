@@ -73,9 +73,14 @@ player 1 silently stops receiving anything for the rest of the match. It works
 perfectly in a two-player test where nobody leaves, which is exactly what makes
 it dangerous.
 
-Two correct patterns, both on the public API:
+Three correct patterns, all on the public API:
 
 ```cpp
+// Get exactly the connected ids, packed and ready to loop over.
+int ids[NetServer::kMaxClients];
+const int count = server->GetConnectedClientIds(ids, NetServer::kMaxClients);
+for (int i = 0; i < count; ++i) { server->Send(ids[i], PayloadFor(ids[i]), SizeFor(ids[i]), true); }
+
 // Everyone gets the same bytes: one call, packed once per slot.
 server->Broadcast(msg.Data(), msg.Size(), /*vital=*/true);
 
@@ -86,6 +91,11 @@ for (int id = 0; id < NetServer::kMaxClients; id++) {
     server->Send(id, PayloadFor(id), SizeFor(id), true);
 }
 ```
+
+`GetConnectedClientIds` exists specifically to make the first pattern
+possible without allocating: it writes the connected ids into a caller-owned
+array in ascending order and returns the count, so a per-tick send loop can
+skip the free-slot checks entirely.
 
 Iterate to `kMaxClients`, not to `maxClients` as passed to `Start` — the bound
 is the table size, and `IsClientConnected` range-checks anyway. An id stays
@@ -396,9 +406,14 @@ prefer non-vital for anything a later value supersedes, and pump
 - `NetServer::Start(0, ...)` binds an OS-assigned port — read it back with
   `GetPort()` and print it for LAN play. `Start` also resets the slot table
   and clears every ban, so restarting a host forgets who was kicked.
-- Per-IP cap (`kNetMaxClientsPerIp = 4`) plus the step-1 flood ban keep a
-  single machine from exhausting the slot table. The cap counts slots in
-  handshake as well as online ones.
+- Per-IP cap (`kNetMaxClientsPerIp = 4` by default) plus the step-1 flood ban
+  keep a single machine from exhausting the slot table. The cap counts slots
+  in handshake as well as online ones. It is a runtime default, not a fixed
+  constant: `NetServer::SetMaxClientsPerIp` raises it for internet play,
+  where every player behind one router shares a public address — a
+  twelve-player game with two people in one house would otherwise be refused
+  at the default. Leave it alone on a LAN, where the low cap is doing real
+  flood-control work.
 - `BanIp(ipHost, seconds)` is instant and lasts for that server run or until it
   expires, whichever comes first — expiry is swept in `Update()`, so a host
   that stops pumping never expires a ban. `ipHost` is **host** byte order:

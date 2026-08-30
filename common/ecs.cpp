@@ -141,7 +141,6 @@ namespace {
 struct RegistryDiagnostics {
   unsigned long updateCalls = 0;
   unsigned long entitiesCreated = 0;
-  unsigned int reports = 0;
 };
 
 std::unordered_map<const Registry *, RegistryDiagnostics> &
@@ -186,17 +185,23 @@ void ForEachMissedEntity(const Registry &registry, std::size_t numEntities,
 
 } // namespace
 
+// Call-site-owned, like every other diagnostic throttle in this file —
+// unlike updateCalls/entitiesCreated above, this counter must outlive any
+// single registry, since ~Registry runs exactly once per registry and could
+// never accumulate past 1 if it lived in the per-registry side table.
+static thread_local unsigned int missingUpdateReports = 0;
+
 Registry::~Registry() {
   RegistryDiagnostics &diagnostics = DiagnosticsTable()[this];
   if (diagnostics.updateCalls == 0 && diagnostics.entitiesCreated > 0 &&
-      EcsShouldReport(diagnostics.reports)) {
+      EcsShouldReport(missingUpdateReports)) {
     EcsReportErr(
         "~Registry: this registry created " +
         std::to_string(diagnostics.entitiesCreated) +
         " entities and Registry::Update() was never called on it, so none of "
         "them ever joined a system — nothing it owned rendered or moved. Call "
         "registry.Update() once per frame, first, in your state's update()." +
-        EcsSuppressionNote(diagnostics.reports));
+        EcsSuppressionNote(missingUpdateReports));
   }
   DiagnosticsTable().erase(this);
   logger.Log("Registry destructor called.");

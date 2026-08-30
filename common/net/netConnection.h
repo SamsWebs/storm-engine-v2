@@ -27,9 +27,13 @@ public:
 
   NetConnection() = default;
 
-  // Owns no socket, but installs callbacks capturing `this` via SetSendFunc:
-  // a copy would give two objects whose callbacks point at the original.
-  // KNOWN_ISSUES item 6, fixed in 2.0.0.
+  // Holds no socket, but a copy is still wrong. The send callback installed
+  // by the owning NetServer/NetClient captures *that owner's* `this` (and,
+  // on the server, one slot index), so a copy keeps sending through the
+  // original owner's socket to the original peer. Two connections would then
+  // run two independent ack windows, sequence counters and resend rings over
+  // one wire, and the copy's callback dangles if the owner is destroyed
+  // first. KNOWN_ISSUES item 6, fixed in 2.0.0.
   NetConnection(const NetConnection &) = delete;
   NetConnection &operator=(const NetConnection &) = delete;
 

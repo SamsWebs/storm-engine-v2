@@ -2,6 +2,7 @@
 
 #include <new>
 #include <stdexcept>
+#include <thread>
 
 #include "../common/ecs.h"
 #include "../common/logger.h"
@@ -499,14 +500,25 @@ Describe(LateSystemRegistrationSpec) {
   };
 };
 
+// The ~Registry throttle counter (missingUpdateReports, a file-scope static
+// thread_local in common/ecs.cpp) is shared process-wide on whichever thread
+// touches it and never resets — unlike the per-registry side table it used
+// to (wrongly) live in. Plenty of other specs, in this file and elsewhere,
+// create a Registry, create an entity, and destroy it without ever calling
+// Update(); on the main thread that budget of ECS_MAX_DIAGNOSTIC_REPORTS (4)
+// is normally spent well before this Describe runs. The two cases below
+// exist specifically to exercise this diagnostic, so each does its
+// create/destroy on a fresh std::thread: a new thread gets its own,
+// untouched instance of the thread_local counter, independent of whatever
+// the main thread has already reported.
 Describe(MissingUpdateSpec) {
   It(should_report_a_registry_destroyed_without_ever_flushing) {
     Logger::messages.clear();
-    {
+    std::thread([] {
       Registry registry;
       (void)registry.CreateEntity();
       (void)registry.CreateEntity();
-    } // destroyed here, Update() never called
+    }).join(); // destroyed here, Update() never called
 
     Assert::That(SpecRegistryErrorCount(),
                  Is().GreaterThanOrEqualTo(static_cast<std::size_t>(1)));
@@ -557,24 +569,35 @@ Describe(MissingUpdateSpec) {
     // paths. Without the erase in ~Registry, this second registry inherits
     // the first's updateCalls and the diagnostic silently stops working for
     // it. Deleting the erase(this) line MUST fail this case.
+    //
+    // Runs on a fresh thread (see the comment above MissingUpdateSpec) so the
+    // shared missingUpdateReports throttle has its own untouched budget,
+    // regardless of what the main thread has already reported elsewhere in
+    // the suite. Assert::That stays on the main thread: an uncaught
+    // assertion failure inside the spawned thread would call std::terminate
+    // instead of failing the case.
     alignas(Registry) unsigned char storage[sizeof(Registry)];
+    bool addressReused = false;
 
-    Registry *first = new (storage) Registry();
-    (void)first->CreateEntity();
-    first->Update(); // marks this address as having flushed
-    first->~Registry();
+    std::thread([&] {
+      Registry *first = new (storage) Registry();
+      (void)first->CreateEntity();
+      first->Update(); // marks this address as having flushed
+      first->~Registry();
 
-    Logger::messages.clear();
+      Logger::messages.clear();
 
-    Registry *second = new (storage) Registry();
+      Registry *second = new (storage) Registry();
+      addressReused =
+          static_cast<void *>(second) == static_cast<void *>(storage);
+      (void)second->CreateEntity();
+      second->~Registry(); // never flushed — must report, despite `first`
+                           // having flushed
+    }).join();
+
     // Assert the address was actually reused, so the case cannot pass by
     // testing nothing.
-    Assert::That(static_cast<void *>(second) == static_cast<void *>(storage),
-                 Equals(true));
-    (void)second->CreateEntity();
-    second->~Registry(); // never flushed — must report, despite `first`
-                         // having flushed
-
+    Assert::That(addressReused, Equals(true));
     Assert::That(SpecRegistryErrorCount(),
                  Is().GreaterThanOrEqualTo(static_cast<std::size_t>(1)));
     Logger::messages.clear();

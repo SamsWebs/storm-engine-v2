@@ -12,7 +12,7 @@
 // ContactSystem (../systems/contact.h) is the replacement.
 //
 // This stays, unchanged in behaviour, for source compatibility with games
-// written against 1.0-1.2. Removing it is a v3 item.
+// written against 1.0-1.2. Removing it is a 2.0.0 item.
 class CollisionSystem : public System {
 public:
   CollisionSystem() {

@@ -174,7 +174,7 @@ public:
   // units scaled by the transform - the same convention as
   // RenderColliderSystem (../systems/renderCollider.h:22-26) and
   // CollisionSystem. Scaling the offset too would be more consistent but
-  // would silently move every existing collider; it is a v3 item.
+  // would silently move every existing collider; it is a 2.0.0 item.
   static ContactAABB BoundsOf(const Entity &entity) {
     const TransformComponent &transform =
         entity.GetComponent<TransformComponent>();

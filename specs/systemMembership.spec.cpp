@@ -56,7 +56,7 @@ Describe(SystemMembershipSpec) {
   // systems the entity belongs to. Fixing that is an ECS redesign that
   // changes System's layout, so it is frozen out of the 1.x line.
   //
-  // A v3 that fixes it MUST make these fail. Flip them deliberately then —
+  // A 2.0.0 that fixes it MUST make these fail. Flip them deliberately then —
   // do not delete them, and do not "repair" them here.
   //////////////////////////////////////////////////////////////////////////
   Describe(ComponentChangesAfterAdmission) {
@@ -227,7 +227,7 @@ Describe(SystemMembershipSpec) {
   // integer converts to an Entity at any call site that takes one.
   //
   // PINS A KNOWN LIMITATION. Adding `explicit` is a source break, so it is
-  // frozen out of 1.x; a v3 that adds it must update this case deliberately.
+  // frozen out of 1.x; a 2.0.0 that adds it must update this case deliberately.
   //////////////////////////////////////////////////////////////////////////
   Describe(ImplicitEntityConversion) {
 

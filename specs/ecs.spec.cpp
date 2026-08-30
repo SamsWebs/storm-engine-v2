@@ -460,7 +460,7 @@ Describe(EcsSpec) {
     // entity satisfies against an empty signature. So a system that should
     // have matched nothing runs on the whole world instead. The clean fix is
     // a disabled_ latch on System, which changes sizeof(System) — an ABI
-    // break, frozen out of 1.x. A v3 that fixes it must update this case.
+    // break, frozen out of 1.x. A 2.0.0 that fixes it must update this case.
     It(should_match_every_entity_when_a_systems_requirement_overflowed) {
       // Order-independent: force SpecOverflowComponent's cached id to
       // MAX_COMPONENTS whether or not the case above has run yet.

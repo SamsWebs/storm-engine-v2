@@ -187,7 +187,7 @@
   collision. `ContactSystem::Overlaps` is strict and does not. All four
   existing specs in `specs/systems/collision.spec.cpp` pass untouched.
 - **`CollisionSystem` is deprecated.** It is kept for source compatibility
-  with games written against 1.0-1.2 and is a candidate for removal in v3
+  with games written against 1.0-1.2 and is a candidate for removal in 2.0.0
   (`KNOWN_ISSUES.md`). New code wants `ContactSystem`.
 - `TUTORIAL.md` - the system table claimed `CollisionSystem` requires
   `Transform + Sprite + BoxCollider`. It requires `Transform + BoxCollider`;
@@ -455,7 +455,7 @@ Memory-safety and correctness pass over the networking layer and the ECS, plus a
 - `Registry::IsAlive(Entity)` and `Registry::DoesTagExist(const std::string &)` - guards for the accessors that cannot fail safely on their own.
 - Windows cross-build via MinGW-w64: `Makefile.win`, `cmake/toolchain-mingw64.cmake`, `examples/examples.win.mk`. Builds `libstormenginev2.dll` and the spec suite. Not covered by CI, which builds `Dockerfile.debian` only.
 - `VPadStyle` and an optional third argument to `MakeVPadLayout(w, h, style)` - the action diamond is now lettered Xbox-style by default (Y top, X left, B right, A bottom); pass `VPadStyle::Snes` for the previous arrangement. The four touch targets are in identical positions under both, so only the lettering moves; a game binding to `state.a` gets the same button under a different thumb. **Existing calls compile unchanged but move to the Xbox lettering** - pass `VPadStyle::Snes` explicitly to keep the old layout.
-- `KNOWN_ISSUES.md` - defects that cannot be fixed within the frozen 1.x API, each with a workaround and the reason. Candidates for a future v3.
+- `KNOWN_ISSUES.md` - defects that cannot be fixed within the frozen 1.x API, each with a workaround and the reason. Candidates for 2.0.0.
 - README section documenting the 32 component-type limit: it is per binary rather than per `Registry`, and it counts types rather than instances.
 
 ### Fixed

@@ -11,7 +11,7 @@
 // built-in component and system. Do not re-include them here.
 //
 // (That transitive include is a documented defect -- KNOWN_ISSUES #8, ~713
-// headers to declare a 23-line interface -- and goes away in v3. Include what
+// headers to declare a 23-line interface -- and goes away in 2.0.0. Include what
 // you use in headers of your own.)
 
 class PlayState : public GameState {

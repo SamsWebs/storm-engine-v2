@@ -58,7 +58,7 @@ It(scales_collider_extents_but_not_the_offset) {
 
   // Matches RenderColliderSystem (common/systems/renderCollider.h:22-26)
   // and CollisionSystem: the offset is world pixels, the extents are local
-  // units scaled by the transform. Changing that is a v3 item.
+  // units scaled by the transform. Changing that is a 2.0.0 item.
   const auto bounds = ContactSystem::BoundsOf(entity);
   Assert::That(bounds.minX, EqualsWithDelta(4.0, 0.001));
   Assert::That(bounds.maxX, EqualsWithDelta(24.0, 0.001));

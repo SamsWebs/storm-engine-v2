@@ -495,3 +495,44 @@ Describe(LateSystemRegistrationSpec) {
                  Equals(static_cast<std::size_t>(0)));
   };
 };
+
+Describe(MissingUpdateSpec) {
+  It(should_report_a_registry_whose_update_was_never_called) {
+    Registry registry;
+    Logger::messages.clear();
+
+    for (unsigned int i = 0; i < ECS_PENDING_ENTITY_WARNING_THRESHOLD + 1;
+         ++i) {
+      (void)registry.CreateEntity();
+    }
+
+    Assert::That(SpecRegistryErrorCount(),
+                 Is().GreaterThanOrEqualTo(static_cast<std::size_t>(1)));
+    Logger::messages.clear();
+  };
+
+  It(should_stay_silent_once_update_has_been_called) {
+    Registry registry;
+    registry.Update();
+    Logger::messages.clear();
+
+    for (unsigned int i = 0; i < ECS_PENDING_ENTITY_WARNING_THRESHOLD + 1;
+         ++i) {
+      (void)registry.CreateEntity();
+    }
+
+    Assert::That(SpecRegistryErrorCount(), Equals(static_cast<std::size_t>(0)));
+  };
+
+  It(should_stay_silent_below_the_threshold) {
+    Registry registry;
+    Logger::messages.clear();
+
+    for (unsigned int i = 0; i < ECS_PENDING_ENTITY_WARNING_THRESHOLD - 1;
+         ++i) {
+      (void)registry.CreateEntity();
+    }
+
+    Assert::That(SpecRegistryErrorCount(), Equals(static_cast<std::size_t>(0)));
+  };
+};

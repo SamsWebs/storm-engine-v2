@@ -123,6 +123,59 @@ const Signature &System::GetComponentSignature() const {
   return componentSignature;
 }
 
+namespace {
+
+// Per-Registry diagnostic state that cannot live on Registry itself: games
+// embed a Registry by value in their states, so sizeof(Registry) is ABI and
+// 1.x may not add a member to it. Keyed on `this` and erased by ~Registry.
+//
+// Not thread-safe, in keeping with the rest of the ECS.
+struct RegistryDiagnostics {
+  unsigned long updateCalls = 0;
+  unsigned int missingUpdateReports = 0;
+};
+
+std::unordered_map<const Registry *, RegistryDiagnostics> &
+DiagnosticsTable() {
+  static std::unordered_map<const Registry *, RegistryDiagnostics> table;
+  return table;
+}
+
+// The entities a system registered now would have to be told about: live,
+// past admission, matching the signature, not already members.
+template <typename TVisitor>
+void ForEachMissedEntity(const Registry &registry, std::size_t numEntities,
+                         const std::vector<Signature> &signatures,
+                         const System &system, TVisitor &&visit) {
+  const Signature &required = system.GetComponentSignature();
+  const std::vector<Entity> &members =
+      const_cast<System &>(system).GetSystemEntities();
+
+  for (std::size_t id = 0; id < numEntities && id < signatures.size(); ++id) {
+    Entity entity(id);
+    if (!registry.IsAlive(entity)) {
+      continue;
+    }
+    if (registry.IsPendingAdmission(entity)) {
+      continue;
+    }
+    if ((signatures[id] & required) != required) {
+      continue;
+    }
+    if (std::find(members.begin(), members.end(), entity) != members.end()) {
+      continue;
+    }
+    visit(entity);
+  }
+}
+
+} // namespace
+
+Registry::~Registry() {
+  DiagnosticsTable().erase(this);
+  logger.Log("Registry destructor called.");
+}
+
 Entity Registry::CreateEntity() {
   std::size_t entityId;
 
@@ -141,6 +194,19 @@ Entity Registry::CreateEntity() {
   Entity entity(entityId);
   entity.registry = this;
   entitiesToBeAdded.insert(entity);
+
+  RegistryDiagnostics &diagnostics = DiagnosticsTable()[this];
+  if (diagnostics.updateCalls == 0 &&
+      entitiesToBeAdded.size() >= ECS_PENDING_ENTITY_WARNING_THRESHOLD &&
+      EcsShouldReport(diagnostics.missingUpdateReports)) {
+    logger.Err(
+        "CreateEntity: " + std::to_string(entitiesToBeAdded.size()) +
+        " entities are waiting to be admitted and Registry::Update() has "
+        "never been called on this registry. No entity has joined any system, "
+        "so nothing will render or move. Call registry.Update() first in your "
+        "state's update()." +
+        EcsSuppressionNote(diagnostics.missingUpdateReports));
+  }
 
   logger.Log("Entity created with id = " + std::to_string(entityId));
 
@@ -212,38 +278,6 @@ Registry::SystemMissedByLateComponent(Entity entity,
   }
   return nullptr;
 }
-
-namespace {
-
-// The entities a system registered now would have to be told about: live,
-// past admission, matching the signature, not already members.
-template <typename TVisitor>
-void ForEachMissedEntity(const Registry &registry, std::size_t numEntities,
-                         const std::vector<Signature> &signatures,
-                         const System &system, TVisitor &&visit) {
-  const Signature &required = system.GetComponentSignature();
-  const std::vector<Entity> &members =
-      const_cast<System &>(system).GetSystemEntities();
-
-  for (std::size_t id = 0; id < numEntities && id < signatures.size(); ++id) {
-    Entity entity(id);
-    if (!registry.IsAlive(entity)) {
-      continue;
-    }
-    if (registry.IsPendingAdmission(entity)) {
-      continue;
-    }
-    if ((signatures[id] & required) != required) {
-      continue;
-    }
-    if (std::find(members.begin(), members.end(), entity) != members.end()) {
-      continue;
-    }
-    visit(entity);
-  }
-}
-
-} // namespace
 
 std::size_t Registry::CountEntitiesMissedBySystem(const System &system) const {
   std::size_t missed = 0;
@@ -330,6 +364,8 @@ void Registry::RemoveEntityFromSystems(Entity entity) {
 }
 
 void Registry::Update() {
+  ++DiagnosticsTable()[this].updateCalls;
+
   // Add the entities that are waiting to be
   // created to the active systems
   for (auto entity : entitiesToBeAdded) {

@@ -376,6 +376,11 @@ Describe(EcsSpec) {
       Registry registry;
       Entity first = registry.CreateEntity();
       registry.AddComponent<SpecHealth>(first, 7);
+      // Flushed once up front, before the 150-entity batch below, so this
+      // test's pending count never trips ECS_PENDING_ENTITY_WARNING_THRESHOLD
+      // (no systems are registered here, so the extra flush changes nothing
+      // this test observes).
+      registry.Update();
       Entity last = first;
       for (int i = 1; i < 151; ++i) {
         last = registry.CreateEntity();

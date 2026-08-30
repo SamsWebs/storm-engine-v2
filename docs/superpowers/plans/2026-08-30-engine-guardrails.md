@@ -1629,6 +1629,31 @@ Confirmed before this task was written: no example, and not the editor, register
 - Consumes: everything Tasks 1-11 produced — `Keyboard`, `TryGetSystem`, `TryGetEntityByTag`, `AdmitExistingEntities`, and the four runtime diagnostics
 - Produces: no new API
 
+- [ ] **Step 0: Settle whether `examples/shooter` was already broken**
+
+Task 9 reported that `examples/shooter` does not build, citing a compile error at `examples/shooter/src/states/playState.cpp:439`:
+
+```cpp
+const bool aIsEnemy = c.a.HasComponent<EnemyComponent>();
+```
+
+It was described as a template-disambiguation error, but that diagnosis is doubtful: the enclosing `PlayState::CheckCollisions()` is not a template, so no `template` disambiguator is needed, and `Entity::HasComponent() const` is const-qualified so a `const Contact &` is not the problem either.
+
+What is established: **this branch never touched `examples/shooter`** (`git log origin/main..HEAD -- examples/shooter/` is empty) and the line is byte-identical to `origin/main`.
+
+Settle it decisively before doing anything else, because the answer changes what this task owns:
+
+```sh
+git stash list                     # confirm nothing pending
+git worktree add /tmp/shooter-base origin/main
+# build the engine and the shooter example from /tmp/shooter-base
+```
+
+- **If it fails on `origin/main` too**, it is inherited breakage. Record the real compiler error verbatim in your report, do **not** fix it as part of this task, and say so plainly — it needs its own decision.
+- **If it builds on `origin/main` and fails here**, one of this release's changes broke it. That is a genuine finding and the most important thing this task will produce. Bisect to the responsible commit if you can, report it, and **stop** rather than patching the example to compile.
+
+Either way, quote the actual compiler output rather than paraphrasing the error class. Remove the temporary worktree when done (`git worktree remove /tmp/shooter-base`).
+
 - [ ] **Step 1: Run every example and collect what fires**
 
 Build and run each example under `examples/` that builds on this machine, plus `editor/` and `template/`. Capture stderr. Then:

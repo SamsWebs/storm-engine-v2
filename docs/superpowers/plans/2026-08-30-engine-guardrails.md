@@ -1556,8 +1556,9 @@ Cover, in this order:
 2. **The one source-level change:** `AddSystem` now takes a forwarding reference. Every deduced call is unaffected; the explicit-template-argument form `AddSystem<Sys, int>(x)` with an lvalue `x` no longer compiles. Give both forms as code. Say that the change also fixes a silent move out of the caller's lvalue under the old signature — a game that passed a container or string to a system constructor and got an empty one back was hitting this.
 3. **New diagnostics and what each means**, one short section each: late component, late system, missing `Update()`, `srcRect` outside texture, `GetSystem` about to throw, `GetComponent` miss. For each, say what to change. Note that all are throttled to `ECS_MAX_DIAGNOSTIC_REPORTS` (4) occurrences.
 4. **New API:** `TryGetSystem`, `TryGetEntityByTag`, `AdmitExistingEntities`, `IsPendingAdmission`, `CountEntitiesMissedBySystem`, `common/input/keyboard.h`.
-5. **`CollisionSystem` is deprecated.** Behaviour unchanged for the whole 1.x line. Migration to `ContactSystem`.
-6. **Coming from 1.2.x:** the hop crosses 1.3.0, which **requires a full rebuild** — `sizeof(AssetStore)` went 112 → 208 and games allocate the store themselves, so a 1.2.x binary against a 1.3.0 library overflows its allocation with no warning. Install the package and rebuild; do not swap the `.so`; run `make clean`, since the engine has no header dependency tracking.
+5. **Networking, for internet play:** `NetServer::SetMaxClientsPerIp` (default unchanged at 4, which only bites over the internet, where every player behind one router shares an address) and `NetServer::GetConnectedClientIds`. State plainly that `GetClientCount()` is not a loop bound and why. Note that `kNetMaxClientsPerIp` stays 4 in `netTypes.h` on purpose: changing the constant would split the ABI between a game and the library.
+6. **`CollisionSystem` is deprecated.** Behaviour unchanged for the whole 1.x line. Migration to `ContactSystem`.
+7. **Coming from 1.2.x:** the hop crosses 1.3.0, which **requires a full rebuild** — `sizeof(AssetStore)` went 112 → 208 and games allocate the store themselves, so a 1.2.x binary against a 1.3.0 library overflows its allocation with no warning. Install the package and rebuild; do not swap the `.so`; run `make clean`, since the engine has no header dependency tracking.
 
 - [ ] **Step 2: Add the `CHANGELOG.md` entry**
 
@@ -1667,6 +1668,387 @@ Then rebuild every example. Expected: everything builds, specs pass, no diagnost
 ```bash
 git add examples/ template/
 git commit -m "Fix what the 1.4.0 diagnostics found in the examples, and put the template on Keyboard"
+```
+
+---
+
+### Task 13: Make the per-IP connection cap configurable
+
+**The trap:** `kNetMaxClientsPerIp = 4` (`common/net/netTypes.h:30`) is checked at `common/net/netServer.cpp:263`. On a LAN this is invisible — twelve machines have twelve addresses. Over the internet every player behind one router shares one public address, so a twelve-player game with two people in the same house is already refused, with the server sending `"too many connections"` and the game having no way to allow it.
+
+**Why the two obvious fixes are wrong, and must not be attempted:**
+
+- **Raising the constant** is a silent ABI split. It is `constexpr` in a header, so a game compiled against 4 and a `libstormenginev2.so` built with 8 disagree with no diagnostic of any kind.
+- **Adding an `int` member to `NetServer`** changes `sizeof(NetServer)` (currently ~372 KB). Games allocate the server themselves via `std::make_unique<NetServer>()`, so the size is emitted in game code — this is precisely the 1.3.0 `AssetStore` heap overflow (112 → 208 bytes) repeated, and nothing warns about it.
+
+The way through is the side table already introduced in Task 4: a file-static map in `netServer.cpp` keyed on `this`, erased by the destructor. Default behaviour is unchanged at 4.
+
+**Files:**
+- Modify: `common/net/netServer.h` — two public method declarations
+- Modify: `common/net/netServer.cpp` — side table, the two bodies, the check at line 263, destructor cleanup
+- Test: `specs/net/netLoopback.spec.cpp`
+
+**Interfaces:**
+- Consumes: `kNetMaxClientsPerIp` (`common/net/netTypes.h:30`), `NetServer::kMaxClients` (16), `NetServer::CountSlotsWithIp`
+- Produces:
+  - `void NetServer::SetMaxClientsPerIp(int limit)`
+  - `int NetServer::GetMaxClientsPerIp() const`
+
+- [ ] **Step 1: Write the failing tests**
+
+Every loopback client connects from `127.0.0.1`, so the default cap of 4 is directly exercisable. Append to `specs/net/netLoopback.spec.cpp`, following the connect/poll idiom already in that file — read the existing cases first and reuse their helpers rather than writing a second connect loop.
+
+```cpp
+Describe(MaxClientsPerIpSpec) {
+  It(should_default_to_the_engine_wide_cap) {
+    NetServer server;
+    Assert::That(server.GetMaxClientsPerIp(), Equals(kNetMaxClientsPerIp));
+  };
+
+  It(should_refuse_the_fifth_client_from_one_address_by_default) {
+    NetServer server;
+    Assert::That(server.Start(0, 12), Equals(true));
+
+    // Five clients, all from 127.0.0.1. The default cap is 4.
+    std::vector<std::unique_ptr<NetClient>> clients;
+    for (int i = 0; i < 5; ++i) {
+      clients.push_back(std::unique_ptr<NetClient>(new NetClient()));
+      clients.back()->Connect("127.0.0.1", server.GetPort());
+    }
+    PumpUntilSettled(server, clients);
+
+    Assert::That(server.GetClientCount(), Equals(kNetMaxClientsPerIp));
+  };
+
+  It(should_admit_more_once_the_cap_is_raised) {
+    NetServer server;
+    server.SetMaxClientsPerIp(12);
+    Assert::That(server.Start(0, 12), Equals(true));
+
+    std::vector<std::unique_ptr<NetClient>> clients;
+    for (int i = 0; i < 6; ++i) {
+      clients.push_back(std::unique_ptr<NetClient>(new NetClient()));
+      clients.back()->Connect("127.0.0.1", server.GetPort());
+    }
+    PumpUntilSettled(server, clients);
+
+    Assert::That(server.GetClientCount(), Equals(6));
+  };
+
+  It(should_clamp_a_limit_above_the_slot_count) {
+    NetServer server;
+    server.SetMaxClientsPerIp(999);
+    Assert::That(server.GetMaxClientsPerIp(), Equals(NetServer::kMaxClients));
+  };
+
+  It(should_reject_a_limit_below_one_and_keep_the_previous_value) {
+    NetServer server;
+    server.SetMaxClientsPerIp(12);
+    server.SetMaxClientsPerIp(0);
+    Assert::That(server.GetMaxClientsPerIp(), Equals(12));
+  };
+
+  It(should_not_leak_the_setting_to_a_later_server_at_the_same_address) {
+    // The side table is keyed on `this`, and a destroyed server's address can
+    // be handed straight back to the next allocation. If the destructor does
+    // not erase its entry, the next NetServer silently inherits this one's cap.
+    {
+      NetServer first;
+      first.SetMaxClientsPerIp(12);
+    }
+    NetServer second;
+    Assert::That(second.GetMaxClientsPerIp(), Equals(kNetMaxClientsPerIp));
+  };
+}
+```
+
+`PumpUntilSettled` stands for whatever the file's existing cases use to drive `server.Poll()` / `server.Update()` and each client until the handshakes finish. **Use the existing helper — do not add a new one.** If the file has no such helper and each case pumps inline, follow that instead; name the approach you took in your report.
+
+The last case is the one that matters most. A side table without destructor cleanup passes every other case in this list and then corrupts an unrelated server later in the same process.
+
+- [ ] **Step 2: Run the tests to verify they fail**
+
+Run: `make -f Makefile.debian clean && make -f Makefile.debian test`
+Expected: compile error — `'class NetServer' has no member named 'SetMaxClientsPerIp'`.
+
+- [ ] **Step 3: Declare the methods**
+
+In `common/net/netServer.h`, in the public section beside `GetClientCount()` (line 45):
+
+```cpp
+    // How many clients may connect from one address. Defaults to
+    // kNetMaxClientsPerIp (4), which is an anti-flood cap sized for a LAN.
+    //
+    // Over the internet every player behind one router shares a public
+    // address, so a twelve-player game with two people in one house is
+    // refused at the default. Raise it for internet play; leave it alone for
+    // a LAN, where it is doing real work.
+    //
+    // A limit below 1 is refused and logged; a limit above kMaxClients is
+    // clamped to kMaxClients. Takes effect on the next connection attempt,
+    // and never disconnects a client already admitted.
+    //
+    // The setting is held outside the object: sizeof(NetServer) is ABI,
+    // because games allocate the server themselves and the size is emitted
+    // at their call site.
+    void SetMaxClientsPerIp(int limit);
+    int GetMaxClientsPerIp() const;
+```
+
+- [ ] **Step 4: Implement**
+
+In `common/net/netServer.cpp`, near the top:
+
+```cpp
+namespace {
+
+// Per-NetServer settings that cannot live on NetServer itself: games allocate
+// the server with std::make_unique<NetServer>(), so sizeof(NetServer) is
+// emitted in game code and 1.x may not change it. Keyed on `this` and erased
+// by ~NetServer — without that erase, a recycled address hands the next
+// server this one's settings.
+//
+// Not thread-safe, in keeping with the rest of the networking layer.
+std::unordered_map<const NetServer *, int> &MaxClientsPerIpTable() {
+  static std::unordered_map<const NetServer *, int> table;
+  return table;
+}
+
+} // namespace
+
+void NetServer::SetMaxClientsPerIp(int limit) {
+  if (limit < 1) {
+    logger_.Err("NetServer::SetMaxClientsPerIp: limit " +
+                std::to_string(limit) +
+                " is below 1; ignoring. The per-address cap is unchanged.");
+    return;
+  }
+  if (limit > kMaxClients) {
+    limit = kMaxClients;
+  }
+  MaxClientsPerIpTable()[this] = limit;
+}
+
+int NetServer::GetMaxClientsPerIp() const {
+  auto found = MaxClientsPerIpTable().find(this);
+  return found == MaxClientsPerIpTable().end() ? kNetMaxClientsPerIp
+                                               : found->second;
+}
+```
+
+Add `#include <unordered_map>` to `netServer.cpp` if it is not already there.
+
+In `~NetServer()`, as the first statement:
+
+```cpp
+  MaxClientsPerIpTable().erase(this);
+```
+
+And at line 263, replace the constant with the accessor:
+
+```cpp
+  if (CountSlotsWithIp(from) >= GetMaxClientsPerIp()) {
+    SendControl(from, kNetControlClose, "too many connections", 21);
+    return;
+  }
+```
+
+Leave `kNetMaxClientsPerIp` in `netTypes.h` at 4, unchanged. It is now the default rather than the law, and changing its value would reintroduce the ABI split this task exists to avoid.
+
+- [ ] **Step 5: Run the tests to verify they pass**
+
+Run: `make -f Makefile.debian clean && make -f Makefile.debian test`
+Expected: all six new cases PASS and every existing net spec still passes. The existing loopback cases connect fewer than four clients, so none of them should change behaviour — if one does, say so rather than adjusting it.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add common/net/netServer.h common/net/netServer.cpp specs/net/netLoopback.spec.cpp
+git commit -m "Make the per-address connection cap configurable for internet play"
+```
+
+---
+
+### Task 14: A safe way to iterate connected clients
+
+**The trap:** client ids are slot indices into `Slot slots_[kMaxClients]`, not a dense range. `for (int i = 0; i < server.GetClientCount(); i++)` works perfectly in a two-player test and silently stops sending to a player the moment anyone quits — client 3 remains connected in slot 3 while `GetClientCount()` returns 3, so the loop never reaches it. Nothing errors; a player simply stops receiving the world.
+
+The correct loop already exists (`i < NetServer::kMaxClients` guarded by `IsClientConnected(i)`). This task makes the correct form the easy one and documents the trap at the method that baits it.
+
+**Files:**
+- Modify: `common/net/netServer.h` — one method declaration, doc comment on `GetClientCount`
+- Modify: `common/net/netServer.cpp` — the body
+- Test: `specs/net/netLoopback.spec.cpp`
+
+**Interfaces:**
+- Consumes: `NetServer::IsClientConnected`, `NetServer::kMaxClients`
+- Produces: `int NetServer::GetConnectedClientIds(int *out, int maxOut) const` — writes the connected slot ids into `out` in ascending order, returns how many were written. Writes nothing and returns 0 when `out` is null or `maxOut` is below 1.
+
+A plain array out-parameter rather than a returned `std::vector` or a `std::function` visitor: this is called every tick on the send path, and it must not allocate. It also has to compile under the Switch build's `-fno-exceptions`.
+
+- [ ] **Step 1: Write the failing tests**
+
+Append to `specs/net/netLoopback.spec.cpp`:
+
+```cpp
+Describe(ConnectedClientIdsSpec) {
+  It(should_report_no_ids_for_a_server_with_no_clients) {
+    NetServer server;
+    int ids[NetServer::kMaxClients] = {};
+    Assert::That(server.GetConnectedClientIds(ids, NetServer::kMaxClients),
+                 Equals(0));
+  };
+
+  It(should_report_the_ids_of_connected_clients) {
+    NetServer server;
+    server.SetMaxClientsPerIp(12);
+    Assert::That(server.Start(0, 12), Equals(true));
+
+    std::vector<std::unique_ptr<NetClient>> clients;
+    for (int i = 0; i < 3; ++i) {
+      clients.push_back(std::unique_ptr<NetClient>(new NetClient()));
+      clients.back()->Connect("127.0.0.1", server.GetPort());
+    }
+    PumpUntilSettled(server, clients);
+
+    int ids[NetServer::kMaxClients] = {};
+    const int count =
+        server.GetConnectedClientIds(ids, NetServer::kMaxClients);
+
+    Assert::That(count, Equals(3));
+    for (int i = 0; i < count; ++i) {
+      Assert::That(server.IsClientConnected(ids[i]), Equals(true));
+    }
+  };
+
+  It(should_skip_a_hole_left_by_a_client_that_quit) {
+    // The whole point: after a middle client leaves, the surviving ids are no
+    // longer 0..count-1, which is what the naive GetClientCount loop assumes.
+    NetServer server;
+    server.SetMaxClientsPerIp(12);
+    Assert::That(server.Start(0, 12), Equals(true));
+
+    std::vector<std::unique_ptr<NetClient>> clients;
+    for (int i = 0; i < 3; ++i) {
+      clients.push_back(std::unique_ptr<NetClient>(new NetClient()));
+      clients.back()->Connect("127.0.0.1", server.GetPort());
+    }
+    PumpUntilSettled(server, clients);
+
+    int before[NetServer::kMaxClients] = {};
+    const int countBefore =
+        server.GetConnectedClientIds(before, NetServer::kMaxClients);
+    Assert::That(countBefore, Equals(3));
+
+    const int departing = before[1];
+    server.DisconnectClient(departing, "spec");
+    PumpUntilSettled(server, clients);
+
+    int after[NetServer::kMaxClients] = {};
+    const int countAfter =
+        server.GetConnectedClientIds(after, NetServer::kMaxClients);
+
+    Assert::That(countAfter, Equals(2));
+    for (int i = 0; i < countAfter; ++i) {
+      Assert::That(after[i] == departing, Equals(false));
+      Assert::That(server.IsClientConnected(after[i]), Equals(true));
+    }
+  };
+
+  It(should_write_no_more_than_the_caller_asked_for) {
+    NetServer server;
+    server.SetMaxClientsPerIp(12);
+    Assert::That(server.Start(0, 12), Equals(true));
+
+    std::vector<std::unique_ptr<NetClient>> clients;
+    for (int i = 0; i < 3; ++i) {
+      clients.push_back(std::unique_ptr<NetClient>(new NetClient()));
+      clients.back()->Connect("127.0.0.1", server.GetPort());
+    }
+    PumpUntilSettled(server, clients);
+
+    int ids[2] = {-1, -1};
+    Assert::That(server.GetConnectedClientIds(ids, 2), Equals(2));
+  };
+
+  It(should_return_zero_for_a_null_buffer) {
+    NetServer server;
+    Assert::That(server.GetConnectedClientIds(nullptr, 4), Equals(0));
+    int ids[1] = {};
+    Assert::That(server.GetConnectedClientIds(ids, 0), Equals(0));
+  };
+}
+```
+
+Use the same existing pump helper as Task 13.
+
+- [ ] **Step 2: Run the tests to verify they fail**
+
+Run: `make -f Makefile.debian clean && make -f Makefile.debian test`
+Expected: compile error — `'class NetServer' has no member named 'GetConnectedClientIds'`.
+
+- [ ] **Step 3: Declare it, and document the trap on `GetClientCount`**
+
+In `common/net/netServer.h`, replace the bare `int GetClientCount() const;` (line 45) with:
+
+```cpp
+    // How many clients are connected. This is a count for display — "3/12
+    // players" — and NOT a loop bound.
+    //
+    // Client ids are slot indices into a fixed array, not a dense range.
+    // `for (int i = 0; i < GetClientCount(); i++)` works in a two-player test
+    // and then silently stops sending to a player the moment anyone quits: a
+    // client in slot 3 stays connected while the count reads 3. Nothing
+    // errors; that player just stops receiving the world.
+    //
+    // Iterate with GetConnectedClientIds, or over kMaxClients guarded by
+    // IsClientConnected.
+    int GetClientCount() const;
+
+    // Writes the connected client ids into `out` in ascending order and
+    // returns how many were written, never more than `maxOut`. Pass
+    // kMaxClients as `maxOut` to be sure of getting all of them.
+    //
+    //     int ids[NetServer::kMaxClients];
+    //     const int count = server.GetConnectedClientIds(ids, NetServer::kMaxClients);
+    //     for (int i = 0; i < count; ++i) { server.Send(ids[i], ...); }
+    //
+    // Takes an array rather than returning a container because this sits on
+    // the per-tick send path and must not allocate.
+    //
+    // Returns 0 and writes nothing when `out` is null or `maxOut` is below 1.
+    int GetConnectedClientIds(int *out, int maxOut) const;
+```
+
+- [ ] **Step 4: Implement**
+
+In `common/net/netServer.cpp`, beside `GetClientCount`:
+
+```cpp
+int NetServer::GetConnectedClientIds(int *out, int maxOut) const {
+  if (out == nullptr || maxOut < 1) {
+    return 0;
+  }
+  int count = 0;
+  for (int i = 0; i < kMaxClients && count < maxOut; i++) {
+    if (IsClientConnected(i)) {
+      out[count++] = i;
+    }
+  }
+  return count;
+}
+```
+
+- [ ] **Step 5: Run the tests to verify they pass**
+
+Run: `make -f Makefile.debian clean && make -f Makefile.debian test`
+Expected: all five new cases PASS.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add common/net/netServer.h common/net/netServer.cpp specs/net/netLoopback.spec.cpp
+git commit -m "Add GetConnectedClientIds and document why GetClientCount is not a loop bound"
 ```
 
 ---

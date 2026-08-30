@@ -457,7 +457,7 @@ Describe(LateSystemRegistrationSpec) {
 
   It(should_stay_silent_when_no_existing_entity_matches) {
     Registry registry;
-    Entity unrelated = registry.CreateEntity();
+    registry.CreateEntity();
     registry.Update();
 
     Logger::messages.clear();

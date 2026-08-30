@@ -2277,6 +2277,63 @@ git commit -m "Make Entity's id constructor explicit"
 
 ---
 
+### Task 17: Restore `ContactSystem`'s availability through `gameState.h`
+
+**A regression from Task 8, found by Task 12's Step 0.** This is an unintended fifth break and must not ship.
+
+Task 8 deleted `common/systems/collision.h` and removed its `#include` from `common/states/gameState.h`. But `collision.h:7` itself included `contact.h`, so that line was the transitive path by which every game reached `ContactSystem`. `gameState.h` has no `contact.h` include of its own, so a game that uses `ContactSystem` and includes only `gameState.h` now fails to compile with `'ContactSystem' was not declared in this scope`.
+
+Verified: `examples/shooter` builds at `9e27c84` and fails at `171f3af`, bisect-confirmed. `examples/sports` uses `ContactSystem` in two files and includes `contact.h` directly in only one, so it is exposed too.
+
+This matters beyond the examples. `gameState.h` deliberately carries the common engine surface, and it *did* provide `ContactSystem`. Deleting the superseded class should not have withdrawn the superseding one.
+
+**Files:**
+- Modify: `common/states/gameState.h` — add one include
+- Modify: `examples/shooter/src/states/playState.h`, and whichever `examples/sports` file lacks it — include what they use
+- Test: build the affected examples
+
+**Interfaces:**
+- Consumes: `common/systems/contact.h`
+- Produces: no API change — this restores availability that was removed by accident
+
+- [ ] **Step 1: Reproduce the failure before fixing it**
+
+Build `examples/shooter` against a staged build of the current branch. Expected: `'ContactSystem' was not declared in this scope`. Capture the verbatim error — you are pinning a regression, so the evidence matters.
+
+**Do not build against `/usr/local`.** There is a stale 1.3.0 install there; `examples/examples.mk:31` links `-lstormenginev2` with no `-I` at this branch, so a default build silently compiles against 1.3.0. Stage the branch to a scratch prefix and override `INCLUDE=`/`LIB=` on the make command line, and make sure `/usr/local/lib` does not precede your staged lib directory or the linker resolves against the stale `.so`.
+
+- [ ] **Step 2: Add the include to `gameState.h`**
+
+```cpp
+#include "../systems/contact.h"
+```
+
+Place it in alphabetical position among the existing `../systems/` includes. Add a brief comment noting it replaces the path that `collision.h` used to provide, so nobody removes it as redundant later.
+
+Leave every other include in `gameState.h` alone.
+
+- [ ] **Step 3: Make the examples include what they use**
+
+`gameState.h` restoring the transitive path fixes existing games without edits, which is the point. But the examples should not depend on it:
+
+- `examples/shooter/src/states/playState.h` — add `#include <stormengine2/systems/contact.h>`.
+- `examples/sports` — find the file that uses `ContactSystem` without including `contact.h` directly and add it there too.
+
+- [ ] **Step 4: Verify both directions**
+
+Build `shooter` and `sports` against the staged branch. Both must compile and link. Then confirm the fix is load-bearing rather than incidental: temporarily revert Step 3's example includes and rebuild — they must still compile, proving `gameState.h` alone restores availability. Put the example includes back afterwards.
+
+Run the full suite: `make -f Makefile.debian clean && make -f Makefile.debian test`. Expected 412/412, 0 warnings.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add common/states/gameState.h examples/shooter examples/sports
+git commit -m "Restore ContactSystem's availability through gameState.h"
+```
+
+---
+
 ## Verification before calling this done
 
 - [ ] `make -f Makefile.debian clean && make -f Makefile.debian test` — report the pass count printed, not a summary of it.

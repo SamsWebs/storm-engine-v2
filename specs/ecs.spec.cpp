@@ -1,4 +1,5 @@
 #include <igloo/igloo_alt.h>
+#include <typeinfo>
 
 #include "../common/ecs.h"
 
@@ -85,6 +86,25 @@ Describe(EcsSpec) {
       Assert::That(entity < entity3, Equals(true));
       Assert::That(entity3 < entity, Equals(false));
     };
+  };
+
+  It(should_name_the_component_type_in_the_miss_diagnostic) {
+    Registry registry;
+    Entity live = registry.CreateEntity();
+    registry.Update();
+
+    Logger::messages.clear();
+    (void)registry.GetComponent<SpecMana>(live).value;
+
+    bool named = false;
+    for (const auto &entry : Logger::messages) {
+      if (entry.type == LogType::LOG_ERROR &&
+          entry.message.find(typeid(SpecMana).name()) != std::string::npos) {
+        named = true;
+      }
+    }
+    Assert::That(named, Equals(true));
+    Logger::messages.clear();
   };
 
   Describe(SystemSpec) {

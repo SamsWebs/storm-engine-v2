@@ -10,6 +10,7 @@
 #include <set>
 #include <type_traits>
 #include <typeindex>
+#include <typeinfo>
 #include <unordered_map>
 #include <vector>
 
@@ -648,9 +649,9 @@ TComponent &Registry::GetComponent(Entity entity) const {
   unsigned int &counter = reports[static_cast<std::size_t>(miss)];
   if (EcsShouldReport(counter)) {
     logger.Err("GetComponent: entity " + std::to_string(entity.GetId()) + " " +
-               ComponentMissDescription(miss) + " (component id " +
-               std::to_string(Component<TComponent>::GetId()) +
-               "); returning a default component" +
+               ComponentMissDescription(miss) + " for component type '" +
+               typeid(TComponent).name() +
+               "'; returning a default component" +
                EcsSuppressionNote(counter));
   }
 

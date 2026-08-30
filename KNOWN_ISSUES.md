@@ -44,6 +44,8 @@ Every `Entity` member now null-checks its registry pointer, so this no-ops and l
 
 **Why it stays.** Adding `explicit` is a source break for any out-of-tree game that relies on the conversion. Nothing in this repo does (`grep -rnE 'KillEntity\([0-9]|TagEntity\([0-9]' examples/ editor/ common/` is empty), and it would break loudly at compile time rather than silently — but "loudly" is still a break, and 1.x promises not to.
 
+**Resolved in 2.0.0.** `Entity(std::size_t)` is now `explicit`. `registry.KillEntity(88)` no longer compiles; a bare integer must be wrapped in an `Entity` explicitly.
+
 ## 3. Thirty-two component types, process-wide
 
 `MAX_COMPONENTS` is 32 and `Signature` is `std::bitset<32>`. Type ids come from one process-wide counter, so the cap is per binary, not per `Registry`. See the README's *Component type limit* section for the full explanation and how to budget against it.
@@ -86,6 +88,8 @@ Copying one gives you two objects whose callbacks point at whichever was copied 
 **Why it stays.** Deleting the copy operations is an API break for any game that stores one by value, returns one from a factory, or puts one in a resizing container. It breaks at compile time — which is exactly the point — but it still breaks.
 
 **Meanwhile.** Hold them by reference or `unique_ptr`, never by value, and never in a `std::vector` that can reallocate. Also note `NetServer` is ~372 KB and `NetClient` ~188 KB — both are far too large for the stack regardless.
+
+**Resolved in 2.0.0.** `NetServer`, `NetClient`, `NetConnection` and `NetSocket` all `= delete` their copy constructor and copy assignment operator. Copying one is now a compile error instead of a dangling callback and a double-close.
 
 ## 7. The engine discards the animation data the editor writes
 
@@ -142,6 +146,8 @@ Any game needing collision *response* — bouncing, damage, triggers, pickups �
 **Why it stays.** An event bus is new architecture, and changing what `CollisionSystem::Update()` does to entities is a silent behaviour break for anything relying on the current kill semantics.
 
 **Resolved for new code in 1.3.0.** `ContactSystem` (`common/systems/contact.h`) is the observe-without-acting path: it reports overlaps with a normal and penetration depth, fires begin/end callbacks once per pair, and never touches an entity. `CollisionSystem` is unchanged and stays unchanged for the whole 1.x line - the two share one copy of the bounds math via `ContactSystem::BoundsOf`. Deleting `CollisionSystem` is a 2.0.0 item, listed below.
+
+**Resolved in 2.0.0.** `CollisionSystem` is deleted. The kill-on-overlap behaviour this entry describes no longer exists in the engine at all; a game that wants entities to die on contact now writes that against `ContactSystem` itself. The entry's other half stays open — there is still no general event bus, only `ContactSystem`'s begin/end callbacks, which cover contacts and nothing else.
 
 ## Also on the 2.0.0 list
 

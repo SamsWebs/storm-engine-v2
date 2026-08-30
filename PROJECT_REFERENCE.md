@@ -95,7 +95,6 @@ registry.AddSystem<MoveSystem>();
 - Suite expanded: 319 → 369 specs (contacts, contact events, pair filtering, gamepad, text, frame pacing, font and sound caching)
 
 #### Changed
-- `CollisionSystem` is **deprecated**. Behaviour is byte-identical - it still kills both movable entities on contact - but it is now a thin shim over `ContactSystem::BoundsOf`. Its overlap test stays inclusive, where `ContactSystem::Overlaps` is strict: a shared edge is not a contact
 - `shooter` moved onto `ContactSystem` with a pair filter; `shooter` and `strategy` deleted their local `gamepad.h` copies
 - `sports` rebuilt the rink boards as six collider entities and bounces with `glm::reflect` about the contact normal; `RL`/`RT`/`RR`/`RB` are gone
 - `puzzle`, `jrpg`, `netplay-checkers` and `sports` draw through the AssetStore font cache and `Text`; `netplay-checkers` also uses `AddSound`
@@ -194,7 +193,6 @@ registry.AddSystem<MoveSystem>();
 | File | Purpose |
 |------|---------|
 | `contact.h` | `ContactSystem`: AABB contact reporting, begin/end callbacks, pair filter |
-| `collision.h` | `CollisionSystem`: **deprecated**; kills both movable entities on overlap |
 | `movement.h` | `MovementSystem`: integrates `RigidBodyComponent` velocity by delta time |
 | `render.h` | `RenderSystem`: z-sorted sprite drawing with optional camera offset |
 | `animation.h` | `AnimationSystem`: advances the sprite source rect, looped or one-shot |
@@ -203,6 +201,7 @@ registry.AddSystem<MoveSystem>();
 ### Input (input/)
 | File | Purpose |
 |------|---------|
+| `keyboard.h` | `Keyboard`: edge-triggered key state, header-only, does not poll |
 | `gamepad.h` | `Gamepad`: SDL_GameController wrapper, button edges, stick deadzone |
 | `touchControls.h` | Touch primitives: TouchZone, TouchPoint |
 | `virtualGamepad.h` | Mobile D-pad + action diamond layout |

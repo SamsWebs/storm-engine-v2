@@ -1,6 +1,7 @@
 #include <igloo/igloo_alt.h>
 
 #include <new>
+#include <stdexcept>
 
 #include "../common/ecs.h"
 #include "../common/logger.h"
@@ -574,6 +575,42 @@ Describe(MissingUpdateSpec) {
     second->~Registry(); // never flushed — must report, despite `first`
                          // having flushed
 
+    Assert::That(SpecRegistryErrorCount(),
+                 Is().GreaterThanOrEqualTo(static_cast<std::size_t>(1)));
+    Logger::messages.clear();
+  };
+};
+
+Describe(TryGetSystemSpec) {
+  It(should_return_null_for_a_system_that_was_never_registered) {
+    Registry registry;
+    Assert::That(registry.TryGetSystem<SpecLateRegisteredSystem>() == nullptr,
+                 Equals(true));
+  };
+
+  It(should_return_the_system_when_it_is_registered) {
+    Registry registry;
+    registry.AddSystem<SpecLateRegisteredSystem>();
+    SpecLateRegisteredSystem *system =
+        registry.TryGetSystem<SpecLateRegisteredSystem>();
+
+    Assert::That(system == nullptr, Equals(false));
+    Assert::That(system == &registry.GetSystem<SpecLateRegisteredSystem>(),
+                 Equals(true));
+  };
+
+  It(should_log_before_get_system_throws) {
+    Registry registry;
+    Logger::messages.clear();
+
+    bool threw = false;
+    try {
+      (void)registry.GetSystem<SpecLateRegisteredSystem>();
+    } catch (const std::out_of_range &) {
+      threw = true;
+    }
+
+    Assert::That(threw, Equals(true));
     Assert::That(SpecRegistryErrorCount(),
                  Is().GreaterThanOrEqualTo(static_cast<std::size_t>(1)));
     Logger::messages.clear();

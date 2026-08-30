@@ -356,6 +356,13 @@ public:
 
   template <typename TSystem> bool HasSystem() const;
 
+  // Prefer this over GetSystem wherever absence is possible: GetSystem calls
+  // .at, which throws std::out_of_range — and aborts outright under the
+  // Switch build's -fno-exceptions. The returned pointer is owned by the
+  // registry and is invalidated by RemoveSystem<TSystem>() or the registry's
+  // destruction.
+  template <typename TSystem> TSystem *TryGetSystem() const;
+
   template <typename TSystem> TSystem &GetSystem() const;
 
   // How many live, already-admitted entities match `system`'s signature
@@ -429,7 +436,27 @@ template <typename TSystem> bool Registry::HasSystem() const {
   return systems.find(std::type_index(typeid(TSystem))) != systems.end();
 }
 
+template <typename TSystem> TSystem *Registry::TryGetSystem() const {
+  auto found = systems.find(std::type_index(typeid(TSystem)));
+  if (found == systems.end()) {
+    return nullptr;
+  }
+  return std::static_pointer_cast<TSystem>(found->second).get();
+}
+
 template <typename TSystem> TSystem &Registry::GetSystem() const {
+  auto found = systems.find(std::type_index(typeid(TSystem)));
+  if (found == systems.end()) {
+    // .at is about to throw, and under -fno-exceptions that is an abort with
+    // no message at all. Say which system first.
+    static thread_local unsigned int reports = 0;
+    if (EcsShouldReport(reports)) {
+      logger.Err("GetSystem: system '" + std::string(typeid(TSystem).name()) +
+                 "' was never registered; this call is about to throw. Use "
+                 "TryGetSystem or HasSystem where absence is possible." +
+                 EcsSuppressionNote(reports));
+    }
+  }
   // .at throws for a missing system — defined behavior instead of the UB of
   // dereferencing end(). Check HasSystem() first if absence is expected.
   return *(std::static_pointer_cast<TSystem>(

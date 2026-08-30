@@ -204,6 +204,19 @@ int NetServer::GetClientCount() const {
   return count;
 }
 
+int NetServer::GetConnectedClientIds(int *out, int maxOut) const {
+  if (out == nullptr || maxOut < 1) {
+    return 0;
+  }
+  int count = 0;
+  for (int i = 0; i < kMaxClients && count < maxOut; i++) {
+    if (IsClientConnected(i)) {
+      out[count++] = i;
+    }
+  }
+  return count;
+}
+
 bool NetServer::IsClientConnected(int clientId) const {
   return clientId >= 0 && clientId < kMaxClients && slots_[clientId].online;
 }

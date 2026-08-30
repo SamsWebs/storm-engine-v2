@@ -48,7 +48,34 @@ public:
     void BanIp(uint32_t ipHost, uint32_t seconds);
 
     bool IsRunning() const { return sock_.IsOpen(); }
+
+    // How many clients are connected. This is a count for display — "3/12
+    // players" — and NOT a loop bound.
+    //
+    // Client ids are slot indices into a fixed array, not a dense range.
+    // `for (int i = 0; i < GetClientCount(); i++)` works in a two-player test
+    // and then silently stops sending to a player the moment anyone quits: a
+    // client in slot 3 stays connected while the count reads 3. Nothing
+    // errors; that player just stops receiving the world.
+    //
+    // Iterate with GetConnectedClientIds, or over kMaxClients guarded by
+    // IsClientConnected.
     int GetClientCount() const;
+
+    // Writes the connected client ids into `out` in ascending order and
+    // returns how many were written, never more than `maxOut`. Pass
+    // kMaxClients as `maxOut` to be sure of getting all of them.
+    //
+    //     int ids[NetServer::kMaxClients];
+    //     const int count = server.GetConnectedClientIds(ids, NetServer::kMaxClients);
+    //     for (int i = 0; i < count; ++i) { server.Send(ids[i], ...); }
+    //
+    // Takes an array rather than returning a container because this sits on
+    // the per-tick send path and must not allocate.
+    //
+    // Returns 0 and writes nothing when `out` is null or `maxOut` is below 1.
+    int GetConnectedClientIds(int *out, int maxOut) const;
+
     bool IsClientConnected(int clientId) const;
     NetAddress GetClientAddress(int clientId) const;
     uint16_t GetPort() const { return sock_.GetBoundPort(); }

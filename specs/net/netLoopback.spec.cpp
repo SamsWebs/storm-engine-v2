@@ -789,3 +789,95 @@ Describe(MaxClientsPerIpSpec) {
     second->~NetServer();
   };
 };
+
+Describe(ConnectedClientIdsSpec) {
+  It(should_report_no_ids_for_a_server_with_no_clients) {
+    NetServer server;
+    int ids[NetServer::kMaxClients] = {};
+    Assert::That(server.GetConnectedClientIds(ids, NetServer::kMaxClients),
+                 Equals(0));
+  };
+
+  It(should_report_the_ids_of_connected_clients) {
+    NetServer server;
+    server.SetMaxClientsPerIp(12);
+    Assert::That(server.Start(0, 12), Equals(true));
+
+    std::vector<std::unique_ptr<NetClient>> clients;
+    for (int i = 0; i < 3; ++i) {
+      clients.push_back(std::unique_ptr<NetClient>(new NetClient()));
+      clients.back()->Connect("127.0.0.1", server.GetPort());
+    }
+    PumpUntilSettled(server, clients, kPumpDeadlineMs,
+                     [&]() { return server.GetClientCount() == 3; });
+
+    int ids[NetServer::kMaxClients] = {};
+    const int count =
+        server.GetConnectedClientIds(ids, NetServer::kMaxClients);
+
+    Assert::That(count, Equals(3));
+    for (int i = 0; i < count; ++i) {
+      Assert::That(server.IsClientConnected(ids[i]), Equals(true));
+    }
+  };
+
+  It(should_skip_a_hole_left_by_a_client_that_quit) {
+    // The whole point: after a middle client leaves, the surviving ids are no
+    // longer 0..count-1, which is what the naive GetClientCount loop assumes.
+    NetServer server;
+    server.SetMaxClientsPerIp(12);
+    Assert::That(server.Start(0, 12), Equals(true));
+
+    std::vector<std::unique_ptr<NetClient>> clients;
+    for (int i = 0; i < 3; ++i) {
+      clients.push_back(std::unique_ptr<NetClient>(new NetClient()));
+      clients.back()->Connect("127.0.0.1", server.GetPort());
+    }
+    PumpUntilSettled(server, clients, kPumpDeadlineMs,
+                     [&]() { return server.GetClientCount() == 3; });
+
+    int before[NetServer::kMaxClients] = {};
+    const int countBefore =
+        server.GetConnectedClientIds(before, NetServer::kMaxClients);
+    Assert::That(countBefore, Equals(3));
+
+    const int departing = before[1];
+    server.DisconnectClient(departing, "spec");
+    PumpUntilSettled(server, clients, kPumpDeadlineMs,
+                     [&]() { return server.GetClientCount() == 2; });
+
+    int after[NetServer::kMaxClients] = {};
+    const int countAfter =
+        server.GetConnectedClientIds(after, NetServer::kMaxClients);
+
+    Assert::That(countAfter, Equals(2));
+    for (int i = 0; i < countAfter; ++i) {
+      Assert::That(after[i] == departing, Equals(false));
+      Assert::That(server.IsClientConnected(after[i]), Equals(true));
+    }
+  };
+
+  It(should_write_no_more_than_the_caller_asked_for) {
+    NetServer server;
+    server.SetMaxClientsPerIp(12);
+    Assert::That(server.Start(0, 12), Equals(true));
+
+    std::vector<std::unique_ptr<NetClient>> clients;
+    for (int i = 0; i < 3; ++i) {
+      clients.push_back(std::unique_ptr<NetClient>(new NetClient()));
+      clients.back()->Connect("127.0.0.1", server.GetPort());
+    }
+    PumpUntilSettled(server, clients, kPumpDeadlineMs,
+                     [&]() { return server.GetClientCount() == 3; });
+
+    int ids[2] = {-1, -1};
+    Assert::That(server.GetConnectedClientIds(ids, 2), Equals(2));
+  };
+
+  It(should_return_zero_for_a_null_buffer) {
+    NetServer server;
+    Assert::That(server.GetConnectedClientIds(nullptr, 4), Equals(0));
+    int ids[1] = {};
+    Assert::That(server.GetConnectedClientIds(ids, 0), Equals(0));
+  };
+};

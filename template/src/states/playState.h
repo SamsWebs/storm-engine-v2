@@ -2,6 +2,7 @@
 
 #include <string>
 
+#include <stormengine2/input/keyboard.h>
 #include <stormengine2/states/gameState.h>
 #include <stormengine2/systems/contact.h>
 #include <stormengine2/text.h>
@@ -25,5 +26,6 @@ private:
   bool &isRunning_;
 
   Registry registry_;
+  Keyboard keyboard_;
   Uint32 millisecondsPreviousFrame_ = 0;
 };

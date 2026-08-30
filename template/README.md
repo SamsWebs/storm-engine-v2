@@ -54,7 +54,24 @@ that admits it.
 
 **Only the active state polls events.** The SDL event queue is shared: whoever
 calls `SDL_PollEvent` first consumes it and everyone else sees nothing. `Game`
-deliberately does not poll.
+deliberately does not poll - `PlayState::processInput` is the one poll owner,
+feeding each event to a `Keyboard` member (`stormengine2/input/keyboard.h`)
+rather than polling a second time:
+
+```cpp
+keyboard_.BeginFrame();
+SDL_Event event;
+while (SDL_PollEvent(&event)) {
+  keyboard_.HandleEvent(event);
+  if (event.type == SDL_QUIT) { isRunning_ = false; }
+}
+if (keyboard_.WasPressed(SDL_SCANCODE_ESCAPE)) { isRunning_ = false; }
+```
+
+`Keyboard` is edge-triggered: `WasPressed`/`WasReleased` are true for one frame,
+`IsDown` for as long as the key is held. If you add another consumer of input
+(a menu state, a UI overlay), feed it from this same poll loop - do not give it
+its own `SDL_PollEvent`.
 
 ## Adding text
 

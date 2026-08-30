@@ -390,6 +390,17 @@ public:
   // PRECONDITION: DoesTagExist(tag). Entity has no "none" value, so this
   // cannot report a miss through its return type — guard the call.
   Entity GetEntityByTag(const std::string &tag) const;
+
+  // The guarded lookup in one call. Returns nullptr when no entity holds the
+  // tag, where GetEntityByTag has a precondition and throws.
+  //
+  // The pointer aliases the registry's tag map: it is invalidated by TagEntity,
+  // RemoveEntityTag, and by the Update() that reaps a killed entity. Read it
+  // and let it go; do not store it across a frame. Entity ids are recycled and
+  // carry no generation counter (KNOWN_ISSUES.md item 1), so the same is true
+  // of the Entity you copy out of it.
+  const Entity *TryGetEntityByTag(const std::string &tag) const;
+
   void RemoveEntityTag(Entity entity);
 
   // Group Management

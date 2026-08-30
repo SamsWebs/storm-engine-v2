@@ -616,3 +616,34 @@ Describe(TryGetSystemSpec) {
     Logger::messages.clear();
   };
 };
+
+Describe(TryGetEntityByTagSpec) {
+  It(should_return_null_for_a_tag_no_entity_holds) {
+    Registry registry;
+    Assert::That(registry.TryGetEntityByTag("player") == nullptr, Equals(true));
+  };
+
+  It(should_return_the_tagged_entity) {
+    Registry registry;
+    Entity player = registry.CreateEntity();
+    player.Tag("player");
+    registry.Update();
+
+    const Entity *found = registry.TryGetEntityByTag("player");
+    Assert::That(found == nullptr, Equals(false));
+    Assert::That(found->GetId(), Equals(player.GetId()));
+  };
+
+  It(should_return_null_after_the_tagged_entity_is_killed) {
+    Registry registry;
+    Entity player = registry.CreateEntity();
+    player.Tag("player");
+    registry.Update();
+
+    player.Kill();
+    registry.Update();
+
+    Assert::That(registry.TryGetEntityByTag("player") == nullptr,
+                 Equals(true));
+  };
+};

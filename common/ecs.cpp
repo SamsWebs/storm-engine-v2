@@ -443,6 +443,14 @@ Entity Registry::GetEntityByTag(const std::string &tag) const {
   return entityPerTag.at(tag);
 }
 
+const Entity *Registry::TryGetEntityByTag(const std::string &tag) const {
+  auto found = entityPerTag.find(tag);
+  if (found == entityPerTag.end()) {
+    return nullptr;
+  }
+  return &found->second;
+}
+
 void Registry::RemoveEntityTag(Entity entity) {
   auto taggedEntity = tagPerEntity.find(entity.GetId());
   if (taggedEntity != tagPerEntity.end()) {

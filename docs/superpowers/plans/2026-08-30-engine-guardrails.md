@@ -1544,70 +1544,65 @@ git commit -m "Add an edge-triggered Keyboard that is fed events rather than pol
 
 ---
 
-### Task 11: Documentation
+### Task 11: Retire what is now false in the docs
+
+**Scope deliberately narrowed.** 2.0.0 will contain nine breaks; only four are built. Writing `UPGRADING.md` or a `CHANGELOG` entry now would describe the `Entity` generation counter, `Tile`'s animation fields, `MAX_COMPONENTS` and namespacing as shipped when none of them exist. Those documents move to the second wave, written once against what actually shipped.
+
+**This task fixes only statements that are false today**, because the four compile-time breaks have landed and several documents still describe the old world.
 
 **Files:**
-- Create: `docs/UPGRADING.md`
-- Modify: `CHANGELOG.md`, `KNOWN_ISSUES.md`, `README.md`
+- Modify: `README.md`, `PROJECT_REFERENCE.md`, `KNOWN_ISSUES.md`
 
-- [ ] **Step 1: Write `docs/UPGRADING.md`**
+**Interfaces:**
+- Consumes: the completed work of Tasks 1-10, 13-16
+- Produces: no code
 
-Cover, in this order:
+- [ ] **Step 1: `CollisionSystem` is gone — stop saying it works**
 
-1. **2.0.0 is a rebuild, and some source will need editing.** No type changed *size* — state the measured sizes and how to confirm them — but four public source-level breaks are taken, so a game must recompile and may have to edit. Lead with the four, each with the before/after code and the one-line fix:
-   - `Registry::AddSystem` takes a forwarding reference. Only `AddSystem<Sys, int>(x)` with an lvalue breaks; the deduced form is unaffected. Also fixes a silent move out of the caller's lvalue.
-   - `CollisionSystem` is deleted. Migrate to `ContactSystem`, which reports overlaps with a normal and penetration depth and never kills anything.
-   - `NetServer`, `NetClient`, `NetConnection`, `NetSocket` are no longer copyable or movable. Hold them by reference or `unique_ptr`, never by value in a reallocating container. They were always unsafe to copy — ~372 KB and ~188 KB, a duplicated descriptor, and callbacks pointing at the original.
-   - `Entity(std::size_t)` is `explicit`. `registry.KillEntity(88)` no longer compiles; write `Entity(id)` where you meant a real entity.
-2. **Argument forwarding, in detail:** `AddSystem` now takes a forwarding reference. Every deduced call is unaffected; the explicit-template-argument form `AddSystem<Sys, int>(x)` with an lvalue `x` no longer compiles. Give both forms as code. Say that the change also fixes a silent move out of the caller's lvalue under the old signature — a game that passed a container or string to a system constructor and got an empty one back was hitting this.
-3. **New diagnostics and what each means**, one short section each: late component, late system, missing `Update()`, `srcRect` outside texture, `GetSystem` about to throw, `GetComponent` miss. For each, say what to change. Note that all are throttled to `ECS_MAX_DIAGNOSTIC_REPORTS` (4) occurrences.
-4. **New API:** `TryGetSystem`, `TryGetEntityByTag`, `AdmitExistingEntities`, `IsPendingAdmission`, `CountEntitiesMissedBySystem`, `common/input/keyboard.h`.
-5. **Networking, for internet play:** `NetServer::SetMaxClientsPerIp` (default unchanged at 4, which only bites over the internet, where every player behind one router shares an address) and `NetServer::GetConnectedClientIds`. State plainly that `GetClientCount()` is not a loop bound and why. Note that `kNetMaxClientsPerIp` stays 4 in `netTypes.h` on purpose: changing the constant would split the ABI between a game and the library.
-6. **The 1.x line ends here.** State what 2.0.0 promises: no layout changes were taken, the four breaks are compile-time and loud, and the layout-changing fixes (`Entity` generation counter, `Tile` animation fields, `MAX_COMPONENTS`, `System`'s disabled latch, namespaces) remain 3.0 items.
-7. **Coming from 1.2.x:** the hop crosses 1.3.0, which **requires a full rebuild** — `sizeof(AssetStore)` went 112 → 208 and games allocate the store themselves, so a 1.2.x binary against a 1.3.0 library overflows its allocation with no warning. Install the package and rebuild; do not swap the `.so`; run `make clean`, since the engine has no header dependency tracking.
+- `README.md:15` — "the older kill-on-contact `CollisionSystem` still works but is deprecated". It does not still work. Rewrite the clause so the sentence describes `ContactSystem` alone.
+- `PROJECT_REFERENCE.md:98` — a paragraph describing `CollisionSystem` as deprecated-but-behaviour-identical, including that its overlap test is inclusive where `ContactSystem::Overlaps` is strict. Delete the paragraph, **but first check whether that inclusive/strict distinction is documented anywhere else.** If it is not, it is real information about `ContactSystem` and must survive in a sentence of its own.
+- `PROJECT_REFERENCE.md:197` — the `collision.h` row in the file table. Remove it.
 
-- [ ] **Step 2: Add the `CHANGELOG.md` entry**
+**Do not edit historical `CHANGELOG.md` entries.** The mentions at lines 158, 183, 189, 192, 377 and 669 describe what shipped in past releases and were true when written. A changelog that is retroactively edited stops being a record.
 
-A `## [2.0.0]` section with `### Added`, `### Changed` and `### Deprecated`, in the prose style of the existing 1.3.0 entry — each item says what the problem was, not just what changed. The `AddSystem` signature change goes under `### Changed` and must name the explicit-template-argument break outright.
+`examples/strategy/README.md:69` also names the class in a comparative aside. Leave it — Task 12 owns the examples.
 
-- [ ] **Step 3: Update `KNOWN_ISSUES.md`**
+- [ ] **Step 2: Mark the three `KNOWN_ISSUES` items that are now fixed**
 
-Three items are now **fixed, not merely detectable** — item 2 (implicit `Entity` conversion), item 6 (networking copy operations) and item 10's `CollisionSystem` deletion. Move them out of the open list into a resolved section that records what shipped and in which release; do not delete the entries, since the record of what was decided is the file's value.
+Three entries describe defects that no longer exist:
 
-Renumber the file's milestone: it refers to "Storm! Engine v3" as the compatibility reset in 8 places across `KNOWN_ISSUES.md` and `CHANGELOG.md`. That reset partly happened here, in 2.0.0. Rewrite those references to name **3.0** as the milestone for the remaining layout-changing items, and add a sentence at the top of `KNOWN_ISSUES.md` saying which promise now applies: 2.x keeps layouts and public signatures stable, and the items still listed are the ones that need a layout change to fix.
+- **Item 2** (a bare integer implicitly converts to an `Entity`) — fixed by Task 16.
+- **Item 6** (networking objects are copyable) — fixed by Task 15.
+- **Item 10**'s `CollisionSystem` half — the class is deleted by Task 8. Note that item 10 is about collision-only-kills *and* the missing event bus; `ContactSystem` already resolved the observation gap in 1.3.0, so read what remains of the entry before editing it.
 
-Items 1, 4, 5 and 7 now have a runtime diagnostic. Add one short paragraph to each saying so, in the shape of the existing "Resolved for new code in 1.3.0" notes. The defects themselves are unchanged and stay listed — "cannot be fixed in 1.x" and "cannot be detected in 1.x" are different claims, and only the second has changed.
+Add a resolution line to each in the shape of the existing "Resolved for new code in 1.3.0" notes, naming 2.0.0. **Do not delete the entries** — the record of what was decided and why is this file's whole value.
 
-Item 9 (no namespaces) explicitly gets nothing. Add a sentence saying a namespace alias was considered and rejected: the global names remain either way, so it would not prevent the collision it appears to address.
+**Do not touch the other entries yet.** Items 1, 3, 4, 7 and 9 (the `Entity` generation counter, `MAX_COMPONENTS`, `System`'s disabled latch, `Tile`'s animation fields, namespaces) are all scheduled for 2.0.0's second wave but are **not built**. Marking them resolved now would be false. Leave them exactly as they are.
 
-Also note under item 3 or in the preamble that `AssetStore_Ptr`, `Logger_Ptr` and the other `_Ptr` typedefs are `std::unique_ptr`, so they are move-only — hold the member, do not copy it.
+- [ ] **Step 3: Add a Diagnostics section to `README.md`**
 
-- [ ] **Step 4: Purge the dangling references to deleted and changed API**
+Six runtime diagnostics landed in this wave. A short section: the engine reports a fixed number of occurrences of each misuse at `Err` level, they are on in every build, and a game seeing one has a real bug. List the six briefly — late component, late system, registry destroyed without flushing, `srcRect` outside its texture, `GetSystem` about to throw, `GetComponent` miss.
 
-Task 8 deleted `CollisionSystem`, and several documents still describe it as present. These are user-facing and currently assert something false:
+Also add `keyboard.h` to whatever list enumerates `common/input/`.
 
-- `README.md:15` — "the older kill-on-contact `CollisionSystem` still works but is deprecated". It does not still work; it is gone. Rewrite the clause so the sentence describes `ContactSystem` alone.
-- `PROJECT_REFERENCE.md:98` — a paragraph describing `CollisionSystem` as deprecated-but-behaviour-identical, including the detail that its overlap test is inclusive where `ContactSystem::Overlaps` is strict. Delete the paragraph, but check first whether the inclusive/strict distinction is documented anywhere else; if it is not, that is real information about `ContactSystem` and should be kept in a sentence of its own.
-- `PROJECT_REFERENCE.md:197` — the `collision.h` row in the file table. Remove the row.
-
-**Do not edit historical `CHANGELOG.md` entries.** The mentions at lines 158, 183, 189, 192, 377 and 669 describe what shipped in past releases and were true when written. A changelog that is retroactively edited stops being a record. Only the new 2.0.0 entry is yours.
-
-`examples/strategy/README.md:69` also names "the deprecated `CollisionSystem`" in a comparative aside. Leave it to Task 12, which owns the examples.
-
-- [ ] **Step 5: Update `README.md`'s feature list and add a Diagnostics section**
-
-Add `keyboard.h` to whatever list enumerates `common/input/`, and add a short "Diagnostics" section: the engine reports a fixed number of occurrences of each misuse at `Err` level, they are on in every build, and a game seeing one has a real bug.
-
-- [ ] **Step 6: Verify the whole tree once more**
+- [ ] **Step 4: Verify**
 
 Run: `make -f Makefile.debian clean && make -f Makefile.debian test`
-Expected: builds with no new warnings, every spec passes. Record the actual pass count in the commit message.
+Expected: 412 tests, 412 succeeded, 0 failed, 0 warnings. Documentation changes cannot alter that; confirm it anyway.
 
-- [ ] **Step 7: Commit**
+Then re-grep for the dangling references you were asked to fix, and paste the result:
+
+```sh
+grep -rn "CollisionSystem" README.md PROJECT_REFERENCE.md
+```
+
+Expected: nothing, or only text that correctly describes it as deleted.
+
+- [ ] **Step 5: Commit**
 
 ```bash
-git add docs/UPGRADING.md CHANGELOG.md KNOWN_ISSUES.md README.md PROJECT_REFERENCE.md
-git commit -m "Document the 2.0.0 guardrails and the upgrade path from 1.2.x"
+git add README.md PROJECT_REFERENCE.md KNOWN_ISSUES.md
+git commit -m "Retire the doc claims the compile-time breaks made false"
 ```
 
 ---

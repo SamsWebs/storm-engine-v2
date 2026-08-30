@@ -4,7 +4,7 @@
 
 **Goal:** Make eleven known ways of misusing Storm! Engine v2 report themselves — at compile time or in the log — and take the four source-level breaks that let three of them be fixed outright rather than merely reported.
 
-**Why 2.0.0 and not 1.4.0.** `KNOWN_ISSUES.md` states the 1.x promise plainly: a game that compiles and links against 1.2.x must keep compiling and linking against every later 1.x release, which rules out changing a public signature or deleting a public member. This release does both. Shipping it as a 1.x point release would make that promise decorative, so the release is 2.0.0 and the compatibility promise resets here.
+**Why 2.0.0 and not 2.0.0.** `KNOWN_ISSUES.md` states the 1.x promise plainly: a game that compiles and links against 1.2.x must keep compiling and linking against every later 1.x release, which rules out changing a public signature or deleting a public member. This release does both. Shipping it as a 1.x point release would make that promise decorative, so the release is 2.0.0 and the compatibility promise resets here.
 
 **What is NOT in this release.** Every fix that requires a *layout* change stays out: the `Entity` generation counter, `Tile`'s animation fields, `MAX_COMPONENTS`, and `System`'s disabled latch. Those remain 3.0 items. The four breaks taken here are all compile-time, all loud, and all have zero in-tree call sites — a game either builds or tells you exactly where it does not. A silent ABI break is a different animal and none is taken.
 
@@ -1528,21 +1528,29 @@ git commit -m "Add an edge-triggered Keyboard that is fed events rather than pol
 
 Cover, in this order:
 
-1. **1.4.0 is a relink, not a rebuild.** No type changed size. State the measured sizes and how to confirm them.
-2. **The one source-level change:** `AddSystem` now takes a forwarding reference. Every deduced call is unaffected; the explicit-template-argument form `AddSystem<Sys, int>(x)` with an lvalue `x` no longer compiles. Give both forms as code. Say that the change also fixes a silent move out of the caller's lvalue under the old signature — a game that passed a container or string to a system constructor and got an empty one back was hitting this.
+1. **2.0.0 is a rebuild, and some source will need editing.** No type changed *size* — state the measured sizes and how to confirm them — but four public source-level breaks are taken, so a game must recompile and may have to edit. Lead with the four, each with the before/after code and the one-line fix:
+   - `Registry::AddSystem` takes a forwarding reference. Only `AddSystem<Sys, int>(x)` with an lvalue breaks; the deduced form is unaffected. Also fixes a silent move out of the caller's lvalue.
+   - `CollisionSystem` is deleted. Migrate to `ContactSystem`, which reports overlaps with a normal and penetration depth and never kills anything.
+   - `NetServer`, `NetClient`, `NetConnection`, `NetSocket` are no longer copyable or movable. Hold them by reference or `unique_ptr`, never by value in a reallocating container. They were always unsafe to copy — ~372 KB and ~188 KB, a duplicated descriptor, and callbacks pointing at the original.
+   - `Entity(std::size_t)` is `explicit`. `registry.KillEntity(88)` no longer compiles; write `Entity(id)` where you meant a real entity.
+2. **Argument forwarding, in detail:** `AddSystem` now takes a forwarding reference. Every deduced call is unaffected; the explicit-template-argument form `AddSystem<Sys, int>(x)` with an lvalue `x` no longer compiles. Give both forms as code. Say that the change also fixes a silent move out of the caller's lvalue under the old signature — a game that passed a container or string to a system constructor and got an empty one back was hitting this.
 3. **New diagnostics and what each means**, one short section each: late component, late system, missing `Update()`, `srcRect` outside texture, `GetSystem` about to throw, `GetComponent` miss. For each, say what to change. Note that all are throttled to `ECS_MAX_DIAGNOSTIC_REPORTS` (4) occurrences.
 4. **New API:** `TryGetSystem`, `TryGetEntityByTag`, `AdmitExistingEntities`, `IsPendingAdmission`, `CountEntitiesMissedBySystem`, `common/input/keyboard.h`.
 5. **Networking, for internet play:** `NetServer::SetMaxClientsPerIp` (default unchanged at 4, which only bites over the internet, where every player behind one router shares an address) and `NetServer::GetConnectedClientIds`. State plainly that `GetClientCount()` is not a loop bound and why. Note that `kNetMaxClientsPerIp` stays 4 in `netTypes.h` on purpose: changing the constant would split the ABI between a game and the library.
-6. **`CollisionSystem` is deprecated.** Behaviour unchanged for the whole 1.x line. Migration to `ContactSystem`.
+6. **The 1.x line ends here.** State what 2.0.0 promises: no layout changes were taken, the four breaks are compile-time and loud, and the layout-changing fixes (`Entity` generation counter, `Tile` animation fields, `MAX_COMPONENTS`, `System`'s disabled latch, namespaces) remain 3.0 items.
 7. **Coming from 1.2.x:** the hop crosses 1.3.0, which **requires a full rebuild** — `sizeof(AssetStore)` went 112 → 208 and games allocate the store themselves, so a 1.2.x binary against a 1.3.0 library overflows its allocation with no warning. Install the package and rebuild; do not swap the `.so`; run `make clean`, since the engine has no header dependency tracking.
 
 - [ ] **Step 2: Add the `CHANGELOG.md` entry**
 
-A `## [1.4.0]` section with `### Added`, `### Changed` and `### Deprecated`, in the prose style of the existing 1.3.0 entry — each item says what the problem was, not just what changed. The `AddSystem` signature change goes under `### Changed` and must name the explicit-template-argument break outright.
+A `## [2.0.0]` section with `### Added`, `### Changed` and `### Deprecated`, in the prose style of the existing 1.3.0 entry — each item says what the problem was, not just what changed. The `AddSystem` signature change goes under `### Changed` and must name the explicit-template-argument break outright.
 
 - [ ] **Step 3: Update `KNOWN_ISSUES.md`**
 
-Items 1, 4, 5, 7 and 10 now have a runtime diagnostic. Add one short paragraph to each saying so, in the shape of the existing "Resolved for new code in 1.3.0" notes. The defects themselves are unchanged and stay listed — "cannot be fixed in 1.x" and "cannot be detected in 1.x" are different claims, and only the second has changed.
+Three items are now **fixed, not merely detectable** — item 2 (implicit `Entity` conversion), item 6 (networking copy operations) and item 10's `CollisionSystem` deletion. Move them out of the open list into a resolved section that records what shipped and in which release; do not delete the entries, since the record of what was decided is the file's value.
+
+Renumber the file's milestone: it refers to "Storm! Engine v3" as the compatibility reset in 8 places across `KNOWN_ISSUES.md` and `CHANGELOG.md`. That reset partly happened here, in 2.0.0. Rewrite those references to name **3.0** as the milestone for the remaining layout-changing items, and add a sentence at the top of `KNOWN_ISSUES.md` saying which promise now applies: 2.x keeps layouts and public signatures stable, and the items still listed are the ones that need a layout change to fix.
+
+Items 1, 4, 5 and 7 now have a runtime diagnostic. Add one short paragraph to each saying so, in the shape of the existing "Resolved for new code in 1.3.0" notes. The defects themselves are unchanged and stay listed — "cannot be fixed in 1.x" and "cannot be detected in 1.x" are different claims, and only the second has changed.
 
 Item 9 (no namespaces) explicitly gets nothing. Add a sentence saying a namespace alias was considered and rejected: the global names remain either way, so it would not prevent the collision it appears to address.
 
@@ -1561,16 +1569,18 @@ Expected: builds with no new warnings, every spec passes. Record the actual pass
 
 ```bash
 git add docs/UPGRADING.md CHANGELOG.md KNOWN_ISSUES.md README.md
-git commit -m "Document the 1.4.0 guardrails and the upgrade path from 1.2.x"
+git commit -m "Document the 2.0.0 guardrails and the upgrade path from 1.2.x"
 ```
 
 ---
 
-### Task 12: Bring the examples and the template onto the 1.4.0 surface
+### Task 12: Bring the examples and the template onto the 2.0.0 surface
 
 The examples are how a new game learns the engine, and the template is what a new game is literally copied from. A diagnostic that fires while running `examples/platformer` is a bug the examples have been teaching.
 
-Confirmed before this task was written: no example, and not the editor, registers `CollisionSystem` (`grep -rn "AddSystem<CollisionSystem>" examples/ editor/` is empty), so nothing here needs migrating off it.
+This task runs **last**, after every engine task, so it exercises what actually shipped. It also absorbs the fallout of the four source-level breaks: `CollisionSystem` is gone, `Entity(std::size_t)` is explicit, and the net types are non-copyable. Those breaks surface as compile errors in the examples, and fixing each at its call site is part of this task.
+
+Confirmed before this task was written: no example, and not the editor, registers `CollisionSystem` (`grep -rn "AddSystem<CollisionSystem>" examples/ editor/` is empty), so its deletion in Task 8 should cost the examples nothing. If an example nonetheless fails to build after Task 8, that is a finding worth reporting, not a silent fixup.
 
 **Files:**
 - Modify: whichever example sources the diagnostics implicate — discovered in Step 1, not guessed
@@ -1643,12 +1653,12 @@ Then rebuild every example. Expected: everything builds, specs pass, no diagnost
 
 ```bash
 git add examples/ template/
-git commit -m "Fix what the 1.4.0 diagnostics found in the examples, and put the template on Keyboard"
+git commit -m "Fix what the 2.0.0 diagnostics found in the examples, and put the template on Keyboard"
 ```
 
 ---
 
-### Task 13: Make the per-IP connection cap configurable
+### Task 13: Make the per-address connection cap configurable
 
 **The trap:** `kNetMaxClientsPerIp = 4` (`common/net/netTypes.h:30`) is checked at `common/net/netServer.cpp:263`. On a LAN this is invisible — twelve machines have twelve addresses. Over the internet every player behind one router shares one public address, so a twelve-player game with two people in the same house is already refused, with the server sending `"too many connections"` and the game having no way to allow it.
 
@@ -2201,4 +2211,4 @@ git commit -m "Make Entity's id constructor explicit"
 - [ ] No `-Wdeprecated-declarations` warning outside `specs/systems/collision.spec.cpp`.
 - [ ] Every example, the editor and the template run with no diagnostic in the log (Task 12 verifies this; this line is the final confirmation).
 - [ ] `git log --oneline` shows one commit per task.
-- [ ] Post a comment on https://github.com/SamsWebs/center-ice-hockey/issues/91 when 1.4.0 tags, with the release link and the `UPGRADING.md` path.
+- [ ] Post a comment on https://github.com/SamsWebs/center-ice-hockey/issues/91 when 2.0.0 tags, with the release link and the `UPGRADING.md` path.

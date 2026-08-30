@@ -567,3 +567,75 @@ Describe(EcsSpec) {
     };
   };
 };
+struct SpecLateA { int value = 0; };
+struct SpecLateB { int value = 0; };
+
+class SpecLateSystem : public System {
+public:
+  SpecLateSystem() {
+    RequireComponent<SpecLateA>();
+    RequireComponent<SpecLateB>();
+  }
+};
+
+Describe(LateComponentSpec) {
+  It(should_report_a_component_added_after_the_entity_was_admitted) {
+    Registry registry;
+    registry.AddSystem<SpecLateSystem>();
+
+    Entity entity = registry.CreateEntity();
+    entity.AddComponent<SpecLateA>();
+    registry.Update(); // membership decided here, without SpecLateB
+
+    Logger::messages.clear();
+    entity.AddComponent<SpecLateB>();
+
+    Assert::That(SpecErrorCount(), Is().GreaterThanOrEqualTo(
+                                       static_cast<std::size_t>(1)));
+    Logger::messages.clear();
+  };
+
+  It(should_stay_silent_when_the_component_is_added_before_admission) {
+    Registry registry;
+    registry.AddSystem<SpecLateSystem>();
+
+    Entity entity = registry.CreateEntity();
+    Logger::messages.clear();
+    entity.AddComponent<SpecLateA>();
+    entity.AddComponent<SpecLateB>();
+    registry.Update();
+
+    Assert::That(SpecErrorCount(), Equals(static_cast<std::size_t>(0)));
+  };
+
+  It(should_stay_silent_when_the_late_component_changes_no_membership) {
+    Registry registry;
+    registry.AddSystem<SpecLateSystem>();
+
+    Entity entity = registry.CreateEntity();
+    entity.AddComponent<SpecLateA>();
+    registry.Update();
+
+    Logger::messages.clear();
+    // SpecMana is required by no registered system, so adding it late costs
+    // the entity nothing and must not be reported.
+    entity.AddComponent<SpecMana>();
+
+    Assert::That(SpecErrorCount(), Equals(static_cast<std::size_t>(0)));
+  };
+
+  It(should_report_nothing_for_an_entity_that_already_belongs_to_the_system) {
+    Registry registry;
+    registry.AddSystem<SpecLateSystem>();
+
+    Entity entity = registry.CreateEntity();
+    entity.AddComponent<SpecLateA>();
+    entity.AddComponent<SpecLateB>();
+    registry.Update(); // already a member
+
+    Logger::messages.clear();
+    entity.AddComponent<SpecLateB>(); // re-adding changes no membership
+
+    Assert::That(SpecErrorCount(), Equals(static_cast<std::size_t>(0)));
+  };
+};

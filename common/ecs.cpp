@@ -161,6 +161,54 @@ bool Registry::IsAlive(Entity entity) const {
                    static_cast<int>(entityId)) == freeIds.end();
 }
 
+const char *
+Registry::SystemMissedByLateComponent(Entity entity,
+                                      std::size_t componentId) const {
+  const auto entityId = entity.GetId();
+  if (entityId >= entityComponentSignatures.size() ||
+      componentId >= MAX_COMPONENTS) {
+    return nullptr;
+  }
+  if (!IsAlive(entity)) {
+    return nullptr;
+  }
+  // Still queued: Update() has not decided its membership yet, so adding a
+  // component now is exactly the correct thing to do.
+  if (entitiesToBeAdded.find(entity) != entitiesToBeAdded.end()) {
+    return nullptr;
+  }
+  // On its way out; its membership will never matter again.
+  if (entitiesToBeKilled.find(entity) != entitiesToBeKilled.end()) {
+    return nullptr;
+  }
+
+  const Signature &now = entityComponentSignatures[entityId];
+  Signature asAdmitted = now;
+  asAdmitted.reset(componentId);
+
+  for (const auto &entry : systems) {
+    const Signature &required = entry.second->GetComponentSignature();
+    const bool matchedAtAdmission = (asAdmitted & required) == required;
+    const bool matchesNow = (now & required) == required;
+    if (matchedAtAdmission || !matchesNow) {
+      continue;
+    }
+    // asAdmitted is a replay, not the recorded admission-time signature, so
+    // it reads a bit that was already set before this call (a re-add of a
+    // component the entity already had) as if it had just appeared. Guard
+    // against that false positive with the one fact the system does record:
+    // an entity Update() actually admitted is already in its entities list,
+    // and nothing done after admission removes it from there.
+    const auto &members = entry.second->GetSystemEntities();
+    const bool alreadyMember =
+        std::find(members.begin(), members.end(), entity) != members.end();
+    if (!alreadyMember) {
+      return entry.first.name();
+    }
+  }
+  return nullptr;
+}
+
 void Registry::KillEntity(Entity entity) {
   const auto entityId = entity.GetId();
 

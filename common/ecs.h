@@ -296,6 +296,20 @@ public:
   // `Registry` by value, so sizeof(Registry) is ABI. Tracked as P49.
   bool IsAlive(Entity entity) const;
 
+  // Names a registered system that `entity` would have joined had
+  // `componentId` been present before Registry::Update() admitted it, or
+  // nullptr when there is none. Call it *after* the signature bit is set.
+  //
+  // System membership is computed once, at admission, so a component added
+  // afterwards never changes it (KNOWN_ISSUES.md item 5). This is how that
+  // silent mistake is detected: replay the signature as the systems last saw
+  // it and look for a requirement the new bit alone satisfies.
+  //
+  // The returned name comes from std::type_index::name() and is
+  // implementation-mangled; it is for a log line, not for parsing.
+  const char *SystemMissedByLateComponent(Entity entity,
+                                          std::size_t componentId) const;
+
   // Component management
   template <typename TComponent, typename... Targs>
   void AddComponent(Entity entity, Targs &&... args);
@@ -438,6 +452,24 @@ void Registry::AddComponent(Entity entity, Targs &&... args) {
 
   logger.Log("Component id = " + std::to_string(componentId) +
              " was added to entity id " + std::to_string(entityId));
+
+  // Gate on the budget before the search — an exhausted diagnostic must cost
+  // one comparison, not a scan of every registered system.
+  static thread_local unsigned int lateReports = 0;
+  if (lateReports < ECS_MAX_DIAGNOSTIC_REPORTS) {
+    if (const char *missed =
+            SystemMissedByLateComponent(entity, componentId)) {
+      if (EcsShouldReport(lateReports)) {
+        logger.Err(
+            "AddComponent: entity " + std::to_string(entityId) +
+            " was already admitted by Registry::Update(), so adding this "
+            "component will not put it in system '" + std::string(missed) +
+            "'. Add every component before the Update() that admits the "
+            "entity, or kill it and create a replacement." +
+            EcsSuppressionNote(lateReports));
+      }
+    }
+  }
 }
 
 template <typename TComponent> void Registry::RemoveComponent(Entity entity) {

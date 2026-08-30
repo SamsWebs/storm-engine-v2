@@ -1,6 +1,7 @@
 #include <chrono>
 #include <cstring>
 #include <functional>
+#include <memory>
 #include <set>
 #include <string>
 #include <thread>
@@ -65,6 +66,27 @@ bool PumpServerUntil(NetServer &server, int timeoutMs,
   while (NetNowMs() - start < (uint32_t)timeoutMs) {
     server.Update();
     server.Poll();
+    if (done())
+      return true;
+    std::this_thread::sleep_for(std::chrono::milliseconds(kPumpStepMs));
+  }
+  return false;
+}
+
+// Pumps the server and every client until `done` returns true or the timeout
+// expires. Returns whether `done` became true. Generalises PumpUntil /
+// PumpUntil2, which handle one and two clients.
+bool PumpUntilSettled(NetServer &server,
+                      std::vector<std::unique_ptr<NetClient>> &clients,
+                      int timeoutMs, const std::function<bool()> &done) {
+  uint32_t start = NetNowMs();
+  while (NetNowMs() - start < (uint32_t)timeoutMs) {
+    server.Update();
+    server.Poll();
+    for (auto &client : clients) {
+      client->Update();
+      client->Poll();
+    }
     if (done())
       return true;
     std::this_thread::sleep_for(std::chrono::milliseconds(kPumpStepMs));
@@ -687,3 +709,83 @@ static_assert(!std::is_copy_constructible<NetSocket>::value,
               "NetSocket must not be copy constructible");
 static_assert(!std::is_copy_assignable<NetSocket>::value,
               "NetSocket must not be copy assignable");
+
+Describe(MaxClientsPerIpSpec) {
+  It(should_default_to_the_engine_wide_cap) {
+    NetServer server;
+    Assert::That(server.GetMaxClientsPerIp(), Equals(kNetMaxClientsPerIp));
+  };
+
+  It(should_refuse_the_fifth_client_from_one_address_by_default) {
+    NetServer server;
+    Assert::That(server.Start(0, 12), Equals(true));
+
+    // Five clients, all from 127.0.0.1. The default cap is 4.
+    std::vector<std::unique_ptr<NetClient>> clients;
+    for (int i = 0; i < 5; ++i) {
+      clients.push_back(std::unique_ptr<NetClient>(new NetClient()));
+      clients.back()->Connect("127.0.0.1", server.GetPort());
+    }
+    // Settled once the four admitted clients are online; the fifth is
+    // refused and never joins, so waiting on a count of 5 would just burn
+    // the whole deadline instead of catching the refusal.
+    PumpUntilSettled(server, clients, kPumpDeadlineMs, [&]() {
+      return server.GetClientCount() == kNetMaxClientsPerIp;
+    });
+
+    Assert::That(server.GetClientCount(), Equals(kNetMaxClientsPerIp));
+  };
+
+  It(should_admit_more_once_the_cap_is_raised) {
+    NetServer server;
+    server.SetMaxClientsPerIp(12);
+    Assert::That(server.Start(0, 12), Equals(true));
+
+    std::vector<std::unique_ptr<NetClient>> clients;
+    for (int i = 0; i < 6; ++i) {
+      clients.push_back(std::unique_ptr<NetClient>(new NetClient()));
+      clients.back()->Connect("127.0.0.1", server.GetPort());
+    }
+    PumpUntilSettled(server, clients, kPumpDeadlineMs,
+                     [&]() { return server.GetClientCount() == 6; });
+
+    Assert::That(server.GetClientCount(), Equals(6));
+  };
+
+  It(should_clamp_a_limit_above_the_slot_count) {
+    NetServer server;
+    server.SetMaxClientsPerIp(999);
+    Assert::That(server.GetMaxClientsPerIp(), Equals(NetServer::kMaxClients));
+  };
+
+  It(should_reject_a_limit_below_one_and_keep_the_previous_value) {
+    NetServer server;
+    server.SetMaxClientsPerIp(12);
+    server.SetMaxClientsPerIp(0);
+    Assert::That(server.GetMaxClientsPerIp(), Equals(12));
+  };
+
+  It(should_not_leak_the_setting_to_a_later_server_at_the_same_address) {
+    // The side table is keyed on `this`, and an allocator hands the same
+    // address back readily — but not deterministically, so this places both
+    // servers in the same raw storage via placement new rather than relying
+    // on the heap or the stack to reuse a freed address. That controls the
+    // address while still exercising the real ~NetServer / SetMaxClientsPerIp
+    // code paths. Without the erase in ~NetServer, the second server
+    // inherits the first's cap and this case fails. Deleting the erase(this)
+    // line MUST fail this case.
+    alignas(NetServer) unsigned char storage[sizeof(NetServer)];
+
+    NetServer *first = new (storage) NetServer();
+    first->SetMaxClientsPerIp(12);
+    first->~NetServer();
+
+    NetServer *second = new (storage) NetServer();
+    // Assert the address was actually reused, so the case cannot pass by
+    // testing nothing.
+    Assert::That(static_cast<void *>(second) == static_cast<void *>(storage),
+                 Equals(true));
+    Assert::That(second->GetMaxClientsPerIp(), Equals(kNetMaxClientsPerIp));
+    second->~NetServer();
+  };
+};

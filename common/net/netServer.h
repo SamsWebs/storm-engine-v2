@@ -53,6 +53,24 @@ public:
     NetAddress GetClientAddress(int clientId) const;
     uint16_t GetPort() const { return sock_.GetBoundPort(); }
 
+    // How many clients may connect from one address. Defaults to
+    // kNetMaxClientsPerIp (4), which is an anti-flood cap sized for a LAN.
+    //
+    // Over the internet every player behind one router shares a public
+    // address, so a twelve-player game with two people in one house is
+    // refused at the default. Raise it for internet play; leave it alone for
+    // a LAN, where it is doing real work.
+    //
+    // A limit below 1 is refused and logged; a limit above kMaxClients is
+    // clamped to kMaxClients. Takes effect on the next connection attempt,
+    // and never disconnects a client already admitted.
+    //
+    // The setting is held outside the object: sizeof(NetServer) is ABI,
+    // because games allocate the server themselves and the size is emitted
+    // at their call site.
+    void SetMaxClientsPerIp(int limit);
+    int GetMaxClientsPerIp() const;
+
     void SetOnClientConnect(ConnectCallback cb) { onConnect_ = cb; }
     void SetOnClientDisconnect(DisconnectCallback cb) { onDisconnect_ = cb; }
     void SetOnChunk(ChunkCallback cb) { onChunk_ = cb; }

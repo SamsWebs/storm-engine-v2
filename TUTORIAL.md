@@ -299,7 +299,7 @@ entity.AddComponent<AnimationComponent>(
 The sprite sheet must be laid out horizontally with each frame exactly `frameWidth` pixels wide.
 
 ### BoxColliderComponent
-An axis-aligned bounding box, read by `ContactSystem` (and by the deprecated `CollisionSystem`).
+An axis-aligned bounding box, read by `ContactSystem`.
 
 ```cpp
 #include <stormengine2/components/boxCollider.h>
@@ -325,7 +325,6 @@ registry.AddSystem<RenderColliderSystem>(); // debug: draws collider outlines
 | `RenderSystem` | Transform + Sprite | Draws all sprites sorted by `zIndex` |
 | `AnimationSystem` | Sprite + Animation | Advances the sprite sheet frame |
 | `ContactSystem` | Transform + BoxCollider | Reports AABB overlaps with a normal and depth, plus begin/end callbacks. Never kills or moves anything |
-| `CollisionSystem` | Transform + BoxCollider | Detects AABB collisions and kills both movable entities. Deprecated - prefer `ContactSystem` |
 | `RenderColliderSystem` | Transform + BoxCollider | Draws collider rectangles (debug) |
 
 `ContactSystem` reports; it never acts. Read `GetContacts()` and decide what a
@@ -356,8 +355,8 @@ for (const auto &c : contacts.GetContacts()) {
 
 Three things to know.
 
-A shared edge is *not* a contact - the overlap test is strict, unlike
-`CollisionSystem::isCollision`, which is inclusive and counts one.
+A shared edge is *not* a contact - the overlap test is strict, unlike an
+inclusive test that would count a shared edge as a contact.
 
 System membership is computed once, when `Registry::Update()` admits an
 entity. Adding a `BoxColliderComponent` to an entity that is already live will

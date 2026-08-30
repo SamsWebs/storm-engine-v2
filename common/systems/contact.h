@@ -14,10 +14,6 @@
 // never moves one, and never writes a component - the game decides what a
 // contact means and in what order to respond, because the engine has no
 // system scheduler.
-//
-// CollisionSystem (../systems/collision.h) is the older kill-on-contact
-// system and shares this file's bounds math. It stays for source
-// compatibility with games written against 1.0-1.2; new code wants this.
 
 // A world-space AABB with the collider offset and the transform scale
 // already applied.
@@ -172,9 +168,9 @@ public:
 
   // World-space bounds. The offset is world pixels and the extents are local
   // units scaled by the transform - the same convention as
-  // RenderColliderSystem (../systems/renderCollider.h:22-26) and
-  // CollisionSystem. Scaling the offset too would be more consistent but
-  // would silently move every existing collider; it is a 2.0.0 item.
+  // RenderColliderSystem (../systems/renderCollider.h:22-26). Scaling the
+  // offset too would be more consistent but would silently move every
+  // existing collider; it is a 2.0.0 item.
   static ContactAABB BoundsOf(const Entity &entity) {
     const TransformComponent &transform =
         entity.GetComponent<TransformComponent>();
@@ -190,8 +186,8 @@ public:
   }
 
   // Strict: a shared edge is not a contact, because a zero-area overlap has
-  // no meaningful normal. CollisionSystem::isCollision is inclusive and
-  // deliberately still is.
+  // no meaningful normal, unlike an inclusive comparison that would count a
+  // touching edge as a collision.
   static bool Overlaps(const ContactAABB &a, const ContactAABB &b) {
     return a.minX < b.maxX && a.maxX > b.minX && a.minY < b.maxY &&
            a.maxY > b.minY;

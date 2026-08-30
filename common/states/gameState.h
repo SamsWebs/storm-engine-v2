@@ -15,7 +15,6 @@
 #include "../ecs.h"
 #include "../logger.h"
 #include "../systems/animation.h"
-#include "../systems/collision.h"
 #include "../systems/movement.h"
 #include "../systems/render.h"
 #include "../systems/renderCollider.h"

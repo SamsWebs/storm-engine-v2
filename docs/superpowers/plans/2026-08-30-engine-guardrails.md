@@ -1589,11 +1589,93 @@ git commit -m "Document the 1.4.0 guardrails and the upgrade path from 1.2.x"
 
 ---
 
+### Task 12: Bring the examples and the template onto the 1.4.0 surface
+
+The examples are how a new game learns the engine, and the template is what a new game is literally copied from. A diagnostic that fires while running `examples/platformer` is a bug the examples have been teaching.
+
+Confirmed before this task was written: no example, and not the editor, registers `CollisionSystem` (`grep -rn "AddSystem<CollisionSystem>" examples/ editor/` is empty), so nothing here needs migrating off it.
+
+**Files:**
+- Modify: whichever example sources the diagnostics implicate — discovered in Step 1, not guessed
+- Modify: `template/src/states/playState.cpp`, `template/src/game.cpp`
+- Modify: `template/README.md` if it documents input handling
+
+**Interfaces:**
+- Consumes: everything Tasks 1-11 produced — `Keyboard`, `TryGetSystem`, `TryGetEntityByTag`, `AdmitExistingEntities`, and the four runtime diagnostics
+- Produces: no new API
+
+- [ ] **Step 1: Run every example and collect what fires**
+
+Build and run each example under `examples/` that builds on this machine, plus `editor/` and `template/`. Capture stderr. Then:
+
+```bash
+grep -n "RenderSystem: srcRect\|AddComponent: entity\|AddSystem:\|CreateEntity:\|GetSystem:\|GetComponent: entity" <captured-log>
+```
+
+Write the full findings to the task report file, one line per example: which diagnostic, which source line caused it. An example that fires nothing gets a line saying so — that is the result for most of them, and recording it is what makes the ones that do fire trustworthy.
+
+The `nx-` and `android-` prefixed examples do not build on Linux. Say so in the report rather than implying the whole set was exercised.
+
+- [ ] **Step 2: Fix each firing diagnostic at its cause**
+
+For each hit, fix the example, not the diagnostic. The four causes and their fixes:
+
+- `RenderSystem: srcRect ... outside texture` — the `SpriteComponent` `width`/`height` do not match the sheet cell, or `AnimationComponent.vertical` does not match the sheet layout. Correct whichever is wrong. Do not resize with `width`/`height`; those are the source rect. Screen size is `TransformComponent.scale`.
+- `AddComponent: entity ... was already admitted` — move the `AddComponent` call before the `registry_.Update()` that admits the entity.
+- `AddSystem: ... registered after N matching entities` — move the `AddSystem` call before the entity creation. Reach for `AdmitExistingEntities<T>()` only where the late registration is deliberate, and comment why.
+- `CreateEntity: ... Registry::Update() has never been called` — the state never flushes. Add `registry_.Update()` as the first call in its `update()`.
+
+Each fix is its own commit, named for the example.
+
+- [ ] **Step 3: Re-run and confirm silence**
+
+Re-run every example from Step 1. Expected: no diagnostic in any log. Paste the actual grep output — an empty result — into the report.
+
+- [ ] **Step 4: Adopt `Keyboard` in the template**
+
+The template is the canonical shape a new game copies, so it is where the input idiom has to be right. In `template/src/states/playState.cpp`, replace the raw `SDL_PollEvent` key handling with a `Keyboard` member fed from the state's existing poll loop:
+
+```cpp
+  keyboard_.BeginFrame();
+  SDL_Event event;
+  while (SDL_PollEvent(&event)) {
+    keyboard_.HandleEvent(event);
+    if (event.type == SDL_QUIT) {
+      m_exiting = true;
+    }
+  }
+  if (keyboard_.WasPressed(SDL_SCANCODE_ESCAPE)) {
+    m_exiting = true;
+  }
+```
+
+Keep the single poll loop the template already has. **Do not add a second `SDL_PollEvent` call, and do not move polling into `Game::ProcessInput` while the state also polls** — two consumers draining one queue is the exact trap `Keyboard` exists to prevent. If `template/src/game.cpp` already polls, the state must not; make the template show one owner and say which in a comment.
+
+Leave the examples' own input code alone unless a diagnostic implicated it. Rewriting nine working examples to a new class is churn, and the plan is not a refactor.
+
+- [ ] **Step 5: Update the template README**
+
+If `template/README.md` documents input handling, update it to the `Keyboard` idiom and state the one-poll-owner rule in a sentence.
+
+- [ ] **Step 6: Full build and test**
+
+Run: `make -f Makefile.debian clean && make -f Makefile.debian test`
+Then rebuild every example. Expected: everything builds, specs pass, no diagnostics in any example log.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add examples/ template/
+git commit -m "Fix what the 1.4.0 diagnostics found in the examples, and put the template on Keyboard"
+```
+
+---
+
 ## Verification before calling this done
 
 - [ ] `make -f Makefile.debian clean && make -f Makefile.debian test` — report the pass count printed, not a summary of it.
 - [ ] `grep -rn "sizeof(Registry)\|sizeof(Entity)" specs/` — the layout assertions in the spec suite still pass. If none exist, add one to `specs/ecs.spec.cpp` pinning `sizeof(Registry) == 576`, `sizeof(Entity) == 16`, `sizeof(System) == 32`, `sizeof(Signature) == 8`, `sizeof(Tile) == 80` on x86-64, so the next layout change is argued rather than assumed.
 - [ ] No `-Wdeprecated-declarations` warning outside `specs/systems/collision.spec.cpp`.
-- [ ] Build and run each example under `examples/`; note any `RenderSystem: srcRect` or ECS diagnostic that fires. Each one is a real pre-existing bug in that example.
+- [ ] Every example, the editor and the template run with no diagnostic in the log (Task 12 verifies this; this line is the final confirmation).
 - [ ] `git log --oneline` shows one commit per task.
 - [ ] Post a comment on https://github.com/SamsWebs/center-ice-hockey/issues/91 when 1.4.0 tags, with the release link and the `UPGRADING.md` path.

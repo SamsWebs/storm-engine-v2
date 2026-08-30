@@ -1,24 +1,41 @@
-# Storm! Engine v2 1.4.0 Usage-Trap Guardrails Implementation Plan
+# Storm! Engine v2 2.0.0 Usage-Trap Guardrails Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make eleven known ways of misusing Storm! Engine v2 report themselves — at compile time or in the log — without breaking source or binary compatibility for games already built on 1.x.
+**Goal:** Make eleven known ways of misusing Storm! Engine v2 report themselves — at compile time or in the log — and take the four source-level breaks that let three of them be fixed outright rather than merely reported.
 
-**Architecture:** Extend the diagnostic convention already in `common/ecs.h` (`EcsShouldReport`, `EcsReportErr`, `EcsSuppressionNote`, `ECS_MAX_DIAGNOSTIC_REPORTS`) rather than add new machinery. Every check is derived from state `Registry` already holds, except one that lives in a file-static side table in `ecs.cpp` keyed on `this`. Nothing is added to any public type's layout.
+**Why 2.0.0 and not 1.4.0.** `KNOWN_ISSUES.md` states the 1.x promise plainly: a game that compiles and links against 1.2.x must keep compiling and linking against every later 1.x release, which rules out changing a public signature or deleting a public member. This release does both. Shipping it as a 1.x point release would make that promise decorative, so the release is 2.0.0 and the compatibility promise resets here.
+
+**What is NOT in this release.** Every fix that requires a *layout* change stays out: the `Entity` generation counter, `Tile`'s animation fields, `MAX_COMPONENTS`, and `System`'s disabled latch. Those remain 3.0 items. The four breaks taken here are all compile-time, all loud, and all have zero in-tree call sites — a game either builds or tells you exactly where it does not. A silent ABI break is a different animal and none is taken.
+
+**Architecture:** Extend the diagnostic convention already in `common/ecs.h` (`EcsShouldReport`, `EcsReportErr`, `EcsSuppressionNote`, `ECS_MAX_DIAGNOSTIC_REPORTS`) rather than add new machinery. Every check is derived from state `Registry` already holds; where per-instance diagnostic state is genuinely needed it lives in a file-static side table keyed on `this`, in `ecs.cpp` and again in `netServer.cpp`. Nothing is added to any public type's layout.
 
 **Tech Stack:** C++17, SDL2, igloo (`igloo/igloo_alt.h`) for specs, GNU make (`Makefile.debian`, `base.mk`).
 
 ## Global Constraints
 
-- **No layout changes.** `sizeof(Registry)` (576), `sizeof(Entity)` (16), `sizeof(System)` (32), `sizeof(Signature)` (8) and `sizeof(Tile)` (80) must be unchanged at the end. No new data member on any public type. 1.4.0 must be a relink, not a rebuild.
-- **No public member removed, no existing signature changed** — with the single sanctioned exception in Task 1.
-- **No behaviour change to any existing call**, except Task 1's fix to argument forwarding.
+- **No layout changes, still.** `sizeof(Registry)` (576), `sizeof(Entity)` (16), `sizeof(System)` (32), `sizeof(Signature)` (8), `sizeof(Tile)` (80) and `sizeof(NetServer)` must be unchanged at the end. No new data member on any public type. Games allocate `Registry`, `AssetStore` and `NetServer` themselves, so a size change is emitted at their call site and overflows their allocation with no warning — that is the 1.3.0 `AssetStore` hazard, and this release does not repeat it. Where per-instance state is needed, use a file-static side table keyed on `this`, erased in the destructor.
+- **Four source-level breaks are sanctioned, and only these four.** Each is compile-time, loud, and has zero in-tree call sites:
+  1. `Registry::AddSystem` takes `Targs &&...` instead of `Targs &...` (Task 1). Breaks only the explicit-template-argument form `AddSystem<Sys, int>(x)` with an lvalue.
+  2. `CollisionSystem` is deleted outright (Task 8).
+  3. `NetServer`, `NetClient`, `NetConnection` and `NetSocket` get deleted copy operations (Task 15).
+  4. `Entity(std::size_t)` becomes `explicit` (Task 16).
+- **Anything not on that list keeps working.** No other public member is removed, no other signature changes, and no existing call changes behaviour — except Task 1's fix to argument forwarding, which stops `AddSystem` moving out of the caller's lvalue.
 - Every runtime diagnostic uses `EcsShouldReport` with a call-site-owned `static thread_local unsigned int` counter, and appends `EcsSuppressionNote(counter)`.
 - **Gate the whole computation, not just the message.** Check `counter < ECS_MAX_DIAGNOSTIC_REPORTS` before doing any work a diagnostic needs, so an exhausted diagnostic costs one integer comparison.
 - Diagnostics log at `Err` level. Specs assert against the process-global `Logger::messages`.
 - **Do not add a false positive.** Every diagnostic spec asserts both that it fires for the misuse and that it stays silent for the legitimate neighbouring case. The silent-case assertion is the one that matters.
-- Build and test with `make -f Makefile.debian test`. Warnings are `-Wall` with no `-Werror` (`base.mk:60`), so `[[deprecated]]` will not break the build.
-- Engine types have no namespace. Do not introduce one.
+- Build and test with `make -f Makefile.debian test`. Warnings are `-Wall` with no `-Werror` (`base.mk:60`).
+- The engine has **no header dependency tracking**. Run `make -f Makefile.debian clean` before any build that follows a header edit.
+- Engine types have no namespace. Do not introduce one — that is a 3.0 item and it would break every line of every consuming game.
+
+## Execution order
+
+Tasks do not run in numeric order. Run the engine tasks first, then the examples last, so Task 12 exercises the finished engine:
+
+**1, 2, 3, 4, 5, 6, 7, 8, 15, 16, 13, 14, 9, 10, 11, then 12.**
+
+Task 12 must be last: it runs every example against the completed engine and fixes what the diagnostics find. Task 11 (documentation) is second-to-last so it can describe what actually shipped.
 
 ---
 
@@ -27,7 +44,8 @@
 **Modified:**
 - `common/ecs.h` — `AddSystem` signature, `AddComponent` diagnostic hook, `GetSystem` diagnostic, new `TryGetSystem` / `AdmitExistingEntities` templates, `GetComponent` message. Declarations of the new non-template helpers.
 - `common/ecs.cpp` — the non-template helper bodies, the diagnostics side table, `Update`/`CreateEntity`/`~Registry` hooks, `TryGetEntityByTag`.
-- `common/systems/collision.h` — deprecation attribute.
+- `common/systems/collision.h` — **deleted**, along with `specs/systems/collision.spec.cpp`.
+- `common/net/netServer.h`, `netClient.h`, `netConnection.h`, `netSocket.h` — deleted copy operations; `netServer.h`/`.cpp` also gain the per-address cap and the client-id iterator.
 - `common/systems/render.h` — `srcRect` bounds diagnostic.
 - `KNOWN_ISSUES.md`, `CHANGELOG.md`, `README.md`, `TUTORIAL.md`.
 
@@ -1050,99 +1068,57 @@ git commit -m "Name the component type in the GetComponent miss diagnostic"
 
 ---
 
-### Task 8: Deprecate `CollisionSystem`
+### Task 8: Delete `CollisionSystem`
+
+`ContactSystem` (`common/systems/contact.h`) superseded it in 1.3.0: it reports overlaps with a normal and penetration depth, fires begin/end callbacks once per pair, and never touches an entity. `CollisionSystem` only kills — on overlap it calls `Kill()` on both entities carrying a `RigidBodyComponent`, with no callback and no way to observe without acting. The two already share one copy of the bounds math via `ContactSystem::BoundsOf`, so nothing else depends on it.
+
+It survived 1.x only because the compatibility promise forbade deleting a public member. 2.0.0 resets that promise, and `KNOWN_ISSUES.md` already names this deletion as the intended outcome.
+
+Verified before this task was written: `grep -rn "AddSystem<CollisionSystem>" examples/ editor/` is empty. No example, and not the editor, registers it. `specs/systems/collision.spec.cpp` is the only thing in the tree that instantiates the class.
 
 **Files:**
-- Modify: `common/systems/collision.h`
-- Modify: `specs/systems/collision.spec.cpp` — suppress the warning at the one place that must keep instantiating it
-- Modify: `TUTORIAL.md` — the `CollisionSystem` row
-- Test: `specs/systems/collision.spec.cpp`
+- Delete: `common/systems/collision.h`
+- Delete: `specs/systems/collision.spec.cpp`
+- Modify: `common/states/gameState.h` — remove the `#include "../systems/collision.h"` line
+- Modify: `TUTORIAL.md` — remove the `CollisionSystem` row
+- Modify: `Makefile.debian` — remove `specs/systems/collision.spec.o` if spec objects are listed rather than globbed
 
 **Interfaces:**
-- Produces: no API change. `CollisionSystem` keeps its behaviour for the whole 1.x line.
+- Consumes: nothing
+- Produces: nothing. This task only removes.
 
-- [ ] **Step 1: Add the attribute and the runtime notice**
-
-In `common/systems/collision.h`:
-
-```cpp
-class [[deprecated(
-    "CollisionSystem kills both entities on overlap and has no callback. Use "
-    "ContactSystem (common/systems/contact.h) to observe collisions without "
-    "acting on them.")]] CollisionSystem : public System {
-public:
-  CollisionSystem() {
-    RequireComponent<TransformComponent>();
-    RequireComponent<BoxColliderComponent>();
-
-    static thread_local unsigned int reports = 0;
-    if (EcsShouldReport(reports)) {
-      EcsReportErr(
-          "CollisionSystem is registered. On overlap it calls Kill() on both "
-          "entities that carry a RigidBodyComponent, and there is no collision "
-          "callback. If you want to observe collisions, register ContactSystem "
-          "instead." +
-          std::string(EcsSuppressionNote(reports)));
-    }
-  }
-```
-
-Keep the rest of the class byte-identical. Confirm `collision.h` already includes `../ecs.h`; add it if not.
-
-- [ ] **Step 2: Silence the warning in the spec**
-
-`specs/systems/collision.spec.cpp` is the only place in the tree that instantiates the class, and it must keep doing so. Wrap the file's body:
-
-```cpp
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-// CollisionSystem is deprecated in 1.4.0 but its behaviour is frozen for the
-// whole 1.x line, so it stays under spec until v3 deletes it.
-
-// ... existing file contents ...
-
-#pragma GCC diagnostic pop
-```
-
-- [ ] **Step 3: Add the notice case**
-
-Append to `specs/systems/collision.spec.cpp`, inside the pragma-wrapped region:
-
-```cpp
-Describe(CollisionSystemDeprecationSpec) {
-  It(should_log_a_notice_when_registered) {
-    Registry registry;
-    Logger::messages.clear();
-    registry.AddSystem<CollisionSystem>();
-
-    std::size_t errors = 0;
-    for (const auto &entry : Logger::messages) {
-      if (entry.type == LogType::LOG_ERROR) {
-        ++errors;
-      }
-    }
-    Assert::That(errors, Is().GreaterThanOrEqualTo(static_cast<std::size_t>(1)));
-    Logger::messages.clear();
-  };
-};
-```
-
-This case is order-dependent on the diagnostic throttle: if another case in the same binary registers a `CollisionSystem` first, the counter may be exhausted. Register it here before any other `CollisionSystem` case in the file, or accept the case only asserting `>= 0` — prefer the ordering.
-
-- [ ] **Step 4: Run the build and tests**
-
-Run: `make -f Makefile.debian clean && make -f Makefile.debian test`
-Expected: PASS, and **no `-Wdeprecated-declarations` warning anywhere in the build output**. If one appears outside `collision.spec.cpp`, something else in the tree still registers `CollisionSystem` — find it and decide deliberately, do not blanket-suppress.
-
-- [ ] **Step 5: Update the tutorial row**
-
-In `TUTORIAL.md`, mark the `CollisionSystem` row deprecated and point at `ContactSystem`. Leave the row in place; the class still exists.
-
-- [ ] **Step 6: Commit**
+- [ ] **Step 1: Confirm nothing else depends on it**
 
 ```bash
-git add common/systems/collision.h specs/systems/collision.spec.cpp TUTORIAL.md
-git commit -m "Deprecate CollisionSystem in favour of ContactSystem"
+grep -rn "CollisionSystem\|collision\.h" --include=*.cpp --include=*.h --include=*.mk --include=Makefile.* common editor examples specs template
+```
+
+Expected hits: the class's own header, its spec, the `#include` in `common/states/gameState.h`, and possibly a Makefile object list. `RenderColliderSystem` and `ContactSystem` are different types — do not touch them, and do not confuse `renderCollider.h` for `collision.h`.
+
+If the grep turns up a dependency this list does not predict, **stop and report BLOCKED** rather than deleting it. An unexpected consumer means the deletion needs a decision, not a bulldozer.
+
+- [ ] **Step 2: Delete the class and its spec**
+
+```bash
+git rm common/systems/collision.h specs/systems/collision.spec.cpp
+```
+
+- [ ] **Step 3: Drop the include and the tutorial row**
+
+Remove the `#include "../systems/collision.h"` line from `common/states/gameState.h`. Leave every other include in that file alone — `gameState.h` deliberately pulls in the common engine surface, and trimming the rest is a separate, still-unmade decision.
+
+Remove the `CollisionSystem` row from `TUTORIAL.md`. If the surrounding prose refers to it, rewrite that sentence to name `ContactSystem` and what it does instead: reports overlaps with a normal and penetration depth, and never kills anything.
+
+- [ ] **Step 4: Build and test**
+
+Run: `make -f Makefile.debian clean && make -f Makefile.debian test`
+Expected: builds clean. The suite drops the collision spec's cases — **report the new total and the delta explicitly**, because a shrinking test count is exactly what a mistakenly deleted spec file also looks like. Confirm the count fell by the number of cases in the deleted file and by no more.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add -A
+git commit -m "Delete CollisionSystem, superseded by ContactSystem"
 ```
 
 ---
@@ -1694,6 +1670,24 @@ The way through is the side table already introduced in Task 4: a file-static ma
   - `void NetServer::SetMaxClientsPerIp(int limit)`
   - `int NetServer::GetMaxClientsPerIp() const`
 
+- [ ] **Step 0: Write the multi-client pump helper**
+
+Read `specs/net/netLoopback.spec.cpp:25-80` first — `PumpUntil`, `PumpUntil2` and `PumpServerUntil` are three copies of one loop differing only in how many clients they pump. Add one helper that covers any number, following their existing shape (same timeout parameter, same predicate-driven exit, same return convention):
+
+```cpp
+// Pumps the server and every client until `done` returns true or the timeout
+// expires. Returns whether `done` became true. Generalises PumpUntil /
+// PumpUntil2, which handle one and two clients.
+static bool PumpUntilSettled(NetServer &server,
+                             std::vector<std::unique_ptr<NetClient>> &clients,
+                             int timeoutMs,
+                             const std::function<bool()> &done);
+```
+
+Give it the same body shape the existing helpers use — poll and update the server, poll and update each client, sleep the same interval, check `done`, bail at the timeout. Do **not** delete or rewrite `PumpUntil`, `PumpUntil2` or `PumpServerUntil`; existing cases use them and this task is not a refactor of the net specs.
+
+Where the cases below write `PumpUntilSettled(server, clients)`, call it with the file's usual timeout and a predicate that matches what the case is waiting for — for the connection cases, that the server's client count has stopped changing or has reached the expected value. A case that waits on "the fifth client is refused" must wait for a settled state, not for a count that never arrives; give it a predicate that becomes true once the four admitted clients are online, then assert the fifth never joins.
+
 - [ ] **Step 1: Write the failing tests**
 
 Every loopback client connects from `127.0.0.1`, so the default cap of 4 is directly exercisable. Append to `specs/net/netLoopback.spec.cpp`, following the connect/poll idiom already in that file — read the existing cases first and reuse their helpers rather than writing a second connect loop.
@@ -1762,7 +1756,7 @@ Describe(MaxClientsPerIpSpec) {
 }
 ```
 
-`PumpUntilSettled` stands for whatever the file's existing cases use to drive `server.Poll()` / `server.Update()` and each client until the handshakes finish. **Use the existing helper — do not add a new one.** If the file has no such helper and each case pumps inline, follow that instead; name the approach you took in your report.
+**`PumpUntilSettled` does not exist yet — Step 0 below writes it.** The file's existing helpers are `PumpUntil` (one client, `specs/net/netLoopback.spec.cpp:25`), `PumpUntil2` (two clients, line 42) and `PumpServerUntil` (server only, line 61). None of them handles the five and six clients these cases need, and adding `PumpUntil5` and `PumpUntil6` to a file that already has three near-identical pump loops would be the wrong answer.
 
 The last case is the one that matters most. A side table without destructor cleanup passes every other case in this list and then corrupts an unrelated server later in the same process.
 
@@ -1980,7 +1974,7 @@ Describe(ConnectedClientIdsSpec) {
 }
 ```
 
-Use the same existing pump helper as Task 13.
+Use the `PumpUntilSettled` helper Task 13 added to this file. It already exists by the time this task runs.
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
@@ -2049,6 +2043,153 @@ Expected: all five new cases PASS.
 ```bash
 git add common/net/netServer.h common/net/netServer.cpp specs/net/netLoopback.spec.cpp
 git commit -m "Add GetConnectedClientIds and document why GetClientCount is not a loop bound"
+```
+
+---
+
+### Task 15: Delete the networking copy operations
+
+`NetServer`, `NetClient`, `NetConnection` and `NetSocket` all have implicit copy constructors and assignment operators. Each installs send callbacks capturing `this`, and each owns a socket file descriptor. Copying one gives you two objects whose callbacks point at whichever was copied *from*, and two destructors closing one descriptor. `NetServer` is ~372 KB and `NetClient` ~188 KB, so the copy is also a silent multi-hundred-kilobyte memcpy.
+
+This is `KNOWN_ISSUES.md` item 6. It stayed unfixed through 1.x because `= delete` is a compile-time source break. 2.0.0 takes it.
+
+Verified before this task was written: nothing in the tree copies one. Every use is by reference, a direct local, or a by-value *member* of a non-copied type — which is aggregation, not copying, and stays legal. `examples/netplay-checkers/src/states/playState.h:139-140` holds a `NetServer` and a `NetClient` by value as members and is unaffected; `examples/netchat`, `examples/netrepl` and `specs/net/netLoopback.spec.cpp` hold them by reference or `unique_ptr`.
+
+**Files:**
+- Modify: `common/net/netServer.h`, `common/net/netClient.h`, `common/net/netConnection.h`, `common/net/netSocket.h`
+- Test: `specs/net/netLoopback.spec.cpp`
+
+**Interfaces:**
+- Consumes: nothing
+- Produces: four types that are no longer copyable. Whether they become movable is decided in Step 2.
+
+- [ ] **Step 1: Write the failing tests**
+
+These are compile-time properties, so the tests are `static_assert`s rather than runtime cases. Append to `specs/net/netLoopback.spec.cpp`, at file scope:
+
+```cpp
+// KNOWN_ISSUES item 6, fixed in 2.0.0: these four own a socket descriptor and
+// install callbacks capturing `this`. A copy gives two objects whose callbacks
+// point at the original and two destructors closing one descriptor.
+static_assert(!std::is_copy_constructible<NetServer>::value,
+              "NetServer must not be copy constructible");
+static_assert(!std::is_copy_assignable<NetServer>::value,
+              "NetServer must not be copy assignable");
+static_assert(!std::is_copy_constructible<NetClient>::value,
+              "NetClient must not be copy constructible");
+static_assert(!std::is_copy_assignable<NetClient>::value,
+              "NetClient must not be copy assignable");
+static_assert(!std::is_copy_constructible<NetConnection>::value,
+              "NetConnection must not be copy constructible");
+static_assert(!std::is_copy_assignable<NetConnection>::value,
+              "NetConnection must not be copy assignable");
+static_assert(!std::is_copy_constructible<NetSocket>::value,
+              "NetSocket must not be copy constructible");
+static_assert(!std::is_copy_assignable<NetSocket>::value,
+              "NetSocket must not be copy assignable");
+```
+
+Add `#include <type_traits>` to the file's includes.
+
+- [ ] **Step 2: Run the tests to verify they fail, and learn what else breaks**
+
+Run: `make -f Makefile.debian clean && make -f Makefile.debian test`
+Expected: eight `static_assert` failures, since all four types are currently copyable.
+
+**This build is also your survey.** Note every other compile error it produces. There should be none beyond the `static_assert`s — but `NetServer` holds `Slot slots_[kMaxClients]` where `Slot` contains a `NetConnection` by value, and `NetClient` holds a `NetSocket` and a `NetConnection` by value, so deleting `NetConnection`'s and `NetSocket`'s copy operations propagates outward. Record what you find; it decides Step 3.
+
+- [ ] **Step 3: Delete the copy operations**
+
+In each of the four headers, in the public section immediately after the constructor declarations:
+
+```cpp
+    // Owns a socket descriptor and installs callbacks capturing `this`: a copy
+    // would give two objects whose callbacks point at the original, and two
+    // destructors closing one descriptor. KNOWN_ISSUES item 6, fixed in 2.0.0.
+    NetServer(const NetServer &) = delete;
+    NetServer &operator=(const NetServer &) = delete;
+```
+
+with the type's own name in each file.
+
+**Do not add move operations unless Step 2 proved something needs them.** Declaring a copy constructor suppresses the implicit move, so these types become neither copyable nor movable — which is correct for something holding a descriptor and self-referential callbacks, and matches how every in-tree consumer already uses them (by reference or `unique_ptr`). If Step 2 turned up a real consumer that moves one, report it and stop rather than inventing move semantics for a callback-capturing type on your own.
+
+- [ ] **Step 4: Run the tests to verify they pass**
+
+Run: `make -f Makefile.debian clean && make -f Makefile.debian test`
+Expected: builds clean, every net spec passes, and the whole suite passes. If `NetServer` or `NetClient` now fails to compile because an aggregate member became non-copyable, that is the outward propagation Step 2 predicted — it means some code really was copying, and it is a finding to report, not a thing to work around by restoring a copy constructor.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add common/net/netServer.h common/net/netClient.h common/net/netConnection.h common/net/netSocket.h specs/net/netLoopback.spec.cpp
+git commit -m "Delete the networking copy operations"
+```
+
+---
+
+### Task 16: Make `Entity(std::size_t)` explicit
+
+`Entity(std::size_t id)` is not `explicit`, so any function taking an `Entity` silently accepts a bare number:
+
+```cpp
+registry.KillEntity(88);        // compiles. 88 is not an entity.
+```
+
+Every `Entity` member null-checks its registry pointer, so this no-ops and logs rather than dereferencing garbage — but it should never have compiled. This is `KNOWN_ISSUES.md` item 2, which records that `grep -rnE 'KillEntity\([0-9]|TagEntity\([0-9]' examples/ editor/ common/` is empty.
+
+**Files:**
+- Modify: `common/ecs.h` — the constructor at line 108
+- Test: `specs/ecs.spec.cpp`
+
+**Interfaces:**
+- Consumes: nothing
+- Produces: `explicit Entity(std::size_t id)`
+
+- [ ] **Step 1: Write the failing test**
+
+The property is compile-time. Append to `specs/ecs.spec.cpp` at file scope:
+
+```cpp
+// KNOWN_ISSUES item 2, fixed in 2.0.0: a bare integer must not become an
+// Entity. Direct initialisation — Entity(7) — stays legal and is how the
+// Registry builds them; only the implicit conversion goes away.
+static_assert(!std::is_convertible<std::size_t, Entity>::value,
+              "a bare size_t must not implicitly convert to an Entity");
+static_assert(std::is_constructible<Entity, std::size_t>::value,
+              "Entity must still be constructible from an id");
+```
+
+Add `#include <type_traits>` to the file's includes.
+
+- [ ] **Step 2: Run the test to verify it fails**
+
+Run: `make -f Makefile.debian clean && make -f Makefile.debian test`
+Expected: the first `static_assert` fails — `a bare size_t must not implicitly convert to an Entity`.
+
+- [ ] **Step 3: Add `explicit`**
+
+In `common/ecs.h`, at the constructor (line 108):
+
+```cpp
+  // explicit since 2.0.0: without it any function taking an Entity silently
+  // accepted a bare number, so registry.KillEntity(88) compiled.
+  explicit Entity(std::size_t id) : id(id){};
+```
+
+- [ ] **Step 4: Run the tests, and read every error carefully**
+
+Run: `make -f Makefile.debian clean && make -f Makefile.debian test`
+
+Expected: clean. If anything fails to compile, the fix is almost always to write the construction explicitly — `Entity(id)` instead of a bare `id` — at the call site. **Do not fix a break by removing `explicit`.**
+
+One place to check specifically: `common/ecs.cpp` and `common/ecs.h` construct `Entity` internally in several places, and the earlier tasks in this release added more (`Entity entity(id);` inside the membership scans). Direct initialisation is unaffected by `explicit`, so those are fine — but a `return 0;` or a braced `{id}` in a function returning `Entity` would not be. Report anything you had to change.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add common/ecs.h specs/ecs.spec.cpp
+git commit -m "Make Entity's id constructor explicit"
 ```
 
 ---

@@ -446,16 +446,18 @@ template <typename TSystem> TSystem *Registry::TryGetSystem() const {
 
 template <typename TSystem> TSystem &Registry::GetSystem() const {
   auto found = systems.find(std::type_index(typeid(TSystem)));
-  if (found == systems.end()) {
-    // .at is about to throw, and under -fno-exceptions that is an abort with
-    // no message at all. Say which system first.
-    static thread_local unsigned int reports = 0;
-    if (EcsShouldReport(reports)) {
-      logger.Err("GetSystem: system '" + std::string(typeid(TSystem).name()) +
-                 "' was never registered; this call is about to throw. Use "
-                 "TryGetSystem or HasSystem where absence is possible." +
-                 EcsSuppressionNote(reports));
-    }
+  if (found != systems.end()) {
+    return *(std::static_pointer_cast<TSystem>(found->second));
+  }
+
+  // .at is about to throw, and under -fno-exceptions that is an abort with
+  // no message at all. Say which system first.
+  static thread_local unsigned int reports = 0;
+  if (EcsShouldReport(reports)) {
+    logger.Err("GetSystem: system '" + std::string(typeid(TSystem).name()) +
+               "' was never registered; this call is about to throw. Use "
+               "TryGetSystem or HasSystem where absence is possible." +
+               EcsSuppressionNote(reports));
   }
   // .at throws for a missing system — defined behavior instead of the UB of
   // dereferencing end(). Check HasSystem() first if absence is expected.

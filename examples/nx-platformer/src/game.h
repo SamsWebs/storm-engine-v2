@@ -9,10 +9,10 @@
 
 #include "states/playState.h"
 
+using namespace storm;
+
 #ifdef __SWITCH__
 #include <switch.h>
-
-using namespace storm;
 #endif
 
 class Game {

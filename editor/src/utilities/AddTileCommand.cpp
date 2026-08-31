@@ -1,14 +1,14 @@
 #include "AddTileCommand.h"
 
 AddTileCommand::AddTileCommand(std::shared_ptr<MouseControl> &mouseControl)
-    : mMouseControl(mouseControl), mTileId(-1) // -1 means no Id
-      ,
+    : mMouseControl(mouseControl), mTile(std::nullopt),
       mCollider(false), mAnimated(false), mBoxColliderComponent(),
       mTransformComponent(), mSpriteComponent(), mAnimationComponent() {}
 
 void AddTileCommand::Execute() {
-  mTileId = mMouseControl->GetRecentTileId();
-  logger.Log("Tile ID: " + std::to_string(mTileId));
+  mTile = mMouseControl->GetRecentTile();
+  if (mTile)
+    logger.Log("Tile ID: " + std::to_string(mTile->GetId()));
 }
 
 void AddTileCommand::Undo() {
@@ -16,7 +16,7 @@ void AddTileCommand::Undo() {
 
   for (auto &entity : entities) {
     // Remove the most Recently added tile
-    if (entity.GetId() == mTileId) {
+    if (mTile && entity == *mTile) {
       const auto &transform = entity.GetComponent<TransformComponent>();
       const auto &sprite = entity.GetComponent<SpriteComponent>();
 
@@ -36,7 +36,7 @@ void AddTileCommand::Undo() {
       }
 
       entity.Kill();
-      logger.Log("UNDO: Remove Tile: " + std::to_string(mTileId));
+      logger.Log("UNDO: Remove Tile: " + std::to_string(mTile->GetId()));
     }
   }
 }
@@ -53,5 +53,5 @@ void AddTileCommand::Redo() {
   if (mAnimated)
     newEntity.AddComponent<AnimationComponent>(mAnimationComponent);
 
-  mTileId = newEntity.GetId();
+  mTile = newEntity;
 }

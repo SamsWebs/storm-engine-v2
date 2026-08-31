@@ -371,10 +371,16 @@ void Registry::KillEntity(Entity entity) {
   // since been handed to a new entity — IsAlive checks the generation, so
   // that case no longer kills the new entity by mistake.
   if (!IsAlive(entity)) {
-    // thread_local, like every other diagnostic throttle in this file (see
-    // ecs.h): a spec exercising this exact path on a fresh thread gets its
-    // own untouched budget, independent of what the main thread has already
-    // reported elsewhere in the suite.
+    // thread_local so a spec asserting on this diagnostic can get an
+    // untouched budget by running the triggering call on a fresh thread,
+    // the same idiom used for the ~Registry throttle (missingUpdateReports,
+    // above). The throttles in this file are a mix: this one and the
+    // "already pending kill" counter just below are thread_local because a
+    // spec exercises them that way; AddEntityToSystems' (line 410),
+    // GetEntitiesByGroup's (line 543), and Entity::Kill/Tag/Group's (lines
+    // 69, 81, 100) are still plain static, since nothing currently asserts
+    // on their message counts. Converting those is a separate decision, not
+    // an implicit guarantee made here.
     static thread_local unsigned int reports = 0;
     if (EcsShouldReport(reports)) {
       logger.Err("KillEntity: entity " + std::to_string(entityId) +

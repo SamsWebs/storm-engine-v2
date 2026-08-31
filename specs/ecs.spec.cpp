@@ -49,6 +49,21 @@ public:
   SpecOverflowSystem() { RequireComponent<SpecOverflowComponent>(); }
 };
 
+// Test seam for the generation-wrap spec below. Reaching 2^32 kills for real
+// is not something a test can do; this pre-seeds Registry's private
+// generation table so the next CreateEntity for that id is stamped right up
+// against the wrap, the same way SpecComponentIdCounter above borrows
+// IComponent::nextId.
+struct EcsGenerationTestSeam {
+  static void SeedGeneration(Registry &registry, std::size_t id,
+                             std::uint32_t generation) {
+    if (id >= registry.generations.size()) {
+      registry.generations.resize(id + 1, 1);
+    }
+    registry.generations[id] = generation;
+  }
+};
+
 static std::size_t SpecErrorCount() {
   std::size_t errors = 0;
   for (const auto &entry : Logger::messages) {
@@ -826,6 +841,128 @@ Describe(GenerationSpec) {
 
     Assert::That(registry.HasComponent<SpecMana>(second), Equals(true));
     Assert::That(registry.GetComponent<SpecMana>(second).value, Equals(42));
+    Assert::That(SpecErrorCount(),
+                 Is().GreaterThanOrEqualTo(static_cast<std::size_t>(1)));
+    Logger::messages.clear();
+  };
+
+  // KNOWN_ISSUES item 1: the increment that bumps a killed id's generation on
+  // its way back to the free list must skip 0, the reserved never-valid
+  // value. Without a clamp, an id killed while its generation sits at
+  // 0xFFFFFFFF wraps the *next* recycle onto generation 0 — the exact value a
+  // hand-built Entity(id) carries by default — so that fabricated handle
+  // starts comparing equal to whatever live entity next takes the id.
+  It(should_skip_generation_zero_on_wrap_at_uint32_max) {
+    Registry registry;
+
+    // First CreateEntity() with an empty registry always takes id 0.
+    EcsGenerationTestSeam::SeedGeneration(registry, 0, 0xFFFFFFFFu);
+
+    Entity first = registry.CreateEntity();
+    Assert::That(first.GetId(), Equals(static_cast<std::size_t>(0)));
+    Assert::That(first.GetGeneration(), Equals(0xFFFFFFFFu));
+    registry.Update();
+
+    first.Kill();
+    registry.Update(); // ++generations[0] would wrap 0xFFFFFFFF -> 0
+
+    Entity recycled = registry.CreateEntity(); // takes id 0 back
+    registry.Update();
+
+    Assert::That(recycled.GetId(), Equals(static_cast<std::size_t>(0)));
+    // Must be 1 (skipping the reserved 0), not 0.
+    Assert::That(recycled.GetGeneration(), Equals(1u));
+
+    // A hand-built handle for this id still carries generation 0 by default,
+    // and must stay stale — not compare equal to the live, recycled entity.
+    Entity fabricated(0);
+    Assert::That(registry.IsAlive(fabricated), Equals(false));
+    Assert::That(fabricated == recycled, Equals(false));
+
+    // The original stale handle (generation 0xFFFFFFFF) must also stay dead.
+    Assert::That(registry.IsAlive(first), Equals(false));
+    Assert::That(first == recycled, Equals(false));
+  };
+};
+
+// TagEntity, GroupEntity and AddEntityToSystems used to be the three ECS
+// mutators AddComponent/RemoveComponent's IsAlive gate did not cover. Each
+// case here recycles an id onto a live entity, then drives the stale handle
+// through the mutator and asserts the *live* entity's state is exactly what
+// it was before — not merely that the call didn't crash.
+Describe(StaleHandleMutationSpec) {
+  It(should_not_steal_the_live_entitys_tag_through_a_stale_tag) {
+    Registry registry;
+    Entity first = registry.CreateEntity();
+    first.Kill();
+    registry.Update(); // id freed, `first` is now stale
+
+    Entity second = registry.CreateEntity(); // same id, new generation
+    registry.TagEntity(second, "player");
+
+    Logger::messages.clear();
+    // Stale: `first`'s generation no longer matches `second`'s. Pre-fix,
+    // TagEntity's entityPerTag.insert_or_assign overwrote "player" with the
+    // stale handle regardless, so the live entity silently lost its tag.
+    registry.TagEntity(first, "player");
+
+    Assert::That(registry.EntityHasTag(second, "player"), Equals(true));
+    Assert::That(registry.DoesTagExist("player"), Equals(true));
+    Assert::That(registry.GetEntityByTag("player") == second, Equals(true));
+    Assert::That(SpecErrorCount(),
+                 Is().GreaterThanOrEqualTo(static_cast<std::size_t>(1)));
+    Logger::messages.clear();
+  };
+
+  It(should_not_duplicate_group_membership_through_a_stale_group) {
+    Registry registry;
+    Entity first = registry.CreateEntity();
+    first.Kill();
+    registry.Update(); // id freed, `first` is now stale
+
+    Entity second = registry.CreateEntity(); // same id, new generation
+    registry.GroupEntity(second, "enemies");
+
+    Logger::messages.clear();
+    // Stale: pre-fix this emplaced `first` into the group's
+    // set<Entity, EntityOrder> alongside `second` — keyed on (id,
+    // generation), so it does not dedupe against the live occupant that
+    // already holds the id, and a dead handle was handed to the game.
+    registry.GroupEntity(first, "enemies");
+
+    std::vector<Entity> members = registry.GetEntitiesByGroup("enemies");
+    Assert::That(members.size(), Equals(static_cast<std::size_t>(1)));
+    Assert::That(members[0] == second, Equals(true));
+    Assert::That(SpecErrorCount(),
+                 Is().GreaterThanOrEqualTo(static_cast<std::size_t>(1)));
+    Logger::messages.clear();
+  };
+
+  It(should_not_add_a_stale_entity_to_systems) {
+    Registry registry;
+    registry.AddSystem<SpecHealthSystem>();
+
+    Entity first = registry.CreateEntity();
+    registry.AddComponent<SpecHealth>(first, 1);
+    registry.Update(); // admits `first` into SpecHealthSystem
+    first.Kill();
+    registry.Update(); // removes `first`, frees its id
+
+    Entity second = registry.CreateEntity(); // same id, new generation
+    registry.AddComponent<SpecHealth>(second, 2);
+    registry.Update(); // admits `second` into SpecHealthSystem
+
+    Logger::messages.clear();
+    // Stale: pre-fix this push_backed `first` into the system's entity
+    // vector unconditionally, permanently — removal only happens for
+    // entities in entitiesToBeKilled, and a stale handle is never queued
+    // there, so RenderSystem/ContactSystem/etc. would iterate it forever.
+    registry.AddEntityToSystems(first);
+
+    auto &system = registry.GetSystem<SpecHealthSystem>();
+    Assert::That(system.GetSystemEntities().size(),
+                 Equals(static_cast<std::size_t>(1)));
+    Assert::That(system.GetSystemEntities()[0] == second, Equals(true));
     Assert::That(SpecErrorCount(),
                  Is().GreaterThanOrEqualTo(static_cast<std::size_t>(1)));
     Logger::messages.clear();

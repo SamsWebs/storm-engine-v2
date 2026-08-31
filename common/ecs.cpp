@@ -400,6 +400,24 @@ void Registry::KillEntity(Entity entity) {
 void Registry::AddEntityToSystems(Entity entity) {
   const auto entityId = entity.GetId();
 
+  // Same guard as AddComponent/RemoveComponent (ecs.h): a stale handle whose
+  // id has since been recycled would otherwise pass every check below —
+  // they're all indexed by id alone — and get the new, live occupant added
+  // to a system a second time, or (worse) get an entity that is not the
+  // system's business added at all. Public API, and the only path that
+  // permanently corrupts state: nothing ever removes an entry here except a
+  // matching entitiesToBeKilled pass, and a stale handle never goes through
+  // that, so RenderSystem/ContactSystem/etc. would iterate it forever.
+  if (!IsAlive(entity)) {
+    static thread_local unsigned int staleReports = 0;
+    if (EcsShouldReport(staleReports)) {
+      logger.Err("AddEntityToSystems: entity " + std::to_string(entityId) +
+                 " " + ComponentMissDescription(ComponentMiss::Stale) +
+                 "; ignoring" + EcsSuppressionNote(staleReports));
+    }
+    return;
+  }
+
   if (entityId >= entityComponentSignatures.size()) {
     static thread_local unsigned int reports = 0;
     if (EcsShouldReport(reports)) {
@@ -451,7 +469,14 @@ void Registry::Update() {
 
     // Bump before the id is reusable: every handle to the old entity becomes
     // detectably stale at exactly the moment the id can be handed out again.
-    ++generations[entity.GetId()];
+    // 0 is the reserved never-valid value (a hand-built Entity(id) defaults
+    // to it), so skip it on wrap: landing on 0 would make every fabricated
+    // handle for this id compare equal to whichever live entity takes it
+    // next. At one increment per id per Update() call this is reachable —
+    // KNOWN_ISSUES item 1 — so the clamp is not defensive dead code.
+    if (++generations[entity.GetId()] == 0) {
+      generations[entity.GetId()] = 1;
+    }
 
     // Make the entity id available to be reused
     freeIds.push_back(entity.GetId());
@@ -459,6 +484,22 @@ void Registry::Update() {
   entitiesToBeKilled.clear();
 }
 void Registry::TagEntity(Entity entity, const std::string &tag) {
+  // Same guard as AddComponent/RemoveComponent (ecs.h): a stale handle whose
+  // id has since been recycled would otherwise pass straight through to
+  // entityPerTag.insert_or_assign below and silently steal the tag away from
+  // whatever live entity now holds that id — RemoveEntityTag's generation-
+  // aware scan protects the live entity's *own* previous tag, not this one.
+  const auto entityId = entity.GetId();
+  if (!IsAlive(entity)) {
+    static thread_local unsigned int staleReports = 0;
+    if (EcsShouldReport(staleReports)) {
+      logger.Err("TagEntity: entity " + std::to_string(entityId) + " " +
+                 ComponentMissDescription(ComponentMiss::Stale) +
+                 "; ignoring" + EcsSuppressionNote(staleReports));
+    }
+    return;
+  }
+
   // One tag per entity, one entity per tag — last write wins on both sides.
   RemoveEntityTag(entity); // drop this entity's previous tag, if any
 
@@ -510,6 +551,22 @@ void Registry::RemoveEntityTag(Entity entity) {
 }
 
 void Registry::GroupEntity(Entity entity, const std::string &group) {
+  // Same guard as AddComponent/RemoveComponent (ecs.h): a stale handle whose
+  // id has since been recycled would otherwise be emplaced into the group's
+  // set below — set<Entity, EntityOrder> is keyed on (id, generation), so it
+  // does not dedupe against the live occupant that may already be a member,
+  // and the group ends up holding a dead handle a game iterates forever.
+  const auto entityId = entity.GetId();
+  if (!IsAlive(entity)) {
+    static thread_local unsigned int staleReports = 0;
+    if (EcsShouldReport(staleReports)) {
+      logger.Err("GroupEntity: entity " + std::to_string(entityId) + " " +
+                 ComponentMissDescription(ComponentMiss::Stale) +
+                 "; ignoring" + EcsSuppressionNote(staleReports));
+    }
+    return;
+  }
+
   // One group per entity — re-grouping moves the entity, so a later kill
   // doesn't need to find it in more than one group's set.
   RemoveEntityGroup(entity);

@@ -204,6 +204,60 @@ It(carries_the_manifold_on_the_begin_callback) {
   Assert::That(depth, EqualsWithDelta(2.0, 0.001));
 }
 
+It(fires_begin_for_a_recycled_entity_that_replaces_a_previous_participant) {
+  // The PairKeyOrder half of the recycled-id fix: PairKey carries both
+  // sides' generations, so a pair recorded last frame is told apart from a
+  // same-id pair that only looks like it because one side's id was recycled
+  // in between. Reducing PairKeyOrder to id-only comparison leaves the rest
+  // of the suite green - specs/systems/contactEvents.spec.cpp otherwise only
+  // covers the FindLive/end half of this fix - but it silently drops this
+  // begin event: the recycled pair's key looks equal, by id alone, to the
+  // one already sitting in `previous`, so the binary_search against
+  // `previous` finds a "match" and Update() never calls onBegin for it.
+  Registry registry;
+  registry.AddSystem<ContactSystem>();
+
+  Entity a = MakeEventCollider(registry, {0, 0});
+  Entity b = MakeEventCollider(registry, {5, 5});
+
+  registry.Update();
+  auto &system = registry.GetSystem<ContactSystem>();
+
+  int begins = 0;
+  system.SetOnBeginContact([&begins](const Contact &) { ++begins; });
+
+  system.Update(); // frame 1: a and b overlap, begin fires once
+  Assert::That(begins, Equals(1));
+
+  a.Kill();
+  registry.Update(); // a's id freed, generation bumped
+
+  // Recycle a's id onto a new participant that still overlaps b.
+  Entity a2 = MakeEventCollider(registry, {0, 2});
+  registry.Update(); // admits a2 into ContactSystem
+
+  Assert::That(a2.GetId(), Equals(a.GetId()));
+  Assert::That(a2.GetGeneration() != a.GetGeneration(), Equals(true));
+
+  Entity begunA(0);
+  Entity begunB(0);
+  system.SetOnBeginContact([&begins, &begunA, &begunB](const Contact &c) {
+    ++begins;
+    begunA = c.a;
+    begunB = c.b;
+  });
+
+  system.Update(); // frame 2: (a2, b) is a NEW pair - must fire begin again
+
+  Assert::That(begins, Equals(2));
+  Assert::That(begunA.GetId() == a2.GetId() &&
+                   begunA.GetGeneration() == a2.GetGeneration(),
+               Equals(true));
+  Assert::That(begunB.GetId() == b.GetId() &&
+                   begunB.GetGeneration() == b.GetGeneration(),
+               Equals(true));
+}
+
 It(runs_without_callbacks_installed) {
   Registry registry;
   registry.AddSystem<ContactSystem>();

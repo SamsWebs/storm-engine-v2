@@ -269,6 +269,14 @@ public:
 ////////////////////////////////////////////////////
 class Registry {
 private:
+  // Test seam: lets a spec pre-seed or read the private generation table
+  // directly, so a wrap at 0xFFFFFFFF can be exercised without spinning 2^32
+  // real CreateEntity/KillEntity cycles. Same trick as IComponent::nextId
+  // (protected, reached through a derived spec struct) applied via
+  // friendship instead, since `generations` is an instance member, not a
+  // static one a subclass could inherit into scope.
+  friend struct EcsGenerationTestSeam;
+
   std::size_t numEntities = 0;
 
   // Vector of component pools, each pool contains all the

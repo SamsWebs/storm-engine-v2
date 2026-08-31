@@ -2,7 +2,7 @@
 
 Written against what 2.0.0 actually shipped, not what was planned for it.
 
-2.0.0 is the release that spends the whole major-version budget at once. Nine
+2.0.0 is the release that spends the whole major-version budget at once. Ten
 breaking changes land together, deliberately, so that the traps they fix are
 gone for good rather than one per release for the next two years.
 
@@ -205,7 +205,24 @@ kind of change rather than the safe one.
 `sizeof(Registry)` and `sizeof(System)` with it — a second ABI break rather than
 a recompile.
 
-## 9. `AddSystem<T>()` takes its arguments by forwarding reference
+## 9. `GameStateMachine` is no longer copyable
+
+```cpp
+GameStateMachine machine;
+GameStateMachine copy = machine;   // 2.0.0: compile error
+```
+
+It owns raw `GameState` pointers in two vectors and frees them in `clean()`, so
+a copy gave two machines owning the same pointers and the second `clean()` freed
+what the first already had. The destructor is empty, so this never appeared at
+scope exit — it needed both machines to tick, which is how it survived every
+example.
+
+Hold it by value as a member (what every game already does) or by reference.
+Nothing in the engine, the examples or the starter template copied one, so this
+is a compile error you are unlikely to hit.
+
+## 10. `AddSystem<T>()` takes its arguments by forwarding reference
 
 ```cpp
 registry.AddSystem<MySystem>(MyConfig{...});   // 1.x: would not compile
@@ -237,6 +254,11 @@ do.
 - **`AdmitExistingEntitiesTo(system)` / `AdmitExistingEntities<T>()` and
   `CountEntitiesMissedBySystem(system)`** — the retrofit for a system registered
   too late, and the way to find out whether that happened.
+- **A stale handle passed to `System::AddEntityToSystem()` is rejected** rather
+  than added. That method is public, so a game holding a `System&` bypassed the
+  `IsAlive` gate on `Registry::AddEntityToSystems` — and nothing removes such an
+  entry, so the system iterated it every frame forever.
+
 - **`GetConnectedClientIds()`** and a configurable per-address connection cap
   (`kNetMaxClientsPerIp`) for internet play, where `GetClientCount()` was never a
   valid loop bound.

@@ -2,10 +2,25 @@ name: Build And Release Multiplatform
 
 on:
   push:
-    branches:
-      - main
+    # Releases come from a deliberately pushed tag, never from a merge.
+    #
+    # This used to also trigger on pushes to main, where the version job bumped
+    # the patch from the newest tag and pushed it. That made every merge a
+    # release, and it derived the number from tag history rather than from what
+    # the tree says it is - so merging a set of BREAKING changes published them
+    # as a patch, telling consumers it was safe to relink when relinking would
+    # hand them misaligned memory. It happened: v1.3.2 was auto-created over the
+    # 2.0.0 wave-one merge and had to be deleted before anyone fetched it.
+    #
+    # pr-validate.yml still builds and tests every PR, but only linux/amd64 in
+    # a debug profile. The arm64/QEMU leg, the release-profile build, strip,
+    # DESTDIR staging and the dpkg-shlibdeps Depends check now run for the
+    # first time at tag push rather than on every merge -- so a break in those
+    # surfaces when you cut a release instead of when you open the PR. That is
+    # a real trade: worth a scheduled packaging run or extending pr-validate to
+    # the matrix. Tracked in docs/ROADMAP.md.
     tags:
-      - 'v*.*.*'   # manually pushed major/minor tags build + release themselves
+      - 'v*.*.*'
   workflow_dispatch:  # manual button for rebuilding a release
 
 # Serialize runs so two quick merges (or a branch+tag push) can't race the
@@ -16,12 +31,16 @@ concurrency:
 
 jobs:
   # ── Determine version ────────────────────────────────────────────────────────
-  # If the merge commit already carries a tag (major/minor bump you pushed
-  # manually), use it.  Otherwise find the latest vX.Y.Z tag and bump patch.
+  # The tag being built is the version. The patch-bump fallback is kept only for
+  # workflow_dispatch, which can run without a tag; a tag push always takes the
+  # first branch.
   version:
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      # read, not write: nothing here pushes any more. The tag-minting
+      # fallback that needed write is gone, and its absence is the point --
+      # a job that cannot push a tag cannot invent a release.
+      contents: read
     outputs:
       version: ${{ steps.calc.outputs.version }}
 
@@ -31,42 +50,93 @@ jobs:
         with:
           fetch-depth: 0
 
+      # Belt and braces against the trigger change above.
+      #
+      # This is a POLICY gate, not a build input. Makefile.debian's VERSION is
+      # metadata (see its own comment: "pkg-config reports it, nothing links
+      # against it"), and the build overrides it below with the tag's version
+      # anyway. What it records is whether the tree considers itself finished:
+      # a tilde or a hyphen marks a pre-release, and 2.0.0~dev sorts below
+      # 2.0.0 to both dpkg and pkg-config. If the tree says it is not ready, a
+      # pushed tag does not make it ready.
+      #
+      # It must fail CLOSED. An earlier version of this step parsed with a
+      # narrow sed and let `case` fall through on an empty result, so a
+      # `VERSION :=` form, a leading space, or a renamed file silently passed
+      # and would have shipped the pre-release.
+      - name: Refuse to release a pre-release version
+        run: |
+          set -euo pipefail
+
+          if [ ! -f Makefile.debian ]; then
+            echo "::error::Makefile.debian not found; cannot verify the tree is releasable."
+            exit 1
+          fi
+
+          # Accepts `VERSION = x`, `?=`, `:=`, `::=`, and leading whitespace.
+          TREE_VERSION=$(sed -nE 's/^[[:space:]]*VERSION[[:space:]]*:?:?\??=[[:space:]]*([^[:space:]#]+).*/\1/p' \
+                         Makefile.debian | head -1)
+
+          if [ -z "$TREE_VERSION" ]; then
+            echo "::error::Could not read VERSION from Makefile.debian. Refusing to release rather than assuming it is releasable."
+            exit 1
+          fi
+
+          echo "Makefile.debian declares VERSION=${TREE_VERSION}"
+
+          case "$TREE_VERSION" in
+            *"~"*|*-*)
+              echo "::error::Refusing to release: VERSION is '${TREE_VERSION}', a pre-release. Set a final version before tagging."
+              exit 1
+              ;;
+          esac
+
       - name: Calculate version
         id: calc
         run: |
-          # Check whether the current commit is already tagged with vX.Y.Z
-          EXISTING=$(git tag --points-at HEAD | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1)
+          set -euo pipefail
 
-          if [ -n "$EXISTING" ]; then
-            # You pushed a manual major/minor tag — use it as-is
-            VERSION="${EXISTING#v}"
-            echo "Using existing tag: $EXISTING"
+          # A tag push is authoritative: use the ref being built, not a search.
+          # Searching by refname sort would resolve v1.9.9 over a freshly
+          # pushed v2.0.0 on the same commit, and publish the new artifacts to
+          # the old release.
+          if [ "${GITHUB_REF_TYPE:-}" = "tag" ]; then
+            EXISTING="${GITHUB_REF_NAME}"
           else
-            # Find the latest vX.Y.Z tag anywhere in history
-            LATEST=$(git tag --list 'v*.*.*' \
-              | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
-              | sort -V | tail -1)
-
-            if [ -z "$LATEST" ]; then
-              # No tags yet — start at v0.0.1
-              VERSION="0.0.1"
-            else
-              # Bump the patch component
-              MAJOR=$(echo "$LATEST" | cut -d. -f1 | tr -d 'v')
-              MINOR=$(echo "$LATEST" | cut -d. -f2)
-              PATCH=$(echo "$LATEST" | cut -d. -f3)
-              VERSION="${MAJOR}.${MINOR}.$((PATCH + 1))"
+            # workflow_dispatch. Rebuilding an existing release is fine;
+            # minting a NEW one from the button is what produced the deleted
+            # v1.3.2, so require the dispatched ref to carry a tag.
+            #
+            # The `|| true` matters: grep exits 1 when nothing matches, which
+            # is the expected case here, and under `-o pipefail` that aborts
+            # the assignment before the message below can print. The guard
+            # still failed closed without it, but the operator saw a bare exit
+            # code instead of being told what to do.
+            EXISTING=$(git tag --points-at HEAD \
+                       | { grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' || true; } \
+                       | head -1)
+            if [ -z "$EXISTING" ]; then
+              echo "::error::workflow_dispatch on a commit with no vX.Y.Z tag. This workflow rebuilds an existing release; it does not create one. Push a tag deliberately, or dispatch against a tag ref."
+              exit 1
             fi
-
-            echo "Bumping from ${LATEST:-none} → v${VERSION}"
-
-            # Create and push the new tag
-            git config user.name  "github-actions[bot]"
-            git config user.email "github-actions[bot]@users.noreply.github.com"
-            git tag "v${VERSION}"
-            git push origin "v${VERSION}"
           fi
 
+          # Validate the TAG, not just the tree.
+          #
+          # The trigger filter `v*.*.*` is an fnmatch glob, not a regex: `*`
+          # matches any character except `/`, so `v2.0.0-rc1` matches it and
+          # fires this workflow. Before this job trusted GITHUB_REF_NAME it
+          # searched with this same strict regex, which filtered such tags out
+          # by accident. Taking the ref directly removed that filter and left
+          # a pre-release tag able to publish as a stable release, with
+          # `prerelease: false`, whenever the tree's own VERSION was final.
+          if ! printf '%s' "$EXISTING" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::Refusing to release '${EXISTING}': not a final vX.Y.Z tag. Pre-release tags (v2.0.0-rc1, v2.0.0~rc1) are rejected here because this workflow publishes with prerelease: false."
+            exit 1
+          fi
+
+          VERSION="${EXISTING#v}"
+          echo "Releasing ${EXISTING}"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 
   # ── Linux packages ──────────────────────────────────────────────────────────

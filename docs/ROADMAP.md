@@ -203,9 +203,30 @@ different hat.
 Verified against a staging install (`make install DESTDIR=…`) rather than by
 overwriting `/usr/local`: all nine desktop examples build and link, the editor
 compiles all 17 objects, and the starter template in `template/` builds through
-pkg-config. `examples/nx-platformer` and `examples/android-platformer` were
-edited the same way but **not** built — neither toolchain is on this machine,
-and CI does not cover them either.
+pkg-config.
+
+`examples/nx-platformer` was edited the same way and then actually **built**
+with devkitPro, which turned up two bugs that had nothing to do with
+namespacing and everything to do with the tree never being built:
+
+- The Makefile passed `-I$(TOPDIR)/../../vendor` intending to supply glm, but
+  glm is at `vendor/android/glm`, so `<glm/glm.hpp>` resolved to
+  `vendor/glm/glm.hpp`, which does not exist — and devkitPro ships no glm
+  portlib. The build failed on the first engine header it reached. The desktop
+  build hid it completely: there glm comes from the system `/usr/include`,
+  which a cross build must not use.
+- `VPATH` searches for **targets** as well as prerequisites, and
+  `include/stormengine2` is a symlink to `common/`, where the desktop build
+  leaves its x86-64 `.o` files. Make found `common/ecs.o` while looking for the
+  aarch64 `ecs.o`, decided the target was satisfied, never compiled it, and
+  passed a bare name to the linker. Six engine translation units silently went
+  unbuilt and the error blamed `ld`. Narrowed to per-pattern `vpath`, and
+  verified by rebuilding with the desktop objects deliberately present.
+
+The namespace edits made blind in that tree turned out to be correct — but that
+was luck rather than verification, and the two bugs above are what "edited but
+never built" actually costs. `examples/android-platformer` is still unbuilt:
+the NDK is not on this machine, so its edits remain reasoned, not tested.
 
 ### 7. Input action mapping — **DONE**
 

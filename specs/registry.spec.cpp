@@ -2,10 +2,10 @@
 
 #include <new>
 #include <stdexcept>
-#include <thread>
 
 #include "../common/ecs.h"
 #include "../common/logger.h"
+#include "support/freshDiagnosticBudget.h"
 
 using namespace igloo;
 
@@ -346,12 +346,11 @@ Describe(RegistrySpec) {
       // ABI break, tracked as P5 in docs/TECH_DEBT.md. Now IsAlive checks the
       // generation, so the stale kill below is rejected instead.
       //
-      // KillEntity's "not alive" diagnostic is throttled by a thread_local
-      // counter (see common/ecs.cpp) shared with every other spec that
-      // exercises this exact rejection on the main thread — by the time this
-      // case runs, that budget is normally already spent. Doing the stale
-      // kill on a fresh thread gives it its own, untouched budget, the same
-      // way MissingUpdateSpec above does for the ~Registry throttle.
+      // KillEntity's "not alive" diagnostic is throttled by a counter shared
+      // with every other spec that exercises this exact rejection on the
+      // main thread — see OnFreshDiagnosticBudget (specs/support/), which
+      // runs the stale kill below on a fresh thread so it gets its own,
+      // untouched budget.
       Registry registry;
       registry.AddSystem<PositionSystem>();
 
@@ -369,10 +368,10 @@ Describe(RegistrySpec) {
           Equals(1u));
 
       Logger::messages.clear();
-      std::thread([&] {
+      OnFreshDiagnosticBudget([&] {
         registry.KillEntity(doomed); // stale, but indistinguishable from
                                      // `recycled` by id alone
-      }).join();
+      });
       registry.Update();
 
       // The stale kill must not touch the new, live entity.
@@ -574,17 +573,16 @@ Describe(LateSystemRegistrationSpec) {
 // Update(); on the main thread that budget of ECS_MAX_DIAGNOSTIC_REPORTS (4)
 // is normally spent well before this Describe runs. The two cases below
 // exist specifically to exercise this diagnostic, so each does its
-// create/destroy on a fresh std::thread: a new thread gets its own,
-// untouched instance of the thread_local counter, independent of whatever
-// the main thread has already reported.
+// create/destroy inside OnFreshDiagnosticBudget (specs/support/) — see that
+// helper for why a fresh thread, not a reset seam, is the right shape here.
 Describe(MissingUpdateSpec) {
   It(should_report_a_registry_destroyed_without_ever_flushing) {
     Logger::messages.clear();
-    std::thread([] {
+    OnFreshDiagnosticBudget([] {
       Registry registry;
       (void)registry.CreateEntity();
       (void)registry.CreateEntity();
-    }).join(); // destroyed here, Update() never called
+    }); // destroyed here, Update() never called
 
     Assert::That(SpecRegistryErrorCount(),
                  Is().GreaterThanOrEqualTo(static_cast<std::size_t>(1)));
@@ -636,16 +634,16 @@ Describe(MissingUpdateSpec) {
     // the first's updateCalls and the diagnostic silently stops working for
     // it. Deleting the erase(this) line MUST fail this case.
     //
-    // Runs on a fresh thread (see the comment above MissingUpdateSpec) so the
-    // shared missingUpdateReports throttle has its own untouched budget,
-    // regardless of what the main thread has already reported elsewhere in
-    // the suite. Assert::That stays on the main thread: an uncaught
-    // assertion failure inside the spawned thread would call std::terminate
-    // instead of failing the case.
+    // Runs via OnFreshDiagnosticBudget (see the comment above
+    // MissingUpdateSpec) so the shared missingUpdateReports throttle has its
+    // own untouched budget, regardless of what the main thread has already
+    // reported elsewhere in the suite. Assert::That stays on the main
+    // thread: an uncaught assertion failure inside the spawned thread would
+    // call std::terminate instead of failing the case.
     alignas(Registry) unsigned char storage[sizeof(Registry)];
     bool addressReused = false;
 
-    std::thread([&] {
+    OnFreshDiagnosticBudget([&] {
       Registry *first = new (storage) Registry();
       (void)first->CreateEntity();
       first->Update(); // marks this address as having flushed
@@ -659,7 +657,7 @@ Describe(MissingUpdateSpec) {
       (void)second->CreateEntity();
       second->~Registry(); // never flushed — must report, despite `first`
                            // having flushed
-    }).join();
+    });
 
     // Assert the address was actually reused, so the case cannot pass by
     // testing nothing.

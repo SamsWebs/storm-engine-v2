@@ -66,7 +66,7 @@ std::size_t Entity::GetId() const { return id; }
 // it into a segfault with no diagnostic.
 void Entity::Kill() {
   if (registry == nullptr) {
-    static unsigned int reports = 0;
+    static thread_local unsigned int reports = 0;
     if (EcsShouldReport(reports)) {
       EcsReportErr("Entity::Kill: entity " + std::to_string(id) +
                    " has no registry; ignoring" + EcsSuppressionNote(reports));
@@ -78,7 +78,7 @@ void Entity::Kill() {
 
 void Entity::Tag(const std::string &tag) {
   if (registry == nullptr) {
-    static unsigned int reports = 0;
+    static thread_local unsigned int reports = 0;
     if (EcsShouldReport(reports)) {
       EcsReportErr("Entity::Tag: entity " + std::to_string(id) +
                    " has no registry; ignoring" + EcsSuppressionNote(reports));
@@ -97,7 +97,7 @@ bool Entity::HasTag(const std::string &tag) const {
 
 void Entity::Group(const std::string &group) {
   if (registry == nullptr) {
-    static unsigned int reports = 0;
+    static thread_local unsigned int reports = 0;
     if (EcsShouldReport(reports)) {
       EcsReportErr("Entity::Group: entity " + std::to_string(id) +
                    " has no registry; ignoring" + EcsSuppressionNote(reports));
@@ -374,13 +374,7 @@ void Registry::KillEntity(Entity entity) {
     // thread_local so a spec asserting on this diagnostic can get an
     // untouched budget by running the triggering call on a fresh thread,
     // the same idiom used for the ~Registry throttle (missingUpdateReports,
-    // above). The throttles in this file are a mix: this one and the
-    // "already pending kill" counter just below are thread_local because a
-    // spec exercises them that way; AddEntityToSystems' (line 410),
-    // GetEntitiesByGroup's (line 543), and Entity::Kill/Tag/Group's (lines
-    // 69, 81, 100) are still plain static, since nothing currently asserts
-    // on their message counts. Converting those is a separate decision, not
-    // an implicit guarantee made here.
+    // above) — see EcsShouldReport's comment in ecs.h.
     static thread_local unsigned int reports = 0;
     if (EcsShouldReport(reports)) {
       logger.Err("KillEntity: entity " + std::to_string(entityId) +
@@ -407,7 +401,7 @@ void Registry::AddEntityToSystems(Entity entity) {
   const auto entityId = entity.GetId();
 
   if (entityId >= entityComponentSignatures.size()) {
-    static unsigned int reports = 0;
+    static thread_local unsigned int reports = 0;
     if (EcsShouldReport(reports)) {
       logger.Err("AddEntityToSystems: entity " + std::to_string(entityId) +
                  " is out of range; ignoring" + EcsSuppressionNote(reports));
@@ -503,7 +497,10 @@ const Entity *Registry::TryGetEntityByTag(const std::string &tag) const {
 
 void Registry::RemoveEntityTag(Entity entity) {
   // No reverse index: scan entityPerTag for the entry this entity holds.
-  // Runs once per entity at kill time, alongside work that is already O(n).
+  // Runs at kill time and on every TagEntity() call (TagEntity calls this
+  // first, to drop the entity's previous tag); entityPerTag holds one entry
+  // per distinct tag, so this is a scan of the tag count, not the entity
+  // count.
   for (auto it = entityPerTag.begin(); it != entityPerTag.end(); ++it) {
     if (it->second == entity) {
       entityPerTag.erase(it);
@@ -540,7 +537,7 @@ Registry::GetEntitiesByGroup(const std::string &group) const {
   // process. Matches AssetStore::GetTexture's miss behaviour.
   auto it = entitiesPerGroup.find(group);
   if (it == entitiesPerGroup.end()) {
-    static unsigned int reports = 0;
+    static thread_local unsigned int reports = 0;
     if (EcsShouldReport(reports)) {
       logger.Err("GetEntitiesByGroup: group '" + group +
                  "' does not exist; returning an empty list" +
@@ -566,7 +563,10 @@ bool Registry::DoesGroupExist(const std::string &group) const {
 
 void Registry::RemoveEntityGroup(Entity entity) {
   // No reverse index: scan entitiesPerGroup for the set holding this entity.
-  // Runs once per entity at kill time, alongside work that is already O(n).
+  // Runs at kill time and on every GroupEntity() call (GroupEntity calls this
+  // first, to drop the entity from its previous group); this is a scan of
+  // the group-name count, each doing a set find/erase, not a scan of the
+  // entity count.
   for (auto &groupEntry : entitiesPerGroup) {
     auto entityInGroup = groupEntry.second.find(entity);
     if (entityInGroup != groupEntry.second.end()) {

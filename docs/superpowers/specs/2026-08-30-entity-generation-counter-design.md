@@ -65,8 +65,11 @@ The cost is smaller than it looks, because most lookups were never reverse looku
 | `RemoveEntityTag(entity)` | reverse map probe | scan `entityPerTag` |
 | `RemoveEntityGroup(entity)` | reverse map probe | scan `entitiesPerGroup` |
 
-Only the two removal paths become scans, they run once per entity at kill time, and
-they already sit alongside O(n) work. Exactly one in-tree consumer touches the reverse
+Only the two removal paths become scans, and each also runs on the *creation* side
+(`TagEntity`/`GroupEntity` call the matching removal first, to drop any previous
+tag/group), not just at kill time. `entityPerTag`/`entitiesPerGroup` hold one entry
+per distinct tag/group name, not one per entity, so this is a scan of the tag/group
+count. Exactly one in-tree consumer touches the reverse
 direction at all (`examples/jrpg/src/states/playState.cpp:556`, `HasTag("player")`),
 and that one is an O(1) probe after the change.
 

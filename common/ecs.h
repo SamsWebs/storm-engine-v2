@@ -35,6 +35,13 @@ constexpr unsigned int ECS_MAX_DIAGNOSTIC_REPORTS = 4;
 // Gate a diagnostic on this *before* building its message — assembling the
 // message is most of the cost. `counter` must be a static owned by a single
 // call site, so that distinct failures throttle independently.
+//
+// Every throttle counter in the engine — every call site in this header and
+// in common/ecs.cpp, and common/systems/render.h's — is `static thread_local`,
+// not plain `static`, so a spec that needs a fresh budget for the diagnostic
+// it is asserting on can get one deterministically by running the triggering
+// call on a fresh thread, regardless of what the main thread has already
+// spent.
 inline bool EcsShouldReport(unsigned int &counter) {
   if (counter >= ECS_MAX_DIAGNOSTIC_REPORTS) {
     return false;
@@ -577,6 +584,21 @@ void Registry::AddComponent(Entity entity, Targs &&... args) {
     return;
   }
 
+  // A stale handle's id may since have been recycled to a different, live
+  // entity - checked ahead of the range check below for the same reason
+  // FindComponent checks it first: every other guard here is indexed by id
+  // alone, so without this one a stale handle would pass them all and write
+  // into the live occupant's pool slot.
+  if (!IsAlive(entity)) {
+    static thread_local unsigned int staleReports = 0;
+    if (EcsShouldReport(staleReports)) {
+      logger.Err("AddComponent: entity " + std::to_string(entityId) + " " +
+                 ComponentMissDescription(ComponentMiss::Stale) +
+                 "; ignoring" + EcsSuppressionNote(staleReports));
+    }
+    return;
+  }
+
   if (entityId >= entityComponentSignatures.size()) {
     static thread_local unsigned int rangeReports = 0;
     if (EcsShouldReport(rangeReports)) {
@@ -642,6 +664,19 @@ template <typename TComponent> void Registry::RemoveComponent(Entity entity) {
 
   static thread_local unsigned int idReports = 0;
   if (!EcsComponentIdIsValid(componentId, "RemoveComponent", idReports)) {
+    return;
+  }
+
+  // See the matching guard in AddComponent above: without it, a stale
+  // handle whose id has since been recycled would flip the live occupant's
+  // signature bit off, silently dropping a component it never had removed.
+  if (!IsAlive(entity)) {
+    static thread_local unsigned int staleReports = 0;
+    if (EcsShouldReport(staleReports)) {
+      logger.Err("RemoveComponent: entity " + std::to_string(entityId) + " " +
+                 ComponentMissDescription(ComponentMiss::Stale) +
+                 "; ignoring" + EcsSuppressionNote(staleReports));
+    }
     return;
   }
 

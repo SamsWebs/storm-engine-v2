@@ -119,11 +119,12 @@ public:
     std::vector<PairKey> current;
     current.reserve(contacts.size());
     for (const Contact &contact : contacts)
-      current.emplace_back(contact.a.GetId(), contact.b.GetId());
+      current.emplace_back(contact.a, contact.b);
 
     if (onBegin) {
       for (std::size_t i = 0; i < contacts.size(); ++i)
-        if (!std::binary_search(previous.begin(), previous.end(), current[i]))
+        if (!std::binary_search(previous.begin(), previous.end(), current[i],
+                                PairKeyOrder{}))
           onBegin(contacts[i]);
     }
 
@@ -132,16 +133,22 @@ public:
       std::sort(live.begin(), live.end(), EntityOrder{});
 
       for (const PairKey &key : previous) {
-        if (std::binary_search(current.begin(), current.end(), key))
+        if (std::binary_search(current.begin(), current.end(), key,
+                               PairKeyOrder{}))
           continue;
 
-        // A killed entity has no meaningful "end". Registry::Update() returns
-        // its id to the free list in the same pass that drops it from this
-        // system (common/ecs.cpp:241-244), so the id may already name a
-        // different entity - handing it back is KNOWN_ISSUES.md #1 exactly.
-        // Drop the pair silently instead.
-        const Entity *a = FindLive(live, key.first);
-        const Entity *b = FindLive(live, key.second);
+        // A killed entity has no meaningful "end", and its id may already
+        // have been recycled onto a different, live entity by the time this
+        // runs: Registry::Update() (common/ecs.cpp:439) returns a killed
+        // entity's id to the free list in the same pass that drops it from
+        // this system, and the next CreateEntity() can hand that id straight
+        // back out. `key` carries each side's generation alongside its id
+        // (PairKey), and FindLive compares the full Entity - id and
+        // generation together - via operator==, so a key naming a recycled
+        // id misses here instead of matching the new occupant. Drop the pair
+        // silently either way.
+        const Entity *a = FindLive(live, key.a);
+        const Entity *b = FindLive(live, key.b);
         if (a && b)
           onEnd(*a, *b);
       }
@@ -224,13 +231,39 @@ public:
   }
 
 private:
-  using PairKey = std::pair<std::size_t, std::size_t>;
+  // Carries both sides' generations alongside their ids, so a pair recorded
+  // last frame can be told apart from a same-id pair that only looks like it
+  // because one side's id was recycled in between. Entity already bundles id
+  // and generation with a generation-aware operator==, so a key is just a
+  // pair of Entity values, not a pair of raw ids.
+  struct PairKey {
+    Entity a;
+    Entity b;
+    PairKey(Entity a, Entity b) : a(a), b(b) {}
+  };
 
+  // Orders PairKey by (a's identity, then b's identity), each compared the
+  // same way EntityOrder compares a single Entity: id first, generation to
+  // break ties. Explicit, because Entity's operator< is deleted - see
+  // EntityOrder's own comment.
+  struct PairKeyOrder {
+    bool operator()(const PairKey &left, const PairKey &right) const {
+      if (!(left.a == right.a))
+        return EntityOrder{}(left.a, right.a);
+      return EntityOrder{}(left.b, right.b);
+    }
+  };
+
+  // Finds the live entity with the same id AND generation as `entity`. `live`
+  // holds at most one entity per id, so locating by id via lower_bound always
+  // lands on the right candidate (or none); the generation-aware
+  // Entity::operator== is what actually rejects a recycled id naming a
+  // different, newer entity.
   static const Entity *FindLive(const std::vector<Entity> &live,
-                                std::size_t id) {
+                                const Entity &entity) {
     auto found =
-        std::lower_bound(live.begin(), live.end(), Entity(id), EntityOrder{});
-    if (found == live.end() || found->GetId() != id)
+        std::lower_bound(live.begin(), live.end(), entity, EntityOrder{});
+    if (found == live.end() || !(*found == entity))
       return nullptr;
     return &(*found);
   }

@@ -1,9 +1,9 @@
 #include <igloo/igloo_alt.h>
-#include <thread>
 #include <type_traits>
 #include <typeinfo>
 
 #include "../common/ecs.h"
+#include "support/freshDiagnosticBudget.h"
 
 using namespace igloo;
 
@@ -581,13 +581,11 @@ Describe(EcsSpec) {
       // passed for a stale handle whose id had already been recycled; now
       // IsAlive checks the generation and the stale kill is rejected.
       //
-      // KillEntity's "not alive" diagnostic is throttled by a thread_local
-      // counter (see common/ecs.cpp) shared with every other spec that
-      // exercises this exact rejection on the main thread — by the time this
-      // case runs, that budget is normally already spent. Doing the stale
-      // kill on a fresh thread gives it its own, untouched budget, the same
-      // way registry.spec.cpp's MissingUpdateSpec does for the ~Registry
-      // throttle.
+      // KillEntity's "not alive" diagnostic is throttled by a counter shared
+      // with every other spec that exercises this exact rejection on the
+      // main thread — see OnFreshDiagnosticBudget (specs/support/), which
+      // runs the stale kill below on a fresh thread so it gets its own,
+      // untouched budget.
       Registry registry;
       registry.AddSystem<SpecHealthSystem>();
 
@@ -607,9 +605,9 @@ Describe(EcsSpec) {
           Equals(1u));
 
       Logger::messages.clear();
-      std::thread([&] {
+      OnFreshDiagnosticBudget([&] {
         registry.KillEntity(doomed); // stale handle, id already recycled
-      }).join();
+      });
       registry.Update();
 
       // The stale kill must not touch the new, live entity.
@@ -782,6 +780,52 @@ Describe(GenerationSpec) {
     Logger::messages.clear();
     Assert::That(registry.TryGetComponent<SpecMana>(first) == nullptr,
                  Equals(true));
+    Assert::That(SpecErrorCount(),
+                 Is().GreaterThanOrEqualTo(static_cast<std::size_t>(1)));
+    Logger::messages.clear();
+  };
+
+  // Every read (FindComponent, and so HasComponent/TryGetComponent/
+  // GetComponent) already gates on IsAlive. AddComponent and RemoveComponent
+  // did not: a stale handle whose id had been recycled wrote straight into
+  // the live occupant's pool slot and flipped its signature bit, silently.
+  It(should_not_write_the_live_entitys_component_through_a_stale_add) {
+    Registry registry;
+    Entity first = registry.CreateEntity();
+    first.Kill();
+    registry.Update();
+
+    Entity second = registry.CreateEntity(); // same id, new generation
+    registry.AddComponent<SpecMana>(second, SpecMana{42});
+    registry.Update();
+
+    Logger::messages.clear();
+    // Stale: `first`'s generation no longer matches. Pre-fix this overwrote
+    // `second`'s SpecMana in place.
+    registry.AddComponent<SpecMana>(first, SpecMana{999});
+
+    Assert::That(registry.GetComponent<SpecMana>(second).value, Equals(42));
+    Assert::That(SpecErrorCount(),
+                 Is().GreaterThanOrEqualTo(static_cast<std::size_t>(1)));
+    Logger::messages.clear();
+  };
+
+  It(should_not_remove_the_live_entitys_component_through_a_stale_remove) {
+    Registry registry;
+    Entity first = registry.CreateEntity();
+    first.Kill();
+    registry.Update();
+
+    Entity second = registry.CreateEntity(); // same id, new generation
+    registry.AddComponent<SpecMana>(second, SpecMana{42});
+    registry.Update();
+
+    Logger::messages.clear();
+    // Stale: pre-fix this cleared `second`'s SpecMana signature bit in place.
+    registry.RemoveComponent<SpecMana>(first);
+
+    Assert::That(registry.HasComponent<SpecMana>(second), Equals(true));
+    Assert::That(registry.GetComponent<SpecMana>(second).value, Equals(42));
     Assert::That(SpecErrorCount(),
                  Is().GreaterThanOrEqualTo(static_cast<std::size_t>(1)));
     Logger::messages.clear();

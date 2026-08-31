@@ -12,13 +12,13 @@ This file previously called that release "Storm! Engine v3", which implied a who
 
 **One deliberate exception has been taken.** 1.3.0 added font and sound caches to `AssetStore`, moving `sizeof(AssetStore)` from 112 to 208. Games allocate the store themselves via `std::make_unique<AssetStore>()`, so the size is emitted in game code and a 1.2.x binary relinked against a 1.3.0 `.so` overflows its allocation. It was taken knowingly: the `.deb` ships headers and library together, so the supported upgrade path - install the package, rebuild the game - is always consistent. It is recorded here so the next layout change is argued rather than assumed.
 
-Measured on the current tree (x86-64, g++ 9, `-std=c++17`): `sizeof(Entity)` 16, `sizeof(Signature)` 8, `sizeof(System)` 32, `sizeof(Registry)` 576, `sizeof(Tile)` 80.
+Measured on the current tree (x86-64, g++ 9, `-std=c++17`): `sizeof(Entity)` 24, `sizeof(Signature)` 8, `sizeof(System)` 32, `sizeof(Registry)` 488, `sizeof(Tile)` 80.
 
 ## 1. A stale `Entity` handle can kill a different, live entity
 
-`Entity` is `{ std::size_t id; Registry *registry; }` and nothing more. Ids are recycled: `KillEntity` returns the id to a free list and the next `CreateEntity` hands it straight back out.
+`Entity` was `{ std::size_t id; Registry *registry; }` and nothing more. Ids are recycled: `KillEntity` returns the id to a free list and the next `CreateEntity` hands it straight back out.
 
-So a handle you kept past its entity's death is **bit-for-bit identical** to the new entity holding that id. `operator==` and `operator<` compare the id alone, the liveness check reports it alive, and the kill destroys the wrong object.
+So a handle you kept past its entity's death was **bit-for-bit identical** to the new entity holding that id. `operator==` compared the id alone, the liveness check reported it alive, and the kill destroyed the wrong object.
 
 ```cpp
 Entity bullet = registry.CreateEntity();   // id 7
@@ -30,7 +30,7 @@ bullet.Kill();                              // destroys `pickup`
 
 **Why it stays.** The fix is a generation counter — `{ id, generation, registry }` — checked on every access. That takes `sizeof(Entity)` from 16 to 24. Games store `Entity` by value in their own containers and every `System` holds a `std::vector<Entity>`, so the layout is thoroughly baked into compiled game code.
 
-**Meanwhile.** Do not keep an `Entity` past the frame in which it might die. Re-look it up by tag or group, or null your own references when you kill something. Two specs (`specs/ecs.spec.cpp`, `specs/registry.spec.cpp`) pin this wrong behaviour deliberately, each carrying a comment to flip them when 2.0.0 fixes it.
+**Resolved in 2.0.0.** `Entity` now carries a generation, stamped at creation and bumped when its id is freed. `operator==` compares id and generation together, so `bullet == pickup` above is `false`; `operator<` is deleted outright rather than left comparing id alone, and callers order explicitly via `EntityOrder` where an ordering is needed. `IsAlive` checks the generation, so `bullet.Kill()` above now rejects the stale handle and logs a throttled error instead of destroying `pickup`. `sizeof(Entity)` moved from 16 to 24, as anticipated above. The two specs that used to pin this behaviour deliberately (`specs/ecs.spec.cpp`, `specs/registry.spec.cpp`) are flipped to assert the fix instead.
 
 ## 2. A bare integer implicitly converts to an `Entity`
 

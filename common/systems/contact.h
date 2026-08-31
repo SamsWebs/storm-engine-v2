@@ -10,6 +10,8 @@
 #include "../components/transform.h"
 #include "../ecs.h"
 
+namespace storm {
+
 // ContactSystem detects overlaps and reports them. It never kills an entity,
 // never moves one, and never writes a component - the game decides what a
 // contact means and in what order to respond, because the engine has no
@@ -274,3 +276,5 @@ private:
   PairCallback onEnd;
   PairFilter filter;
 };
+
+} // namespace storm

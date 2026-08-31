@@ -3,6 +3,8 @@
 #include <SDL2/SDL.h>
 #include <bitset>
 
+namespace storm {
+
 // Edge-triggered keyboard state.
 //
 // It does not poll. The engine owns no main loop, so the game decides where
@@ -82,3 +84,5 @@ private:
   KeyBits pressed_;
   KeyBits released_;
 };
+
+} // namespace storm

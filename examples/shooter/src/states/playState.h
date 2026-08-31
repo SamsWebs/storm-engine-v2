@@ -12,6 +12,8 @@
 #include <optional>
 #include <string>
 
+using namespace storm;
+
 class PlayState : public GameState {
 public:
   PlayState(SDL_Renderer *renderer, int windowWidth, int windowHeight,

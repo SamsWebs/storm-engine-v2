@@ -5,6 +5,8 @@
 
 #include <SDL2/SDL.h>
 
+namespace storm {
+
 // A physical game controller, polled once a frame.
 //
 // This is NOT virtualGamepad.h. That one is an on-screen touch pad: it maps
@@ -253,3 +255,5 @@ private:
   GamepadState current_;
   GamepadState previous_;
 };
+
+} // namespace storm

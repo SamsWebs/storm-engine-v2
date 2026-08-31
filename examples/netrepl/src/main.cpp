@@ -7,6 +7,8 @@
 
 #include <stormengine2/net/net.h>
 
+using namespace storm;
+
 // ── netrepl: fixed-tick host simulation + snapshot replication ──────────────
 //   ./bin/netrepl host [port]
 //   ./bin/netrepl join <ip> <port>

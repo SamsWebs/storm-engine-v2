@@ -4,6 +4,7 @@
 #include "support/softwareRenderer.h"
 
 using namespace igloo;
+using namespace storm;
 
 // Headless. Measure and Draw both have to survive a null font, because
 // AssetStore::GetFont returns nullptr for a missing id and the whole point of

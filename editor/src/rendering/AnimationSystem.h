@@ -7,6 +7,8 @@
 #include <stormengine2/components/transform.h>
 #include <stormengine2/ecs.h>
 
+using namespace storm;
+
 class AnimationSystem : public System {
 public:
   AnimationSystem();

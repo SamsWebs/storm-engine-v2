@@ -2,6 +2,7 @@
 #include <igloo/igloo_alt.h>
 
 using namespace igloo;
+using namespace storm;
 
 // Editor-format maps are space-separated and carry full per-tile metadata
 // (world position, scale, colliders, animation). No PNG is needed — the world

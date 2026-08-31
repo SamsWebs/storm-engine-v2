@@ -8,6 +8,8 @@
 
 #include "states/playState.h"
 
+using namespace storm;
+
 // Android shell: identical to the desktop platformer's Game except the window
 // is fullscreen at the display's native size and the working directory is
 // moved to internal storage (where PlatformerActivity extracted the assets).

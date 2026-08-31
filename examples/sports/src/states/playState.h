@@ -19,6 +19,8 @@
 #include "../components/skaterComponent.h"
 #include "../systems/hockeyPhysicsSystem.h"
 
+using namespace storm;
+
 // ─── Rink Layout (pixels)
 // ─────────────────────────────────────────────────────
 constexpr int RINK_X = 60;              // left  edge of ice surface

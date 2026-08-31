@@ -24,3 +24,7 @@
 #include "../systems/render.h"
 #include "../systems/renderCollider.h"
 #include "../tilemapLoader.h"
+
+namespace storm {
+
+} // namespace storm

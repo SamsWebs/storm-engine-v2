@@ -18,3 +18,7 @@
 #include "netSocket.h"
 #include "netTypes.h"
 #include "netVarInt.h"
+
+namespace storm {
+
+} // namespace storm

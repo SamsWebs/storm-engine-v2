@@ -6,6 +6,8 @@
 #include <stormengine2/gameStateMachine.h>
 #include <stormengine2/logger.h>
 
+using namespace storm;
+
 class Game {
 public:
   Game();

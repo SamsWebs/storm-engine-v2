@@ -6,6 +6,7 @@
 #include "../../common/net/netConnection.h"
 
 using namespace igloo;
+using namespace storm;
 
 namespace {
 const uint32_t kTokenA = 0x1111AAAA;

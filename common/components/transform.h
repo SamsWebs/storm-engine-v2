@@ -2,6 +2,8 @@
 
 #include <glm/glm.hpp>
 
+namespace storm {
+
 struct TransformComponent {
   glm::vec2 position;
   glm::vec2 scale;
@@ -14,3 +16,5 @@ struct TransformComponent {
     this->rotation = rotation;
   }
 };
+
+} // namespace storm

@@ -7,6 +7,8 @@
 #include <optional>
 #include <string>
 
+using namespace storm;
+
 // gameState.h already pulls in SDL2, ecs.h, assetStore.h, logger.h and every
 // built-in component and system. Do not re-include them here.
 //

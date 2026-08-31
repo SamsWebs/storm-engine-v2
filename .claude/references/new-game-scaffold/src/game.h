@@ -8,6 +8,8 @@
 
 #include "states/playState.h"
 
+using namespace storm;
+
 // The engine ships no Game class, no main loop and no window management --
 // only GameStateMachine. Every game writes this file. It is ~50 lines and is
 // near-identical across games, which is exactly why it belongs in a scaffold.

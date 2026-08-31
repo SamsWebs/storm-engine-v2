@@ -5,6 +5,8 @@
 #include "../Canvas.h"
 #include "ICommand.h"
 
+using namespace storm;
+
 class ChangeCanvasSizeCommand : public ICommand {
 private:
   std::shared_ptr<class Canvas> mCanvas;

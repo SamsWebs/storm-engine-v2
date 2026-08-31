@@ -22,6 +22,8 @@
 #include "../components/npcComponent.h"
 #include "../components/playerComponent.h"
 
+using namespace storm;
+
 // ─── Sprite sheet layout (640×64, 20 frames of 32×64 each) ───────────────────
 // Frame 0:   idle up        Frame 1:  idle down
 // Frame 2:   idle left      Frame 3:  idle right

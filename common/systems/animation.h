@@ -6,6 +6,8 @@
 #include <SDL2/SDL.h>
 #include <algorithm>
 
+namespace storm {
+
 class AnimationSystem : public System {
 public:
   AnimationSystem() {
@@ -41,3 +43,4 @@ public:
     }
   }
 };
+} // namespace storm

@@ -8,6 +8,8 @@
 
 #include "../utilities/Utilities.h"
 
+using namespace storm;
+
 class RenderCollisionSystem : public System {
 public:
   RenderCollisionSystem();

@@ -6,6 +6,8 @@
 #include <cstdio>
 #include <string>
 
+using namespace storm;
+
 // HUD and menu drawing helpers.
 //
 // These are deliberately NOT ECS work. Score digits, labels and centred

@@ -9,6 +9,8 @@
 // would still get all 146,775 preprocessed lines back.
 #include "states/gameStateBase.h"
 
+namespace storm {
+
 class GameStateMachine {
 public:
   GameStateMachine() {}
@@ -36,3 +38,4 @@ private:
   std::vector<GameState *> m_gameStates;
   std::vector<GameState *> m_defunctStates;
 };
+} // namespace storm

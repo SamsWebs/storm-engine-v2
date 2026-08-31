@@ -4,6 +4,7 @@
 #include "../../common/states/gameState.h"
 
 using namespace igloo;
+using namespace storm;
 
 // OWNERSHIP: the machine owns every state it is handed. popState/changeState/
 // clean delete states, so specs allocate with `new` and observe lifecycles via

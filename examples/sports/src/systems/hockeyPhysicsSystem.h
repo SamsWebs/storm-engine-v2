@@ -5,6 +5,8 @@
 
 #include "../components/puckComponent.h"
 
+using namespace storm;
+
 // HockeyPhysicsSystem: integrates the free puck and bleeds its speed off.
 //
 // It does NOT handle the boards. The rink walls are ordinary collider

@@ -16,6 +16,8 @@
 #include <stormengine2/states/gameState.h>
 #include <stormengine2/systems/render.h>
 
+using namespace storm;
+
 // ─── Netplay ───────────────────────────────────────────────────────────────
 constexpr uint16_t kDefaultPort = 51235;
 

@@ -14,6 +14,8 @@
 #include "battleState.h"
 #include "gameOverState.h"
 
+using namespace storm;
+
 const std::string OverworldState::s_overworldID = "OVERWORLD";
 
 namespace {

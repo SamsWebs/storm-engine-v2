@@ -4,6 +4,8 @@
 
 #include "touchControls.h" // TouchZone / TouchPoint
 
+namespace storm {
+
 // ── Virtual gamepad (SDL-free) ──────────────────────────────────────────────
 // The standard mobile layout: a circular d-pad bottom-left (up/down/left/right
 // via angle sectors, so a diagonal push sets two flags) and four action buttons
@@ -114,3 +116,5 @@ inline VPadState EvalVPad(const VPadLayout &l, const TouchPoint *points,
   }
   return s;
 }
+
+} // namespace storm

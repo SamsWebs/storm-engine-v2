@@ -8,6 +8,8 @@
 #include "netConnection.h"
 #include "netSocket.h"
 
+namespace storm {
+
 // ── Game host / dedicated server ────────────────────────────────────────────
 // UDP server with fixed client slots, a cookie handshake (anti-spoofing: a
 // joining client must echo back a random nonce before it gets a slot, so a
@@ -139,3 +141,5 @@ private:
     ChunkCallback onChunk_;
     Logger logger_;
 };
+
+} // namespace storm

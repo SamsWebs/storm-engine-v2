@@ -9,6 +9,8 @@
 
 #include "states/playState.h"
 
+using namespace storm;
+
 class Game {
 public:
   Game();

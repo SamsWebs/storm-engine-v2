@@ -4,6 +4,8 @@
 #include "../components/transform.h"
 #include "../ecs.h"
 
+namespace storm {
+
 class MovementSystem : public System {
 public:
   MovementSystem() {
@@ -23,3 +25,4 @@ public:
     }
   }
 };
+} // namespace storm

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <SDL2/SDL.h>
+using namespace storm;
 
 // A real SDL_Renderer with no window, no display and no SDL_Init: SDL's
 // software renderer draws straight into an SDL_Surface, so RenderSystem and

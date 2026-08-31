@@ -8,6 +8,8 @@
 #include "touchControls.h"
 #include "virtualGamepad.h"
 
+namespace storm {
+
 // ── Action mapping ──────────────────────────────────────────────────────────
 // Four input sources ship in this directory - keyboard.h, gamepad.h,
 // virtualGamepad.h and touchControls.h - and before this header there was no
@@ -288,3 +290,5 @@ private:
 
   std::vector<Entry> entries_;
 };
+
+} // namespace storm

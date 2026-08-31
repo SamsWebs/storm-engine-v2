@@ -137,21 +137,45 @@ a recompile. That is recorded at the constant, in the README and in
 `KNOWN_ISSUES.md`, since the next person to want more types will not otherwise
 know the ceiling has a cliff behind it.
 
-### 6. The engine moves into `namespace storm` — `KNOWN_ISSUES.md` item 9
+### 6. The engine moves into `namespace storm` — `KNOWN_ISSUES.md` item 9 — **DONE**
 
-Do this **last**. It rewrites nearly every line it touches, and doing it earlier
-makes every other diff in the wave unreadable.
+Done last, as planned: it touches 46 engine files and would have made every other
+diff in the wave unreadable.
 
-Ships with an opt-in `<stormengine2/compat/global.h>` emitting `using` declarations,
-so an existing game keeps compiling by adding one include. That header exists to be
-deleted in a future major — a bridge, not an API.
+Ships with `<stormengine2/compat/global.h>`, which emits a `using` declaration
+for every public engine name. The cheapest migration for an existing game is a
+force-include from the build (`CXXFLAGS += -include stormengine2/compat/global.h`)
+rather than editing every file. The header exists to be deleted — it undoes the
+namespace's entire benefit — and a future major drops it.
 
-For a game whose engine includes are spread across many headers, the cheapest
-migration is a force-include from the build rather than editing every file:
+Four things this turned up that were not obvious from the plan:
 
-```make
-CXXFLAGS += -include stormengine2/compat/global.h
-```
+- **The unscoped enums.** `using storm::LogType;` does not bring `LOG_INFO`
+  across: the enumerators of an unscoped enum are names in `namespace storm` in
+  their own right. The bridge needs a `using` per enumerator, and `LogType`,
+  `NetChunkFlag`, `NetPacketFlag` and `NetControlMessage` all have them.
+- **The `friend` declaration in `Registry`.** `friend struct EcsGenerationTestSeam;`
+  now names `storm::EcsGenerationTestSeam`, so the spec's seam had to move into
+  the namespace — a same-named struct in the global namespace is a different type
+  and gets no access. The compiler said so plainly, but only for that one file.
+- **`specs/main.cpp` includes no engine header**, so `using namespace storm;`
+  there is an error rather than a no-op. A blanket edit across `specs/` has to
+  account for it.
+- **`INCLUDE +=` in `editor/Makefile` is discarded** the moment anyone passes
+  `INCLUDE` on the command line, which is how the editor gets built against a
+  staging prefix. It is `override INCLUDE +=` now.
+
+`specs/compat/global.spec.cpp` is the one spec in the suite deliberately written
+**without** `using namespace storm;` — it names every type unqualified through
+the bridge alone, so it fails if the bridge misses a name. Adding the directive
+there would make it pass whether the bridge exported anything or not.
+
+Verified against a staging install (`make install DESTDIR=…`) rather than by
+overwriting `/usr/local`: all nine desktop examples build and link, the editor
+compiles all 17 objects, and the starter template in `template/` builds through
+pkg-config. `examples/nx-platformer` and `examples/android-platformer` were
+edited the same way but **not** built — neither toolchain is on this machine,
+and CI does not cover them either.
 
 ### 7. Input action mapping — **DONE**
 

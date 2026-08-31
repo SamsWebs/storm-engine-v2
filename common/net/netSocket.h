@@ -5,6 +5,8 @@
 #include "../logger.h"
 #include "netTypes.h"
 
+namespace storm {
+
 // ── Platform UDP socket ─────────────────────────────────────────────────────
 // Thin wrapper over BSD sockets: Linux, macOS, Android (NDK) and Switch (libnx
 // provides the same API); Windows via winsock behind #ifdef. Non-blocking —
@@ -59,3 +61,5 @@ inline void TokenToNonce(uint32_t token, uint8_t nonce[4]) {
     nonce[2] = (uint8_t)(token >> 8);
     nonce[3] = (uint8_t)token;
 }
+
+} // namespace storm

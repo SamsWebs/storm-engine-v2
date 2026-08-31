@@ -14,6 +14,8 @@
 #include "AssetManager.h"
 #include "utilities/Utilities.h"
 
+using namespace storm;
+
 class MouseControl {
 private:
   glm::vec2 mMouseRect;

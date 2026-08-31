@@ -25,6 +25,8 @@
 #include "rendering/RenderImGui.h"
 #include "rendering/RenderSystem.h"
 
+using namespace storm;
+
 class Application {
 
 private:

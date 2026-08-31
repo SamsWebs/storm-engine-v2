@@ -6,6 +6,8 @@
 
 #include "ICommand.h"
 
+using namespace storm;
+
 /*
  *  The CommandManager keeps track of all commands that have been executed
  *  The executed commands need to be a child of the type ICommand

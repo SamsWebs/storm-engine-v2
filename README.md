@@ -38,11 +38,13 @@ New code qualifies or opens the namespace:
 using namespace storm;   // what the examples, the editor and the starter template do
 ```
 
-An existing 1.x game does not need editing. `<stormengine2/compat/global.h>` emits a `using` declaration for every public engine name, so the cheapest migration is one line in the build:
+An existing 1.x game needs no editing **for the namespace change**. `<stormengine2/compat/global.h>` emits a `using` declaration for every public engine name, so the cheapest migration is one line in the build:
 
 ```make
 CXXFLAGS += -include stormengine2/compat/global.h
 ```
+
+The bridge covers the namespace and nothing else. 2.0.0 makes eight other breaking changes, and no `using` declaration can bridge a deleted type: `CollisionSystem` is gone, `Entity::operator<` is deleted, `Entity(std::size_t)` is `explicit`, and the networking types are non-copyable. See [docs/UPGRADING.md](docs/UPGRADING.md) for those.
 
 That header is a bridge, not an API. It pulls every engine name back into the global namespace - the exact collision the namespace exists to prevent - so a game that keeps it forever gains nothing from the change. Use it to get green, then drop it and fix the names. A future major removes it.
 

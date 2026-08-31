@@ -166,9 +166,23 @@ Four things this turned up that were not obvious from the plan:
   staging prefix. It is `override INCLUDE +=` now.
 
 `specs/compat/global.spec.cpp` is the one spec in the suite deliberately written
-**without** `using namespace storm;` — it names every type unqualified through
-the bridge alone, so it fails if the bridge misses a name. Adding the directive
-there would make it pass whether the bridge exported anything or not.
+**without** `using namespace storm;`, since the directive would make it pass
+whether the bridge exported anything or not.
+
+Its original claim — "it names every type unqualified through the bridge alone,
+so it fails if the bridge misses a name" — **was false**, and an adversarial
+review caught it. The file named 33 of 133 exports, chosen from the same mental
+list that produced the bridge, so a name forgotten in one was forgotten in the
+other. Two were: `EcsSuppressionNote` and `ComponentMissDescription`, both
+public since 1.x, both used by any game with its own throttled diagnostic.
+
+The fix is that the list no longer comes from memory.
+`scripts/generate-compat-probes.py` parses the engine headers and emits
+`specs/compat/bridgedNames.h`, one `using ::Name;` per public name — a form
+legal for every entity kind that fails to compile when the name is absent. CI
+re-runs the generator with `--check` and fails if the committed file is stale,
+because a generated file nobody regenerates is the same hole wearing a
+different hat.
 
 Verified against a staging install (`make install DESTDIR=…`) rather than by
 overwriting `/usr/local`: all nine desktop examples build and link, the editor

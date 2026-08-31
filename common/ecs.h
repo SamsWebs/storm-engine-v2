@@ -421,7 +421,31 @@ template <typename TSystem, typename... Targs>
 void Registry::AddSystem(Targs &&... args) {
   std::shared_ptr<TSystem> newSystem =
       std::make_shared<TSystem>(std::forward<Targs>(args)...);
-  systems.insert(std::make_pair(std::type_index(typeid(TSystem)), newSystem));
+  const auto result = systems.insert(
+      std::make_pair(std::type_index(typeid(TSystem)), newSystem));
+  if (!result.second) {
+    // Duplicate registration: unordered_map::insert is a no-op when the key
+    // already exists, so `newSystem` above was never stored — the system
+    // registered earlier is still the one in `systems`, untouched, and it
+    // already has every matching entity as a member. Returning here (rather
+    // than falling through) matters: CountEntitiesMissedBySystem below would
+    // otherwise run against this stray, never-stored `newSystem`, whose
+    // member list is empty, and report every live matching entity as
+    // "missed" even though the real system already sees them — a false
+    // positive the late-registration diagnostic exists specifically to
+    // avoid.
+    //
+    // Silent, not its own diagnostic: a second AddSystem<T>() changes
+    // nothing observable — the first registration keeps running exactly as
+    // it was — so there is no state for a caller to have gotten wrong here,
+    // unlike the late-registration case where entities really are left
+    // stranded. The rest of Registry treats absence/duplication as
+    // routine rather than newsworthy (RemoveSystem<T> on an unregistered
+    // system, HasSystem<T> both no-op silently); adding a log here would be
+    // the odd one out, and risks flagging a deliberately idempotent
+    // AddSystem<T>() call in setup code as if it were a mistake.
+    return;
+  }
 
   // TSystem's constructor has run its RequireComponent calls by now, so the
   // signature is final and the scan is meaningful.

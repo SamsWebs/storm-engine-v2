@@ -413,7 +413,10 @@ Describe(RegistrySpec) {
   };
 };
 
-struct SpecLateSystemMarker { int value = 0; };
+struct SpecLateSystemMarker {
+  int value = 0;
+  SpecLateSystemMarker(int value = 0) : value(value) {}
+};
 
 class SpecLateRegisteredSystem : public System {
 public:
@@ -473,9 +476,9 @@ Describe(LateSystemRegistrationSpec) {
   It(should_backfill_the_admitted_entities_on_request) {
     Registry registry;
     Entity first = registry.CreateEntity();
-    first.AddComponent<SpecLateSystemMarker>();
+    first.AddComponent<SpecLateSystemMarker>(11);
     Entity second = registry.CreateEntity();
-    second.AddComponent<SpecLateSystemMarker>();
+    second.AddComponent<SpecLateSystemMarker>(22);
     registry.Update();
 
     registry.AddSystem<SpecLateRegisteredSystem>();
@@ -487,9 +490,25 @@ Describe(LateSystemRegistrationSpec) {
         registry.AdmitExistingEntities<SpecLateRegisteredSystem>();
 
     Assert::That(admitted, Equals(static_cast<std::size_t>(2)));
-    Assert::That(
-        registry.GetSystem<SpecLateRegisteredSystem>().GetSystemEntities().size(),
-        Equals(static_cast<std::size_t>(2)));
+    const std::vector<Entity> &backfilled =
+        registry.GetSystem<SpecLateRegisteredSystem>().GetSystemEntities();
+    Assert::That(backfilled.size(), Equals(static_cast<std::size_t>(2)));
+
+    // A count alone cannot tell a healthy back-filled entity from a poisoned
+    // one: ForEachMissedEntity hands AdmitExistingEntitiesTo bare
+    // Entity(id) candidates with a null `registry`, and every Entity
+    // forwarder short-circuits a null registry to a shared, zeroed fallback
+    // component instead of segfaulting. That would still pass a
+    // size()-only assertion. Dereference a real component off each
+    // back-filled entity and check its actual value: a poisoned entity
+    // reads back value == 0 (the fallback), not the 11/22 that was really
+    // stored.
+    int total = 0;
+    for (const Entity &entity : backfilled) {
+      total += entity.GetComponent<SpecLateSystemMarker>().value;
+    }
+    Assert::That(total, Equals(11 + 22));
+
     Logger::messages.clear();
   };
 
@@ -497,6 +516,28 @@ Describe(LateSystemRegistrationSpec) {
     Registry registry;
     Assert::That(registry.AdmitExistingEntities<SpecLateRegisteredSystem>(),
                  Equals(static_cast<std::size_t>(0)));
+  };
+
+  It(should_not_report_missed_entities_when_a_system_is_registered_twice) {
+    Registry registry;
+    registry.AddSystem<SpecLateRegisteredSystem>();
+
+    Entity entity = registry.CreateEntity();
+    entity.AddComponent<SpecLateSystemMarker>();
+    registry.Update();
+
+    Logger::messages.clear();
+    // Duplicate registration: unordered_map::insert no-ops, so this second
+    // instance is discarded. Before the fix, the diagnostic ran
+    // CountEntitiesMissedBySystem against that discarded instance (an empty
+    // member list) instead of the real, already-populated one, and falsely
+    // reported every matching entity as missed.
+    registry.AddSystem<SpecLateRegisteredSystem>();
+
+    Assert::That(SpecRegistryErrorCount(), Equals(static_cast<std::size_t>(0)));
+    Assert::That(
+        registry.GetSystem<SpecLateRegisteredSystem>().GetSystemEntities().size(),
+        Equals(static_cast<std::size_t>(1)));
   };
 };
 

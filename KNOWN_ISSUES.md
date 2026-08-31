@@ -147,7 +147,7 @@ Any game needing collision *response* — bouncing, damage, triggers, pickups �
 
 **Why it stays.** An event bus is new architecture, and changing what `CollisionSystem::Update()` does to entities is a silent behaviour break for anything relying on the current kill semantics.
 
-**Resolved for new code in 1.3.0.** `ContactSystem` (`common/systems/contact.h`) is the observe-without-acting path: it reports overlaps with a normal and penetration depth, fires begin/end callbacks once per pair, and never touches an entity. `CollisionSystem` is unchanged and stays unchanged for the whole 1.x line - the two share one copy of the bounds math via `ContactSystem::BoundsOf`. Deleting `CollisionSystem` is a 2.0.0 item, listed below.
+**Resolved for new code in 1.3.0.** `ContactSystem` (`common/systems/contact.h`) is the observe-without-acting path: it reports overlaps with a normal and penetration depth, fires begin/end callbacks once per pair, and never touches an entity. `CollisionSystem` is unchanged and stays unchanged for the whole 1.x line - the two share one copy of the bounds math via `ContactSystem::BoundsOf`. Deleting `CollisionSystem` is a 2.0.0 item.
 
 **Resolved in 2.0.0.** `CollisionSystem` is deleted. The kill-on-overlap behaviour this entry describes no longer exists in the engine at all; a game that wants entities to die on contact now writes that against `ContactSystem` itself. The entry's other half stays open — there is still no general event bus, only `ContactSystem`'s begin/end callbacks, which cover contacts and nothing else.
 

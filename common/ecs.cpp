@@ -192,18 +192,26 @@ void ForEachMissedEntity(const Registry &registry, std::size_t numEntities,
 static thread_local unsigned int missingUpdateReports = 0;
 
 Registry::~Registry() {
-  RegistryDiagnostics &diagnostics = DiagnosticsTable()[this];
-  if (diagnostics.updateCalls == 0 && diagnostics.entitiesCreated > 0 &&
-      EcsShouldReport(missingUpdateReports)) {
-    EcsReportErr(
-        "~Registry: this registry created " +
-        std::to_string(diagnostics.entitiesCreated) +
-        " entities and Registry::Update() was never called on it, so none of "
-        "them ever joined a system — nothing it owned rendered or moved. Call "
-        "registry.Update() once per frame, first, in your state's update()." +
-        EcsSuppressionNote(missingUpdateReports));
+  // find, not operator[]: a registry that never called CreateEntity or
+  // Update() has no entry in this table, and operator[] would insert one
+  // just to immediately erase it below. With no entry, entitiesCreated reads
+  // as 0 either way, so the guard's outcome is unchanged.
+  auto found = DiagnosticsTable().find(this);
+  if (found != DiagnosticsTable().end()) {
+    const RegistryDiagnostics &diagnostics = found->second;
+    if (diagnostics.updateCalls == 0 && diagnostics.entitiesCreated > 0 &&
+        EcsShouldReport(missingUpdateReports)) {
+      EcsReportErr(
+          "~Registry: this registry created " +
+          std::to_string(diagnostics.entitiesCreated) +
+          " entities and Registry::Update() was never called on it, so none "
+          "of them ever joined a system — nothing it owned rendered or "
+          "moved. Call registry.Update() once per frame, first, in your "
+          "state's update()." +
+          EcsSuppressionNote(missingUpdateReports));
+    }
+    DiagnosticsTable().erase(found);
   }
-  DiagnosticsTable().erase(this);
   logger.Log("Registry destructor called.");
 }
 
@@ -314,6 +322,13 @@ std::size_t Registry::AdmitExistingEntitiesTo(System &system) {
   ForEachMissedEntity(*this, numEntities, entityComponentSignatures, system,
                       [&toAdmit](Entity entity) { toAdmit.push_back(entity); });
   for (Entity entity : toAdmit) {
+    // ForEachMissedEntity builds each candidate as a bare Entity(id), so
+    // entity.registry is still null here. Stamp it before handing the entity
+    // to the system: everything a system does with an Entity (GetComponent,
+    // Kill, Tag, ...) routes through that pointer, and a null one silently
+    // poisons every access instead of failing loudly. Entity::registry is
+    // public, so this needs no friend declaration.
+    entity.registry = this;
     system.AddEntityToSystem(entity);
   }
   return toAdmit.size();

@@ -36,6 +36,31 @@ LIB = -L/usr/local/lib -Wl,-rpath=/usr/local/lib -lSDL2 -lSDL2_image -lSDL2_ttf 
 # link with "cannot find -lnfd" on any machine without libnfd installed, even
 # though no example references NFD. Only the editor links it.
 EDITOR_LIB = -lnfd
+# Note that this resolves <stormengine2/...> from the INSTALL PREFIX, not from
+# this checkout's common/. That is deliberate for the examples and the editor:
+# they are meant to exercise the shipped artifact, the way a real game does.
+#
+# The consequence is worth knowing before it costs you a day. If the installed
+# engine is older than your working tree, an example still compiles, links and
+# runs -- against an engine that is not the one you are changing. Nothing warns.
+# During 2.0.0's development this produced two wrong conclusions: examples were
+# reported clean after being exercised against a version that contained none of
+# the features under test, and a build failure was blamed on the branch when it
+# came from the installed copy.
+#
+# So: reinstall before you trust an example run.
+#
+#     make -f Makefile.debian && sudo make -f Makefile.debian install
+#
+# From 2.0.0 this matters more, not less. While the engine's changes were
+# compile-time, a stale install surfaced as a confusing error. 2.0.0 changes
+# type layouts, so a stale-header build is silent memory corruption instead --
+# the same failure mode as relinking without rebuilding.
+#
+# An automated equality check was tried and reverted: CI builds the engine from
+# a separate tree at /opt/library and installs from there, so tree-vs-install
+# equality is false by construction in the one environment that would benefit
+# most from the check.
 INCLUDE = -I/usr/local/include -I$(ROOT_DIR)/vendor
 
 # Build profile. The default is the local-dev one — unoptimized with debug

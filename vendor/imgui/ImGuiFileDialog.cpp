@@ -28,6 +28,9 @@ SOFTWARE.
 #include "ImGuiFileDialog.h"
 #include "imgui.h"
 
+#include <cstdint>   // LOCAL PATCH: intptr_t, used below but not declared by
+                     // any header upstream includes. GCC 13 stopped pulling it
+                     // in transitively. See vendor/MANIFEST.md, "Local changes".
 #include <float.h>
 #include <string.h> // stricmp / strcasecmp
 #include <sstream>

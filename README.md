@@ -233,6 +233,8 @@ make run    # launch without rebuilding
 - **C** - toggle collider debug overlay
 - The editor saves `.map` files that `TileMapLoader` can load directly in your game
 
+The editor is the only target that links [NFD](https://github.com/mlabbe/nativefiledialog), which Debian and Ubuntu do not package. Build and install it from source once, or the link fails with `cannot find -lnfd`. Nothing else needs it - the library, the spec suite and every example build without it, which is why CI compiles the editor to objects and stops short of the link.
+
 ## Windows / WSL
 
 Windows is supported via a MinGW-w64 cross-compile from Linux - no Windows toolchain needed. SDL2 and its satellites are cross-built from the same vendored sources the Android build uses (`vendor/android/`), so nothing is downloaded:

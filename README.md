@@ -20,6 +20,7 @@ A lightweight, ECS-based 2D game engine built on SDL2 - made for game jams and p
 - **Keyboard** input - edge-triggered `IsDown`/`WasPressed`/`WasReleased` over the full `SDL_Scancode` range, header-only and does not poll (`<stormengine2/input/keyboard.h>`)
 - **Gamepad** support - an `SDL_GameController` wrapper with edge-detected `Pressed`/`Released` and a configurable stick deadzone (`<stormengine2/input/gamepad.h>`), used by the shooter, strategy and sports examples
 - **Virtual gamepad** for touch devices - d-pad + action-button layout, pure and spec'd (`<stormengine2/input/virtualGamepad.h>`), driven by `examples/android-platformer`
+- **Action mapping** - bind one game action across the keyboard, gamepad, virtual gamepad and touch at once, with one edge per action rather than four (`<stormengine2/input/actionMap.h>`, new in 2.0.0)
 - **UDP networking** - host/join LAN play: reliable + unreliable chunks, kick/ban/timeout, snapshot replication with per-client deltas and a prediction cache (`<stormengine2/net/net.h>`, see [docs/networking.md](docs/networking.md))
 - Built-in **tile map editor** with drag-to-paint, drag-to-erase, and layer support
 - Example games: platformer, shooter (*1945*, a vertical shoot-'em-up with menu, HUD and controller support), strategy (*Realms*, a *Dragon Force*-style campaign map with pushed side-on battles - artwork downloaded separately, see below), puzzle, JRPG, sports, Android platformer, Switch platformer, and networking demos (netchat, netrepl, netplay-checkers)
@@ -236,6 +237,39 @@ make run    # launch without rebuilding
 - The editor saves `.map` files that `TileMapLoader` can load directly in your game
 
 The editor is the only target that links [NFD](https://github.com/mlabbe/nativefiledialog), which Debian and Ubuntu do not package. Build and install it from source once, or the link fails with `cannot find -lnfd`. Nothing else needs it - the library, the spec suite and every example build without it, which is why CI compiles the editor to objects and stops short of the link.
+
+## Action mapping
+
+Four input sources ship in `<stormengine2/input/>`, and until 2.0.0 nothing tied them together, so a game that supported a keyboard, a controller and a phone wrote this in every state, for every action:
+
+```cpp
+if (keyboard.WasPressed(SDL_SCANCODE_SPACE) ||
+    gamepad.Pressed(GamepadButton::A) || vpad.a || touch.jump) Jump();
+```
+
+`ActionMap` resolves one action across all four:
+
+```cpp
+enum class Action { Jump, Left, Right };
+
+ActionBinding jump;
+jump.key   = SDL_SCANCODE_SPACE;
+jump.pad   = GamepadButton::A;
+jump.vpad  = VPadControl::A;
+jump.touch = TouchControl::Jump;
+actions.Bind(static_cast<int>(Action::Jump), jump);
+
+// once per frame, after feeding the keyboard its events and calling gamepad.Update()
+actions.Update(&keyboard, &gamepad, &vpad, &touch);
+
+if (actions.WasPressed(static_cast<int>(Action::Jump))) Jump();
+```
+
+Every source is optional - pass `nullptr` and it contributes nothing, so a desktop build and a phone build share one binding table and differ only in what they hand to `Update`.
+
+With more than one source bound to an action, the action goes down when the **first** source takes it and comes up when the **last** one lets go: pressing a second source mid-hold reports no new press, and releasing one of two held sources reports no release.
+
+Keyboard and gamepad edges are taken from those classes rather than recomputed, so a key pressed and released inside a single frame is still seen as a press. Deriving edges from the held state alone would drop fast taps silently - which is why `Keyboard` tracks presses separately in the first place.
 
 ## Windows / WSL
 

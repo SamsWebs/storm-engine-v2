@@ -1796,14 +1796,18 @@ the game's own headers.
 - No built-in scene editor beyond the tile map editor. Entity placement is
   code-driven or XML-driven.
 - The engine ships no main loop, no Game class, no window management.
-- No keyboard abstraction - games read SDL (or libnx `PadState` on Switch)
-  themselves. `common/input/` ships SDL-free touch primitives
-  (`touchControls.h`), the on-screen virtual gamepad (`virtualGamepad.h`:
-  `MakeVPadLayout(w, h, VPadStyle = VPadStyle::Xbox)` / `EvalVPad`, lettered
-  Xbox-style by default with Y top, X left, B right and A bottom, or
-  `VPadStyle::Snes` on request), and since 1.3.0 a real controller wrapper
-  (`gamepad.h`: `Gamepad`), which covers one pad at a time and still no
-  keyboard.
+- `common/input/` ships four sources and, since 2.0.0, a way to bind them
+  together. SDL-free touch primitives (`touchControls.h`); the on-screen virtual
+  gamepad (`virtualGamepad.h`: `MakeVPadLayout(w, h, VPadStyle = VPadStyle::Xbox)`
+  / `EvalVPad`, lettered Xbox-style by default with Y top, X left, B right and A
+  bottom, or `VPadStyle::Snes` on request); a real controller wrapper since 1.3.0
+  (`gamepad.h`: `Gamepad`), one pad at a time; and since 2.0.0 an edge-triggered
+  keyboard (`keyboard.h`: `Keyboard`, fed events rather than polling, because the
+  engine owns no main loop and two `SDL_PollEvent` sites drain one shared queue).
+  `actionMap.h` binds one game action across all four (`ActionMap::Bind` /
+  `Update` / `WasPressed`); every source is optional, so a desktop build and a
+  phone build share one binding table. On Switch, games still read libnx
+  `PadState` themselves.
 - `common/net/` is absent from the **Switch** build only:
   `examples/nx-platformer/Makefile` globs `$(wildcard $(dir)/*.cpp)` over
   `include/stormengine2` (a symlink to `common/`), which is non-recursive and

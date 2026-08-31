@@ -64,6 +64,12 @@ bool EcsComponentIdIsValid(std::size_t componentId, const char *where,
 // diagnostic can name the reason while the bounds checks live in one place.
 enum class ComponentMiss : unsigned char {
   None = 0,
+  // The handle's id is no longer held by the entity that created it — either
+  // the id was recycled to a different entity after this one was killed, or
+  // the handle was hand-built and never valid to begin with. Checked first:
+  // without it, a stale handle whose id a live entity now holds would pass
+  // every check below and read that entity's component instead of missing.
+  Stale,
   TooManyTypes,
   NoPool,
   OutOfRange,
@@ -368,9 +374,13 @@ public:
 
   // Returns a pointer to `entity`'s TComponent, or nullptr when there is
   // none: no pool for the type, an id out of range, or the signature bit
-  // unset. Silent — a miss is a legitimate answer here, so this is safe to
-  // call every frame, and it cannot alias. This is the correct accessor
-  // whenever absence is possible.
+  // unset. Silent for those — a miss is a legitimate answer here, so this is
+  // safe to call every frame, and it cannot alias. This is the correct
+  // accessor whenever absence is possible.
+  //
+  // EXCEPTION: a stale handle (its id has since been recycled to a different
+  // entity) is not a legitimate miss — it means the caller kept an Entity
+  // past its death — so that one case logs (throttled) even here.
   template <typename TComponent>
   TComponent *TryGetComponent(Entity entity) const;
 
@@ -648,22 +658,38 @@ template <typename TComponent> void Registry::RemoveComponent(Entity entity) {
 }
 
 template <typename TComponent> bool Registry::HasComponent(Entity entity) {
-  const auto componentId = Component<TComponent>::GetId();
-  const auto entityId = entity.GetId();
-
-  static thread_local unsigned int idReports = 0;
-  if (!EcsComponentIdIsValid(componentId, "HasComponent", idReports)) {
-    return false;
-  }
-
-  return (entityId < entityComponentSignatures.size()) &&
-         entityComponentSignatures[entityId][componentId];
+  // Routed through FindComponent — the same shared implementation
+  // TryGetComponent and GetComponent use — so the staleness check lives in
+  // exactly one place. A separate hand-rolled check here, alongside
+  // FindComponent's, is exactly the kind of pair of related checks that has
+  // already drifted apart twice in this codebase.
+  ComponentMiss miss = ComponentMiss::None;
+  return FindComponent<TComponent>(entity, miss) != nullptr;
 }
 
 template <typename TComponent>
 TComponent *Registry::FindComponent(Entity entity, ComponentMiss &miss) const {
   const auto componentId = Component<TComponent>::GetId();
   const auto entityId = entity.GetId();
+
+  // A stale handle's id may since have been recycled to a different, live
+  // entity — every check below is indexed by id alone, so without this one
+  // a stale handle would pass all of them and read that entity's component.
+  // Unlike the other misses, a stale access is never a routine, expected
+  // outcome, so it is reported here directly rather than left to whichever
+  // accessor called in — that way TryGetComponent and HasComponent name it
+  // too, not just GetComponent's own throttled diagnostic below.
+  if (!IsAlive(entity)) {
+    miss = ComponentMiss::Stale;
+    static thread_local unsigned int staleReports = 0;
+    if (EcsShouldReport(staleReports)) {
+      logger.Err("FindComponent: entity " + std::to_string(entityId) + " " +
+                 ComponentMissDescription(ComponentMiss::Stale) +
+                 " for component type '" + typeid(TComponent).name() + "'" +
+                 EcsSuppressionNote(staleReports));
+    }
+    return nullptr;
+  }
 
   // Checked before any bitset::test below — past MAX_COMPONENTS that call
   // throws, and this template compiles into the game's TU.
@@ -709,18 +735,23 @@ TComponent &Registry::GetComponent(Entity entity) const {
     return *component;
   }
 
-  // One budget per (component type, reason): the counters are static inside a
-  // template instantiated per TComponent, so a game that misses this lookup
-  // every frame logs a handful of lines and then stays silent.
-  static thread_local unsigned int
-      reports[static_cast<std::size_t>(ComponentMiss::Count)] = {};
-  unsigned int &counter = reports[static_cast<std::size_t>(miss)];
-  if (EcsShouldReport(counter)) {
-    logger.Err("GetComponent: entity " + std::to_string(entity.GetId()) + " " +
-               ComponentMissDescription(miss) + " for component type '" +
-               typeid(TComponent).name() +
-               "'; returning a default component" +
-               EcsSuppressionNote(counter));
+  // Stale is reported directly by FindComponent, unconditionally — logging
+  // it again here would double the report for this one reason alone.
+  if (miss != ComponentMiss::Stale) {
+    // One budget per (component type, reason): the counters are static
+    // inside a template instantiated per TComponent, so a game that misses
+    // this lookup every frame logs a handful of lines and then stays
+    // silent.
+    static thread_local unsigned int
+        reports[static_cast<std::size_t>(ComponentMiss::Count)] = {};
+    unsigned int &counter = reports[static_cast<std::size_t>(miss)];
+    if (EcsShouldReport(counter)) {
+      logger.Err("GetComponent: entity " + std::to_string(entity.GetId()) +
+                 " " + ComponentMissDescription(miss) +
+                 " for component type '" + typeid(TComponent).name() +
+                 "'; returning a default component" +
+                 EcsSuppressionNote(counter));
+    }
   }
 
   return EcsFallbackComponent<TComponent>();

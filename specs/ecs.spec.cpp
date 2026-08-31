@@ -712,4 +712,28 @@ Describe(GenerationSpec) {
     Assert::That(registry.IsAlive(fabricated), Equals(false));
     Assert::That(fabricated == live, Equals(false));
   };
+
+  // Task 4b — IsAlive alone is not enough: the component pools are indexed
+  // by id, so without this check a stale handle whose id was recycled reads
+  // the new, live entity's data as if it were its own.
+  It(should_not_read_the_live_entitys_components_through_a_stale_handle) {
+    Registry registry;
+    Entity first = registry.CreateEntity();
+    first.Kill();
+    registry.Update();
+
+    Entity second = registry.CreateEntity(); // same id, new generation
+    registry.AddComponent<SpecMana>(second, SpecMana{77});
+    registry.Update();
+
+    Assert::That(registry.HasComponent<SpecMana>(second), Equals(true));
+    Assert::That(registry.HasComponent<SpecMana>(first), Equals(false));
+
+    Logger::messages.clear();
+    Assert::That(registry.TryGetComponent<SpecMana>(first) == nullptr,
+                 Equals(true));
+    Assert::That(SpecErrorCount(),
+                 Is().GreaterThanOrEqualTo(static_cast<std::size_t>(1)));
+    Logger::messages.clear();
+  };
 };

@@ -42,6 +42,9 @@ bool EcsComponentIdIsValid(std::size_t componentId, const char *where,
 
 const char *ComponentMissDescription(ComponentMiss miss) {
   switch (miss) {
+  case ComponentMiss::Stale:
+    return "is a stale handle (its id has been recycled to a different "
+           "entity)";
   case ComponentMiss::TooManyTypes:
     return "uses a component type past MAX_COMPONENTS";
   case ComponentMiss::NoPool:

@@ -215,15 +215,28 @@ unreachable-effect code. The same flag is load-bearing on the release side —
 without it an idle action reports a release on every frame — so there is now a
 case pinning exactly that.
 
-### 8. Documentation, written once at the end
+### 8. Documentation, written once at the end — **DONE**
 
 `docs/UPGRADING.md` and the `CHANGELOG.md` 2.0.0 entry, written against what
-actually shipped rather than what was planned. Then `VERSION` moves from
-`2.0.0~dev` to `2.0.0`.
+actually shipped. `VERSION` moved from `2.0.0~dev` to `2.0.0`, and the README's
+banner with it.
 
-The tilde matters and should not be "tidied" to a hyphen: pkg-config sorts
-`2.0.0-dev` *above* `2.0.0`, so a game gating on `--atleast-version=2.0.0` would
-pass against a build missing most of the release. `2.0.0~dev` sorts below.
+The tilde mattered and was not tidied to a hyphen: pkg-config sorts `2.0.0-dev`
+*above* `2.0.0`, so a game gating on `--atleast-version=2.0.0` would have passed
+against a development build missing most of the release. `2.0.0~dev` sorts below.
+
+Every code snippet in `UPGRADING.md` was compiled against a staging install
+before the file was committed, which caught a wrong `ContactSystem` API in the
+migration example — `SetOnBegin(Entity, Entity)` does not exist; it is
+`SetOnBeginContact(const Contact &)`, and the `Contact` carries a normal and a
+penetration depth, which is the whole reason `ContactSystem` can do what
+`CollisionSystem` could not. A migration guide is exactly the document whose
+examples nobody compiles.
+
+One claim was walked back before commit: the changelog said eight of the ten
+`KNOWN_ISSUES.md` entries were resolved. Seven are resolved outright; item 10 is
+half resolved (`CollisionSystem` is gone, the event bus is still missing), and
+counting it whole would have overstated the release.
 
 ---
 

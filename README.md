@@ -2,7 +2,7 @@
 
 A lightweight, ECS-based 2D game engine built on SDL2 - made for game jams and personal projects.
 
-> **"v2" is the second-generation engine.** The current release is v1.3.0; `main` is at `2.0.0~dev`. 2.0.0 is where the 1.x API freeze resets, so the tree ahead of that release deliberately breaks source compatibility - see [KNOWN_ISSUES.md](KNOWN_ISSUES.md) for what it fixes and [CHANGELOG.md](CHANGELOG.md) for release notes.
+> **"v2" is the second-generation engine.** The current release is **v2.0.0**, which resets the 1.x API freeze: nine breaking changes land together so the traps they fix are gone for good rather than arriving one per release. **It requires a rebuild, not a relink** - four structs changed size and `MAX_COMPONENTS` changed meaning without changing any size at all. See [docs/UPGRADING.md](docs/UPGRADING.md) to migrate, [CHANGELOG.md](CHANGELOG.md) for what changed, and [KNOWN_ISSUES.md](KNOWN_ISSUES.md) for what remains.
 
 ![Storm Engine v2 platformer example](examples/platformer/screenshot.png)
 

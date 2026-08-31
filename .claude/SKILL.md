@@ -12,10 +12,15 @@ date_added: "2026-08-03"
 
 # Storm! Engine v2
 
-> **Current release: v2.0.0~dev** (`Makefile.debian`) - the compatibility
-> promise that kept the 1.x line's public API stable no longer governs this
-> tree. 2.0.0 is the breaking release `KNOWN_ISSUES.md` describes; several of
-> its items are resolved here, and the rest stay open for a later release.
+> **Current release: v2.0.0** (`Makefile.debian`) - the compatibility promise
+> that kept the 1.x line's public API stable no longer governs this tree. 2.0.0
+> is the breaking release `KNOWN_ISSUES.md` describes: nine breaking changes
+> shipped together, seven of its ten items are resolved outright and an eighth
+> in part. Items 5 (component changes never move system membership) and 8
+> (`gameState.h` compiles the whole engine) stay open for a later release.
+> **2.0.0 requires a rebuild, not a relink** - `Registry` 576→488, `Entity`
+> 16→24, `System` 32→40, `Tile` 80→104, and `MAX_COMPONENTS` 32→64 with no size
+> change at all. See `docs/UPGRADING.md`.
 > Repo: `github.com/WillSams/storm-engine-v2` · License: WTFPL
 >
 > Since v1.2.1: v1.2.2 added the safe accessors (`TryGetComponent`, `IsAlive`,

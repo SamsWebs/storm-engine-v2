@@ -1,5 +1,163 @@
 # Changelog
 
+## [2.0.0] - 2026-08-31
+
+> **This release requires a REBUILD, not a relink.** Four structs changed size
+> and one constant changed meaning without changing any size at all. Rebuild the
+> library, the editor and every game against the same headers, in one go.
+>
+> | | 1.3.x | 2.0.0 |
+> |---|---|---|
+> | `sizeof(Registry)` | 576 | 488 |
+> | `sizeof(Entity)` | 16 | 24 |
+> | `sizeof(System)` | 32 | 40 |
+> | `sizeof(Tile)` | 80 | 104 |
+> | `MAX_COMPONENTS` | 32 | **64** |
+>
+> `MAX_COMPONENTS` is the dangerous row, precisely because nothing moved.
+> `sizeof(std::bitset<N>)` is 8 bytes for every `N` up to 64, so `Signature` is
+> 8 bytes at either value and no size check anywhere can catch a translation
+> unit still compiled against 32. Two objects disagreeing about it disagree
+> about what type `Signature` *is*: they link cleanly and misbehave at runtime.
+>
+> `docs/UPGRADING.md` is the migration guide. The namespace break, which is the
+> one that touches every line of every game, is a single line in your build:
+> `CXXFLAGS += -include stormengine2/compat/global.h`.
+
+This is the release that spends the whole major-version budget at once. Nine
+breaking changes land together, deliberately, so the traps they fix are gone for
+good rather than arriving one per release for the next two years. Seven of the
+ten entries in `KNOWN_ISSUES.md` are resolved outright and an eighth in part;
+the two that remain are named under **Notes** below.
+
+### Breaking
+
+- **Every engine type moved into `namespace storm`.** Ships with
+  `<stormengine2/compat/global.h>`, which emits a `using` declaration for every
+  public name — including the enumerators of the unscoped enums (`LOG_INFO`,
+  `kNetChunkVital`), which a `using` on the enum type alone does not bring
+  across. The bridge exists to be deleted: it pulls every name back into the
+  global namespace, which is the exact collision the namespace prevents. A
+  future major removes it.
+
+- **`Entity` carries a generation.** Ids are recycled, and in 1.x a handle to a
+  killed entity kept working against whatever entity later took its id — so
+  `bullet.Kill()` after `bullet` died destroyed an unrelated live entity. The
+  generation is stamped at creation and bumped when the id is freed, so a stale
+  handle now compares unequal and is rejected with a throttled error.
+  `sizeof(Entity)` 16 → 24.
+
+  `Entity::operator<` and `operator>` are **deleted** rather than left comparing
+  id alone. Order explicitly with `EntityOrder` — `std::set<Entity, EntityOrder>`,
+  `std::sort(first, last, EntityOrder{})`. `Registry::GetEntitiesToBeKilled()`
+  returns `std::vector<Entity>` as a consequence.
+
+- **`Entity(std::size_t)` is `explicit`.** `registry.KillEntity(88)` no longer
+  compiles; wrap it: `registry.KillEntity(Entity(88))`.
+
+- **`CollisionSystem` is deleted.** It only ever killed both entities on
+  overlap, which is not collision response and was the first thing every game
+  worked around. `ContactSystem` reports begin/end contacts with a normal and a
+  penetration depth and leaves the response to the game.
+
+- **Networking objects are no longer copyable.** `NetServer`, `NetClient`,
+  `NetConnection` and `NetSocket` `= delete` their copy constructor and copy
+  assignment. Each captures `this` in send callbacks and owns a socket
+  descriptor, so a copy gave two objects pointing at the original and two
+  destructors closing one descriptor.
+
+- **A system that overflows the component cap is latched off.** Membership is
+  `(entitySignature & systemSignature) == systemSignature`, so a system left
+  with an empty signature matched **every** entity — one that should have seen
+  nothing ran on the whole world. It now matches nothing, and
+  `System::IsDisabled()` reports it. `sizeof(System)` 32 → 40.
+
+- **`Tile` carries the editor's animation fields.** The editor has always
+  written them; `TileMapLoader` parsed and discarded them, so animated tiles
+  rendered static and the editor's animation UI did nothing at runtime. `Tile`
+  now carries `isAnimated`, `numFrames`, `frameSpeedRate`, `vertical`,
+  `isLooped` and `frameOffset`, named to match `AnimationComponent`. The same
+  pass found `colliderOffset` being discarded too — a tile whose collider you
+  nudged in the editor collided from its unnudged position. `sizeof(Tile)`
+  80 → 104.
+
+- **`MAX_COMPONENTS` is 64.** See the note above for why a change that moves
+  nothing is the dangerous kind. 64 is the last free step: at 65 the bitset
+  doubles to 16 bytes and carries `Registry` and `System` with it.
+
+- **`AddSystem<T>()` takes its arguments by forwarding reference.** The old
+  signature took lvalue references, so a temporary could not be passed at all.
+
+### Added
+
+- **`Keyboard`** (`<stormengine2/input/keyboard.h>`) — edge-triggered
+  `IsDown` / `WasPressed` / `WasReleased` across the full scancode range. It is
+  fed events rather than polling, because the engine owns no main loop and two
+  `SDL_PollEvent` sites drain one shared queue, which is how input goes missing.
+
+- **`ActionMap`** (`<stormengine2/input/actionMap.h>`) — binds one game action
+  across the keyboard, gamepad, virtual gamepad and touch at once, so a game
+  stops writing `if (key || pad || touch)` by hand in every state. Every source
+  is optional: a desktop build and a phone build share one binding table and
+  differ only in what they pass. Keyboard and gamepad edges come from those
+  classes rather than being recomputed, so a key pressed and released inside a
+  single frame is still seen as a press.
+
+- **Diagnostics for the traps that used to be silent**, all throttled to a few
+  reports per site and on in every build: a component added after
+  `Registry::Update()` froze membership; a system registered after matching
+  entities already existed; a registry destroyed having never flushed; a stale
+  handle used for component access; a sprite whose source rect falls outside its
+  texture.
+
+- **The non-throwing halves of the accessors**: `Registry::TryGetSystem<T>()`,
+  `TryGetComponent<T>()`, `TryGetEntityByTag()`.
+
+- **A retrofit for a system registered too late**:
+  `Registry::AdmitExistingEntitiesTo(system)`,
+  `AdmitExistingEntities<T>()`, and `CountEntitiesMissedBySystem(system)` to
+  find out whether it happened.
+
+- **`NetServer::GetConnectedClientIds()`** and a configurable per-address
+  connection cap (`kNetMaxClientsPerIp`) for internet play, where
+  `GetClientCount()` was never a valid loop bound.
+
+- **`specs/layout.spec.cpp`** pins `sizeof(Registry)`, `Entity`, `System`,
+  `Signature`, `Tile` and the value of `MAX_COMPONENTS`. These sizes are ABI:
+  games allocate `Registry` themselves and iterate `std::vector<Tile>` directly,
+  so a size change is emitted at *their* call site. The `MAX_COMPONENTS`
+  assertion is there because the size assertions cannot see it.
+
+- **`docs/UPGRADING.md`**, written against what shipped rather than what was
+  planned.
+
+### Fixed
+
+- The tile editor builds again under GCC 13. Two separate breakages, the second
+  only visible once the first was fixed: vendored `ImGuiFileDialog.cpp` used
+  `intptr_t` with no header declaring it, and `sol.hpp` includes `<lua.h>`
+  unqualified while the include path only reached `vendor/`.
+
+- `vendor/MANIFEST.md` records every vendored dependency's version and upstream,
+  the six submodule pins, and the patches carried on top of upstream — so the
+  next vendor update does not silently revert one.
+
+- The release workflow no longer mints tags of its own, validates the tag format
+  before publishing, and fails closed when it cannot read the version.
+
+### Notes
+
+- `KNOWN_ISSUES.md` item 5 stays open: adding or removing a component after
+  `Registry::Update()` still never changes system membership. Re-evaluating on
+  every component change means membership can no longer be a flat
+  `std::vector<Entity>`, which is an ECS redesign rather than a patch. The new
+  diagnostic reports it loudly instead.
+
+- `KNOWN_ISSUES.md` item 8 stays open: `states/gameState.h` still pulls in the
+  whole engine. `gameStateBase.h` (1.3.0) is the same interface without the
+  convenience includes, at a 45% saving per translation unit, for games that
+  want it.
+
 ## [1.3.0] - 2026-08-23
 
 > **Upgrading from 1.2.x requires a REBUILD, not just a relink.** `AssetStore`

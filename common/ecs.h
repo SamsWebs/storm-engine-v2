@@ -15,7 +15,17 @@
 #include <unordered_map>
 #include <vector>
 
-constexpr unsigned int MAX_COMPONENTS = 32;
+// Raised 32 -> 64 in 2.0.0. This needed a major release despite changing no
+// struct size, and that is exactly why: sizeof(std::bitset<N>) is 8 bytes for
+// every N from 1 to 64, so Signature is 8 bytes either way and no size check
+// can catch a translation unit still compiled against 32. Two TUs disagreeing
+// about MAX_COMPONENTS disagree about what type Signature *is* -- an ODR
+// violation that links cleanly and misbehaves at runtime. Rebuild the library,
+// the editor and every game against one value, in one go.
+//
+// 64 is the ceiling that stays free: at 65 the bitset becomes 16 bytes, which
+// changes sizeof(Registry) and sizeof(System) and is a second ABI break.
+constexpr unsigned int MAX_COMPONENTS = 64;
 
 //////////////////////////////////////////
 // Signature

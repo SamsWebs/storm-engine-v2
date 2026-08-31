@@ -138,13 +138,15 @@ These are the biggest correctness traps — understand them before writing ECS c
    entities. A system registered after entities were already flushed starts empty
    and stays empty. Always register systems before creating entities.
 
-3. **`MAX_COMPONENTS = 32` is a process-wide cap** — `IComponent::nextId` is a single
-   static. A 33rd component type does **not** throw any more: `EcsComponentIdIsValid`
+3. **`MAX_COMPONENTS = 64` is a process-wide cap** (32 before 2.0.0) — `IComponent::nextId`
+   is a single static. A 65th component type does **not** throw: `EcsComponentIdIsValid`
    range-checks the id, logs a throttled error, and the type is then ignored
-   everywhere — `RequireComponent` drops the requirement, `AddComponent` /
-   `RemoveComponent` no-op, `HasComponent` returns `false`, and `GetComponent`
-   returns the fallback. Signature bits are set with `operator[]`, never
-   `bitset::set()`, so no throw is emitted into a `-fno-exceptions` game TU.
+   everywhere — `AddComponent` / `RemoveComponent` no-op, `HasComponent` returns
+   `false`, and `GetComponent` returns the fallback. Signature bits are set with
+   `operator[]`, never `bitset::set()`, so no throw is emitted into a
+   `-fno-exceptions` game TU. Since 2.0.0 a `RequireComponent` that overflows
+   **latches the system off** (`System::IsDisabled()`) rather than dropping the
+   requirement, so it matches nothing instead of everything.
 
 4. **Component storage is dense, not sparse** — one `std::vector<T>` per type, indexed
    directly by entity id. Memory per component type is O(highest entity id). Every
@@ -1783,12 +1785,14 @@ the game's own headers.
   2.0.0, so `ContactSystem` is now the only collision system. There is still no event
   bus and no event queue (`KNOWN_ISSUES.md` #10), and the broadphase sweeps one
   axis.
-- **Thirty-two component types, process-wide.** `MAX_COMPONENTS` is 32 and
-  `Signature` is `std::bitset<32>`; ids come from one global counter, so the cap
-  is per binary, not per `Registry`. Overflow no longer throws — the id is
-  range-checked, logged and ignored — but a system whose `RequireComponent<T>`
-  was dropped keeps an empty signature, and an empty signature matches **every**
-  entity. Prefer widening a component with a `kind` enum over declaring a new one.
+- **Sixty-four component types, process-wide.** `MAX_COMPONENTS` is 64 since
+  2.0.0 (32 before) and `Signature` is `std::bitset<64>`; ids come from one
+  global counter, so the cap is per binary, not per `Registry`. Overflow does
+  not throw — the id is range-checked, logged and ignored — and a system whose
+  `RequireComponent<T>` overflowed is now latched off, so it matches **nothing**
+  rather than every entity. Prefer widening a component with a `kind` enum over
+  declaring a new one. 64 is the last free step: at 65 the bitset doubles to 16
+  bytes and moves `sizeof(Registry)` and `sizeof(System)` with it.
 - No built-in scene editor beyond the tile map editor. Entity placement is
   code-driven or XML-driven.
 - The engine ships no main loop, no Game class, no window management.

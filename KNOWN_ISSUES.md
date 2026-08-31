@@ -52,11 +52,15 @@ Every `Entity` member now null-checks its registry pointer, so this no-ops and l
 
 ## 3. Thirty-two component types, process-wide
 
-`MAX_COMPONENTS` is 32 and `Signature` is `std::bitset<32>`. Type ids come from one process-wide counter, so the cap is per binary, not per `Registry`. See the README's *Component type limit* section for the full explanation and how to budget against it.
+`MAX_COMPONENTS` was 32 and `Signature` was `std::bitset<32>`. Type ids come from one process-wide counter, so the cap is per binary, not per `Registry`. See the README's *Component type limit* section for the full explanation and how to budget against it.
 
-**Why it stays.** `Signature` is `std::bitset<MAX_COMPONENTS>`; two translation units compiled with different values disagree about what type `Signature` *is*, which is an ODR violation. Worse, `sizeof(std::bitset<N>)` is 8 bytes for every N from 1 to 64, so raising 32 → 64 changes no layout and no size check catches a stale object file — the mismatch is silent. Shipping that as a 1.x point release would corrupt games that did not rebuild.
+**Why it stayed.** `Signature` is `std::bitset<MAX_COMPONENTS>`; two translation units compiled with different values disagree about what type `Signature` *is*, which is an ODR violation. Worse, `sizeof(std::bitset<N>)` is 8 bytes for every N from 1 to 64, so raising 32 → 64 changes no layout and no size check catches a stale object file — the mismatch is silent. Shipping that as a 1.x point release would corrupt games that did not rebuild.
 
-**Meanwhile.** Prefer widening a component (a `kind` enum) over declaring a new one. Overflow is reported on the error log and the type is ignored rather than throwing, so it will not abort under `-fno-exceptions`.
+**Resolved in 2.0.0.** `MAX_COMPONENTS` is 64. No struct moved, which is precisely why it took a major: nothing about the build can detect a translation unit still compiled against 32, so the only safe upgrade is to rebuild the library, the editor and every game against one header in one go. `specs/layout.spec.cpp` pins the value itself alongside the sizes, because the size pins cannot see it.
+
+64 is the last free step. At 65 `std::bitset` becomes 16 bytes and `sizeof(Registry)` and `sizeof(System)` move with it — a second ABI break rather than a recompile.
+
+**Still true.** The cap remains per binary, not per `Registry`, and the five engine components count against it. Prefer widening a component (a `kind` enum) over declaring a new one. Overflow is reported on the error log and the type is ignored rather than throwing, so it will not abort under `-fno-exceptions` — and since 2.0.0 the system that lost the requirement is latched off rather than left matching everything (item 4).
 
 ## 4. A system that overflows the component cap matches *every* entity
 

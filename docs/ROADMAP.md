@@ -225,8 +225,25 @@ namespacing and everything to do with the tree never being built:
 
 The namespace edits made blind in that tree turned out to be correct — but that
 was luck rather than verification, and the two bugs above are what "edited but
-never built" actually costs. `examples/android-platformer` is still unbuilt:
-the NDK is not on this machine, so its edits remain reasoned, not tested.
+never built" actually costs.
+
+`examples/android-platformer` was **confirmed working by the maintainer on a
+machine with the NDK**, along with the Switch build. Neither toolchain is on the
+machine this branch was developed on, so that confirmation is the only evidence
+for the Android tree — it is not covered by CI and nothing here can re-check it.
+
+Android was structurally immune to both bugs the Switch tree had, which is worth
+knowing before assuming the two platforms fail alike:
+
+- `app/jni/CMakeLists.txt` names `vendor/android/glm` on the include path
+  directly, so the glm path bug could not occur.
+- It uses `file(GLOB_RECURSE ENGINE_SRC "${REPO_ROOT}/common/*.cpp")` and CMake's
+  own object layout, so there is no `VPATH` target lookup for a stale desktop
+  `.o` to satisfy. It also picks up every engine translation unit, where the
+  Switch Makefile's non-recursive glob picks up six.
+
+**The standing gap is unchanged:** CI builds neither. Both trees can break on a
+future engine change and nothing in the repo will say so.
 
 ### 7. Input action mapping — **DONE**
 

@@ -157,12 +157,32 @@ DiagnosticsTable() {
 
 } // namespace
 
-// Candidates are built with their real, current generation (and a null
-// `registry`): that keeps IsAlive and the members-list == comparison below
-// meaningful, while anything that dereferences a component off one must
-// still stamp `entity.registry` first, as AdmitExistingEntitiesTo does.
-// Skipping that stamp is silent - the null guards return a shared zeroed
-// fallback rather than failing - and it shipped that way once already.
+bool Registry::IsIdInUse(std::size_t id) const {
+  if (id >= numEntities) {
+    return false;
+  }
+  return std::find(freeIds.begin(), freeIds.end(),
+                   static_cast<int>(id)) == freeIds.end();
+}
+
+// Occupancy is checked with IsIdInUse *before* the candidate is stamped with
+// a generation. IsAlive cannot do this job: it requires the caller's
+// generation to already match the id's current one, so stamping the current
+// generation onto the candidate first — then asking IsAlive whether that
+// same generation is current — would be trivially true even for an id that
+// is presently sitting in freeIds.
+//
+// Once occupancy is confirmed, the candidate is stamped with its real,
+// current generation (and left with a null `registry`) so it carries the
+// live entity's actual identity into every == it takes part in below: the
+// members-list scan, and anything IsPendingAdmission or a caller compares it
+// against afterward. A bare Entity(id) (generation 0) would read as a
+// mismatch against the real entity in every one of those.
+//
+// Anything that dereferences a component off a candidate must still stamp
+// `entity.registry` first, as AdmitExistingEntitiesTo does. Skipping that
+// stamp is silent — the null guards return a shared zeroed fallback rather
+// than failing — and it shipped that way once already.
 template <typename TVisitor>
 void Registry::ForEachMissedEntity(const System &system,
                                    TVisitor &&visit) const {
@@ -172,9 +192,7 @@ void Registry::ForEachMissedEntity(const System &system,
 
   for (std::size_t id = 0;
        id < numEntities && id < entityComponentSignatures.size(); ++id) {
-    const bool idInUse = std::find(freeIds.begin(), freeIds.end(),
-                                   static_cast<int>(id)) == freeIds.end();
-    if (!idInUse) {
+    if (!IsIdInUse(id)) {
       continue;
     }
 

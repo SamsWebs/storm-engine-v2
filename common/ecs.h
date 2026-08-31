@@ -107,7 +107,7 @@ public:
 };
 
 // Entity is a value type copied into every system list, set, and sort — keep
-// it lean (an id + registry pointer, nothing else).
+// it lean (an id, a generation, and a registry pointer, nothing else).
 class Entity {
 private:
   std::size_t id;
@@ -289,6 +289,14 @@ private:
   template <typename TComponent>
   TComponent *FindComponent(Entity entity, ComponentMiss &miss) const;
 
+  // Whether `id` is currently held by any entity, independent of generation:
+  // occupied means "in [0, numEntities) and not parked in freeIds". Named so
+  // that "what does occupied mean" has one home. A liveness bitmap has been
+  // floated to replace this scan (P49, tracked in docs/TECH_DEBT.md); an
+  // unnamed, single-use reimplementation of occupancy is exactly what such a
+  // change would miss.
+  bool IsIdInUse(std::size_t id) const;
+
   // Shared implementation of CountEntitiesMissedBySystem and
   // AdmitExistingEntitiesTo: entities that are live, past admission, match
   // `system`'s signature, and are not already one of its members.
@@ -296,9 +304,10 @@ private:
   // A Registry member (not a free function) so it can stamp each candidate's
   // real, current generation before `visit` or the members-list comparison
   // below sees it — id occupancy and generation are both private state.
-  // Handing `visit` a bare Entity(id) (generation 0) would make it read as
-  // permanently stale to IsAlive and to every == comparison against the
-  // system's real members, silently breaking this accounting.
+  // Handing `visit` a bare Entity(id) (generation 0) would make every == it
+  // takes part in — the members-list scan, and any comparison a caller makes
+  // afterward — read as a mismatch against the real, live entity holding
+  // that id.
   template <typename TVisitor>
   void ForEachMissedEntity(const System &system, TVisitor &&visit) const;
 

@@ -371,7 +371,11 @@ void Registry::KillEntity(Entity entity) {
   // since been handed to a new entity — IsAlive checks the generation, so
   // that case no longer kills the new entity by mistake.
   if (!IsAlive(entity)) {
-    static unsigned int reports = 0;
+    // thread_local, like every other diagnostic throttle in this file (see
+    // ecs.h): a spec exercising this exact path on a fresh thread gets its
+    // own untouched budget, independent of what the main thread has already
+    // reported elsewhere in the suite.
+    static thread_local unsigned int reports = 0;
     if (EcsShouldReport(reports)) {
       logger.Err("KillEntity: entity " + std::to_string(entityId) +
                  " is not alive (never created, or already killed); ignoring" +
@@ -381,7 +385,7 @@ void Registry::KillEntity(Entity entity) {
   }
 
   if (entitiesToBeKilled.count(entity) > 0) {
-    static unsigned int reports = 0;
+    static thread_local unsigned int reports = 0;
     if (EcsShouldReport(reports)) {
       logger.Err("KillEntity: entity " + std::to_string(entityId) +
                  " is already pending kill this frame; ignoring" +

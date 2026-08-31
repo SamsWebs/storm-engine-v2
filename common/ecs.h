@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <bitset>
+#include <cstdint>
 #include <deque>
 #include <functional>
 #include <memory>
@@ -110,6 +111,12 @@ public:
 class Entity {
 private:
   std::size_t id;
+  // 0 is reserved and never valid: Registry::generations starts at 1, so an
+  // Entity built from a bare id is stale by construction and cannot be
+  // mistaken for a live entity.
+  std::uint32_t generation = 0;
+
+  friend class Registry;
 
 public:
   // explicit since 2.0.0: without it any function taking an Entity silently
@@ -125,8 +132,10 @@ public:
   bool BelongsToGroup(const std::string &group) const;
 
   Entity &operator=(const Entity &other) = default;
-  bool operator==(const Entity &other) const { return id == other.id; };
-  bool operator!=(const Entity &other) const { return id != other.id; };
+  bool operator==(const Entity &other) const {
+    return id == other.id && generation == other.generation;
+  };
+  bool operator!=(const Entity &other) const { return !(*this == other); };
   bool operator>(const Entity &other) const { return id > other.id; };
   bool operator<(const Entity &other) const { return id < other.id; };
 
@@ -248,6 +257,10 @@ private:
   // [ Vector index = entity id ]
   std::vector<Signature> entityComponentSignatures;
 
+  // Generation per entity id, parallel to entityComponentSignatures. Starts
+  // at 1 so that generation 0 can mean "never valid" — see Entity.
+  std::vector<std::uint32_t> generations;
+
   std::unordered_map<std::type_index, std::shared_ptr<System>> systems;
 
   // Set of entities that are flagged to be added or removed the
@@ -276,6 +289,19 @@ private:
   template <typename TComponent>
   TComponent *FindComponent(Entity entity, ComponentMiss &miss) const;
 
+  // Shared implementation of CountEntitiesMissedBySystem and
+  // AdmitExistingEntitiesTo: entities that are live, past admission, match
+  // `system`'s signature, and are not already one of its members.
+  //
+  // A Registry member (not a free function) so it can stamp each candidate's
+  // real, current generation before `visit` or the members-list comparison
+  // below sees it — id occupancy and generation are both private state.
+  // Handing `visit` a bare Entity(id) (generation 0) would make it read as
+  // permanently stale to IsAlive and to every == comparison against the
+  // system's real members, silently breaking this accounting.
+  template <typename TVisitor>
+  void ForEachMissedEntity(const System &system, TVisitor &&visit) const;
+
 public:
   Registry() { logger.Log("Registry constructor called"); }
 
@@ -289,14 +315,12 @@ public:
   Entity CreateEntity();
   void KillEntity(Entity entity);
 
-  // True while `entity`'s id is in use. NOTE: ids are recycled, so a stale
-  // handle whose id has since been handed to a new entity reports alive —
-  // Entity carries no generation counter to tell the two apart.
-  //
-  // Derived from existing state (id < numEntities, and not parked in freeIds)
-  // rather than a liveness bitmap, so it costs a scan of freeIds. A bitmap
-  // would make this O(1) but adds a data member to Registry, and games embed
-  // `Registry` by value, so sizeof(Registry) is ABI. Tracked as P49.
+  // True while `entity`'s id is in use *and* its generation matches the
+  // entity currently holding that id. A stale handle whose id has since been
+  // recycled to a new entity reports false, not true: Entity carries a
+  // generation stamped at creation and bumped when the id is freed, so the
+  // two are never mistaken for each other. O(1): a generation compare, no
+  // freeIds scan.
   bool IsAlive(Entity entity) const;
 
   // True while `entity` is queued for the next Registry::Update() and has not
@@ -399,9 +423,7 @@ public:
   //
   // The pointer aliases the registry's tag map: it is invalidated by TagEntity,
   // RemoveEntityTag, and by the Update() that reaps a killed entity. Read it
-  // and let it go; do not store it across a frame. Entity ids are recycled and
-  // carry no generation counter (KNOWN_ISSUES.md item 1), so the same is true
-  // of the Entity you copy out of it.
+  // and let it go; do not store it across a frame.
   const Entity *TryGetEntityByTag(const std::string &tag) const;
 
   void RemoveEntityTag(Entity entity);

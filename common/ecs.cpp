@@ -155,31 +155,36 @@ DiagnosticsTable() {
   return table;
 }
 
-// The entities a system registered now would have to be told about: live,
-// past admission, matching the signature, not already members.
-//
-// Candidates are bare `Entity(id)` values: `registry` is null on every one of
-// them. That is fine for counting, but anything that dereferences a component
-// off one must stamp `entity.registry` first, as AdmitExistingEntitiesTo does.
+} // namespace
+
+// Candidates are built with their real, current generation (and a null
+// `registry`): that keeps IsAlive and the members-list == comparison below
+// meaningful, while anything that dereferences a component off one must
+// still stamp `entity.registry` first, as AdmitExistingEntitiesTo does.
 // Skipping that stamp is silent - the null guards return a shared zeroed
 // fallback rather than failing - and it shipped that way once already.
 template <typename TVisitor>
-void ForEachMissedEntity(const Registry &registry, std::size_t numEntities,
-                         const std::vector<Signature> &signatures,
-                         const System &system, TVisitor &&visit) {
+void Registry::ForEachMissedEntity(const System &system,
+                                   TVisitor &&visit) const {
   const Signature &required = system.GetComponentSignature();
   const std::vector<Entity> &members =
       const_cast<System &>(system).GetSystemEntities();
 
-  for (std::size_t id = 0; id < numEntities && id < signatures.size(); ++id) {
+  for (std::size_t id = 0;
+       id < numEntities && id < entityComponentSignatures.size(); ++id) {
+    const bool idInUse = std::find(freeIds.begin(), freeIds.end(),
+                                   static_cast<int>(id)) == freeIds.end();
+    if (!idInUse) {
+      continue;
+    }
+
     Entity entity(id);
-    if (!registry.IsAlive(entity)) {
+    entity.generation = generations[id];
+
+    if (IsPendingAdmission(entity)) {
       continue;
     }
-    if (registry.IsPendingAdmission(entity)) {
-      continue;
-    }
-    if ((signatures[id] & required) != required) {
+    if ((entityComponentSignatures[id] & required) != required) {
       continue;
     }
     if (std::find(members.begin(), members.end(), entity) != members.end()) {
@@ -188,8 +193,6 @@ void ForEachMissedEntity(const Registry &registry, std::size_t numEntities,
     visit(entity);
   }
 }
-
-} // namespace
 
 // Call-site-owned, like every other diagnostic throttle in this file —
 // unlike updateCalls/entitiesCreated above, this counter must outlive any
@@ -236,7 +239,12 @@ Entity Registry::CreateEntity() {
     freeIds.pop_front();
   }
 
+  if (entityId >= generations.size()) {
+    generations.resize(entityId + 1, 1); // 1, not 0: 0 means never valid
+  }
+
   Entity entity(entityId);
+  entity.generation = generations[entityId];
   entity.registry = this;
   entitiesToBeAdded.insert(entity);
 
@@ -252,16 +260,10 @@ Entity Registry::CreateEntity() {
 
 bool Registry::IsAlive(Entity entity) const {
   const auto entityId = entity.GetId();
-
-  // An id is in use once CreateEntity has handed it out (id < numEntities) and
-  // for as long as Update()'s kill flush has not parked it back in freeIds.
-  // CreateEntity pops it off freeIds again when it recycles the id.
-  if (entityId >= numEntities) {
+  if (entityId >= numEntities || entityId >= generations.size()) {
     return false;
   }
-
-  return std::find(freeIds.begin(), freeIds.end(),
-                   static_cast<int>(entityId)) == freeIds.end();
+  return entity.generation == generations[entityId];
 }
 
 bool Registry::IsPendingAdmission(Entity entity) const {
@@ -318,22 +320,21 @@ Registry::SystemMissedByLateComponent(Entity entity,
 
 std::size_t Registry::CountEntitiesMissedBySystem(const System &system) const {
   std::size_t missed = 0;
-  ForEachMissedEntity(*this, numEntities, entityComponentSignatures, system,
-                      [&missed](Entity) { ++missed; });
+  ForEachMissedEntity(system, [&missed](Entity) { ++missed; });
   return missed;
 }
 
 std::size_t Registry::AdmitExistingEntitiesTo(System &system) {
   std::vector<Entity> toAdmit;
-  ForEachMissedEntity(*this, numEntities, entityComponentSignatures, system,
+  ForEachMissedEntity(system,
                       [&toAdmit](Entity entity) { toAdmit.push_back(entity); });
   for (Entity entity : toAdmit) {
-    // ForEachMissedEntity builds each candidate as a bare Entity(id), so
-    // entity.registry is still null here. Stamp it before handing the entity
-    // to the system: everything a system does with an Entity (GetComponent,
-    // Kill, Tag, ...) routes through that pointer, and a null one silently
-    // poisons every access instead of failing loudly. Entity::registry is
-    // public, so this needs no friend declaration.
+    // ForEachMissedEntity stamps each candidate's real generation but leaves
+    // registry null. Stamp it before handing the entity to the system:
+    // everything a system does with an Entity (GetComponent, Kill, Tag, ...)
+    // routes through that pointer, and a null one silently poisons every
+    // access instead of failing loudly. Entity::registry is public, so this
+    // needs no friend declaration.
     entity.registry = this;
     system.AddEntityToSystem(entity);
   }
@@ -343,14 +344,11 @@ std::size_t Registry::AdmitExistingEntitiesTo(System &system) {
 void Registry::KillEntity(Entity entity) {
   const auto entityId = entity.GetId();
 
-  // One liveness test covers both rejections this needs: an id that was never
-  // created, and an id already recycled into freeIds (the double-kill that
-  // used to alias two live entities onto one id).
-  //
-  // KNOWN GAP: ids are recycled, so a stale handle whose id has since been
-  // handed to a new entity reads as alive and kills that new entity instead.
-  // Closing it needs a generation counter inside Entity, which changes
-  // sizeof(Entity) — an ABI break, tracked as P5 in docs/TECH_DEBT.md.
+  // One liveness test covers every rejection this needs: an id that was never
+  // created, an id already recycled into freeIds (the double-kill that used
+  // to alias two live entities onto one id), and a stale handle whose id has
+  // since been handed to a new entity — IsAlive checks the generation, so
+  // that case no longer kills the new entity by mistake.
   if (!IsAlive(entity)) {
     static unsigned int reports = 0;
     if (EcsShouldReport(reports)) {
@@ -425,6 +423,10 @@ void Registry::Update() {
     RemoveEntityTag(entity); // otherwise a recycled id inherits the stale tag
 
     entityComponentSignatures[entity.GetId()].reset();
+
+    // Bump before the id is reusable: every handle to the old entity becomes
+    // detectably stale at exactly the moment the id can be handed out again.
+    ++generations[entity.GetId()];
 
     // Make the entity id available to be reused
     freeIds.push_back(entity.GetId());

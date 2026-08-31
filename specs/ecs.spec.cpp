@@ -678,3 +678,42 @@ static_assert(!std::is_convertible<std::size_t, Entity>::value,
               "a bare size_t must not implicitly convert to an Entity");
 static_assert(std::is_constructible<Entity, std::size_t>::value,
               "Entity must still be constructible from an id");
+
+Describe(GenerationSpec) {
+  It(should_not_report_a_stale_handle_as_alive) {
+    Registry registry;
+    Entity first = registry.CreateEntity();
+    const std::size_t reusedId = first.GetId();
+    first.Kill();
+    registry.Update();                       // id returns to the free list
+
+    Entity second = registry.CreateEntity(); // same id, new generation
+    Assert::That(second.GetId(), Equals(reusedId));
+
+    Assert::That(registry.IsAlive(second), Equals(true));
+    Assert::That(registry.IsAlive(first), Equals(false));
+  };
+
+  It(should_not_compare_a_stale_handle_equal_to_the_live_entity) {
+    Registry registry;
+    Entity first = registry.CreateEntity();
+    first.Kill();
+    registry.Update();
+    Entity second = registry.CreateEntity();
+
+    Assert::That(first == second, Equals(false));
+    Assert::That(first != second, Equals(true));
+  };
+
+  It(should_treat_a_hand_built_entity_as_stale) {
+    // Generation 0 is reserved: generations start at 1, so an Entity built
+    // from a bare id can never match a live one.
+    Registry registry;
+    Entity live = registry.CreateEntity();
+    registry.Update();
+
+    Entity fabricated(live.GetId());
+    Assert::That(registry.IsAlive(fabricated), Equals(false));
+    Assert::That(fabricated == live, Equals(false));
+  };
+};

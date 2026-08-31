@@ -16,8 +16,8 @@ using namespace igloo;
 // Measured on x86-64, g++, -std=c++17.
 Describe(LayoutSpec) {
   It(pins_the_sizes_that_are_abi) {
-    Assert::That(sizeof(Registry), Equals(static_cast<std::size_t>(576)));
-    Assert::That(sizeof(Entity), Equals(static_cast<std::size_t>(16)));
+    Assert::That(sizeof(Registry), Equals(static_cast<std::size_t>(600)));
+    Assert::That(sizeof(Entity), Equals(static_cast<std::size_t>(24)));
     Assert::That(sizeof(System), Equals(static_cast<std::size_t>(32)));
     Assert::That(sizeof(Signature), Equals(static_cast<std::size_t>(8)));
     Assert::That(sizeof(Tile), Equals(static_cast<std::size_t>(80)));

@@ -14,7 +14,7 @@ date_added: "2026-08-03"
 
 > **Current release: v2.0.0** (`Makefile.debian`) - the compatibility promise
 > that kept the 1.x line's public API stable no longer governs this tree. 2.0.0
-> is the breaking release `KNOWN_ISSUES.md` describes: nine breaking changes
+> is the breaking release `KNOWN_ISSUES.md` describes: ten breaking changes
 > shipped together, seven of its ten items are resolved outright and an eighth
 > in part. Items 5 (component changes never move system membership) and 8
 > (`gameState.h` compiles the whole engine) stay open for a later release.

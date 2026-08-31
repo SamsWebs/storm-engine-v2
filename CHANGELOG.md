@@ -24,7 +24,7 @@
 > one that touches every line of every game, is a single line in your build:
 > `CXXFLAGS += -include stormengine2/compat/global.h`.
 
-This is the release that spends the whole major-version budget at once. Nine
+This is the release that spends the whole major-version budget at once. Ten
 breaking changes land together, deliberately, so the traps they fix are gone for
 good rather than arriving one per release for the next two years. Seven of the
 ten entries in `KNOWN_ISSUES.md` are resolved outright and an eighth in part;
@@ -88,6 +88,24 @@ the two that remain are named under **Notes** below.
 - **`AddSystem<T>()` takes its arguments by forwarding reference.** The old
   signature took lvalue references, so a temporary could not be passed at all.
 
+- **`GameStateMachine` is no longer copyable.** It owns raw `GameState`
+  pointers in two vectors and frees them in `clean()`, so a copy gave two
+  machines owning the same pointers and the second `clean()` freed what the
+  first already had. The destructor is empty, which is why this never showed
+  up at scope exit — it needed both machines to tick. The copy constructor and
+  copy assignment are `= delete`d, the same treatment the networking types got.
+  Every game holds one by value as a member, which still works; nothing in the
+  engine, the examples or the starter template copied one.
+
+- **`System::AddEntityToSystem()` rejects a stale handle.** It is public, so a
+  game holding a `System&` from `GetSystem<T>()` reached it directly and
+  bypassed the `IsAlive` gate on `Registry::AddEntityToSystems`. Nothing
+  removes an entry from a system's list except a matching kill pass, and a
+  stale handle never goes through one — so a stale entity added this way was
+  iterated by that system every frame, forever. It now logs a throttled error
+  and ignores the handle. A bare `Entity` carries no registry to check against
+  and still passes through.
+
 ### Added
 
 - **`Keyboard`** (`<stormengine2/input/keyboard.h>`) — edge-triggered
@@ -130,6 +148,13 @@ the two that remain are named under **Notes** below.
 
 - **`docs/UPGRADING.md`**, written against what shipped rather than what was
   planned.
+
+- **`scripts/generate-compat-probes.py`**, which generates the check that
+  `<stormengine2/compat/global.h>` is complete from the engine headers rather
+  than from a hand-written list. The spec that was meant to prove the bridge
+  complete named 33 of 133 exports, chosen from the same list that produced the
+  bridge — so it could not fail for the case it existed to catch, and two public
+  names were in fact missing. CI fails if the generated file is stale.
 
 ### Fixed
 

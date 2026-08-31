@@ -20,6 +20,6 @@ Describe(LayoutSpec) {
     Assert::That(sizeof(Entity), Equals(static_cast<std::size_t>(24)));
     Assert::That(sizeof(System), Equals(static_cast<std::size_t>(40)));
     Assert::That(sizeof(Signature), Equals(static_cast<std::size_t>(8)));
-    Assert::That(sizeof(Tile), Equals(static_cast<std::size_t>(80)));
+    Assert::That(sizeof(Tile), Equals(static_cast<std::size_t>(104)));
   };
 };

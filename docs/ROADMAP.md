@@ -91,12 +91,34 @@ survived, and it survived because no test could distinguish its presence from
 its absence. The reasoning is recorded in a comment at the site so it is not
 re-added.
 
-### 4. `Tile` carries the editor's animation fields — `KNOWN_ISSUES.md` item 7
+### 4. `Tile` carries the editor's animation fields — `KNOWN_ISSUES.md` item 7 — **DONE**
 
-`sizeof(Tile)` 80 → larger. The tile editor writes animation data into `.map` files
-and `TileMapLoader` parses and discards it, because `Tile` has nowhere to put it.
-Animated tiles render as static ones and the editor's animation UI does nothing at
-runtime.
+`sizeof(Tile)` 80 → 104, pinned in `specs/layout.spec.cpp`. All five animation
+fields now reach `Tile`, named to match `AnimationComponent` so a game builds one
+by copying across.
+
+The pass found a **second** discarded field nobody had listed: `colliderOffset`.
+The editor has written collider offsets since colliders existed and the loader
+read them only to advance the stream, so a tile whose collider the editor had
+nudged collided from its unnudged position. It is fixed here because 2.0.0 is
+the one chance — carrying it later would cost a second ABI break.
+
+The new fields are appended rather than grouped beside the collider fields, at a
+cost of 8 bytes of padding. Reordering would have silently shifted a `bool` onto
+`colliderW` for any game constructing a `Tile` positionally, and `bool` converts
+to `int` without a diagnostic.
+
+One test was written vacuous and caught before commit: "animation must not leak
+between tiles" asserted on tiles that *preceded* the only animated tile in the
+fixture, so it would have passed against any implementation. The fixture gained
+a plain tile *after* the animated one, which is the only position where the leak
+is observable. Mutation testing then killed all five mutants, the hoisted-variable
+leak included.
+
+**Not done here:** no example consumes the new fields yet, so the feature is
+proven by specs rather than end to end. Wiring one would need the engine
+installed over `/usr/local` to verify locally, since examples build against the
+install prefix rather than the checkout.
 
 ### 5. `MAX_COMPONENTS` 32 → 64 — `KNOWN_ISSUES.md` item 3
 

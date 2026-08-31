@@ -71,9 +71,11 @@ direction at all (`examples/jrpg/src/states/playState.cpp:556`, `HasTag("player"
 and that one is an O(1) probe after the change.
 
 The three `std::set<Entity>` members — `entitiesToBeAdded`, `entitiesToBeKilled`,
-`entitiesPerGroup` — take a named `EntityIdLess` comparator ordering by
+`entitiesPerGroup` — take a named comparator ordering by
 `(id, generation)`, so the ordering is visible rather than implied by a deleted
-operator.
+operator. Name it for what it orders — `EntityOrder`, not `EntityIdLess`, since it
+is not ordering by id alone and a misleading name here is how the deleted operator
+gets quietly reintroduced.
 
 `sizeof(Registry)` changes: two members removed, one added. The layout pin is updated
 deliberately as part of this work.

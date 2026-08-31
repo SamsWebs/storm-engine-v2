@@ -1,4 +1,5 @@
 #include <igloo/igloo_alt.h>
+#include <thread>
 #include <type_traits>
 #include <typeinfo>
 
@@ -569,14 +570,24 @@ Describe(EcsSpec) {
     };
   };
 
-  // P5 — the guards catch a double kill, but not a stale handle whose id has
-  // already been recycled.
+  // P5 — the guards used to catch a double kill, but not a stale handle
+  // whose id had already been recycled.
   Describe(RecycledIdStaleKillSpec) {
-    It(should_still_destroy_the_new_entity_through_a_recycled_stale_handle) {
-      // KNOWN GAP, pinned deliberately: closing it needs a generation counter
-      // inside Entity, which changes sizeof(Entity) — an ABI break, tracked
-      // as P5 in docs/TECH_DEBT.md. When P5 is properly closed this case will
-      // fail, which is the point: flip the assertions then.
+    It(should_reject_a_kill_through_a_recycled_stale_handle) {
+      // FIXED, was pinned deliberately: closing this needed a generation
+      // counter inside Entity, which changed sizeof(Entity) — an ABI break,
+      // tracked as P5 in docs/TECH_DEBT.md. Before the fix, `doomed`'s stale
+      // kill landed on `recycled` because the three KillEntity guards all
+      // passed for a stale handle whose id had already been recycled; now
+      // IsAlive checks the generation and the stale kill is rejected.
+      //
+      // KillEntity's "not alive" diagnostic is throttled by a thread_local
+      // counter (see common/ecs.cpp) shared with every other spec that
+      // exercises this exact rejection on the main thread — by the time this
+      // case runs, that budget is normally already spent. Doing the stale
+      // kill on a fresh thread gives it its own, untouched budget, the same
+      // way registry.spec.cpp's MissingUpdateSpec does for the ~Registry
+      // throttle.
       Registry registry;
       registry.AddSystem<SpecHealthSystem>();
 
@@ -587,7 +598,7 @@ Describe(EcsSpec) {
       registry.KillEntity(doomed);
       registry.Update(); // id 1 goes on the free list
 
-      Entity recycled = registry.CreateEntity(); // takes id 1 back
+      Entity recycled = registry.CreateEntity(); // takes id 1 back, new generation
       registry.AddComponent<SpecHealth>(recycled, 42);
       registry.Update();
       Assert::That(recycled.GetId(), Equals(doomed.GetId()));
@@ -595,14 +606,25 @@ Describe(EcsSpec) {
           registry.GetSystem<SpecHealthSystem>().GetSystemEntities().size(),
           Equals(1u));
 
-      registry.KillEntity(doomed); // stale handle, id already recycled
+      Logger::messages.clear();
+      std::thread([&] {
+        registry.KillEntity(doomed); // stale handle, id already recycled
+      }).join();
       registry.Update();
 
-      // The stale kill takes the new, live entity with it.
+      // The stale kill must not touch the new, live entity.
       Assert::That(
           registry.GetSystem<SpecHealthSystem>().GetSystemEntities().size(),
-          Equals(0u));
-      Assert::That(registry.IsAlive(recycled), Equals(false));
+          Equals(1u));
+      Assert::That(registry.IsAlive(recycled), Equals(true));
+      Assert::That(registry.IsAlive(doomed), Equals(false));
+      // Not just alive — intact. A kill that half-succeeded would still
+      // report alive.
+      Assert::That(registry.GetComponent<SpecHealth>(recycled).value,
+                   Equals(42));
+      Assert::That(SpecErrorCount(),
+                   Is().GreaterThanOrEqualTo(static_cast<std::size_t>(1)));
+      Logger::messages.clear();
       (void)keeper;
     };
 

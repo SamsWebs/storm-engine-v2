@@ -27,6 +27,10 @@ public:
   PositionSystem() { RequireComponent<PositionComponent>(); }
 };
 
+// Forward-declared so EntityLifecycle (below) can use it; defined after
+// RegistrySpec, alongside the other spec-local helpers.
+static std::size_t SpecRegistryErrorCount();
+
 Describe(RegistrySpec) {
 
   Describe(ComponentManagement) {
@@ -334,13 +338,20 @@ Describe(RegistrySpec) {
       Assert::That(b.GetId(), Equals(1u));
     };
 
-    It(should_still_kill_the_new_entity_through_a_recycled_stale_handle) {
-      // KNOWN GAP, pinned deliberately. The three KillEntity guards all pass
-      // for a stale handle whose id has already been recycled, so the kill
-      // lands on the new, live entity. Closing it needs a generation counter
-      // inside Entity, which changes sizeof(Entity) — an ABI break, tracked
-      // as P5 in docs/TECH_DEBT.md. This case fails once P5 is closed; that
-      // is the signal to flip the assertions.
+    It(should_reject_a_kill_through_a_recycled_stale_handle) {
+      // FIXED, was pinned deliberately. The three KillEntity guards used to
+      // all pass for a stale handle whose id had already been recycled, so
+      // the kill landed on the new, live entity. Closing it needed a
+      // generation counter inside Entity, which changed sizeof(Entity) — an
+      // ABI break, tracked as P5 in docs/TECH_DEBT.md. Now IsAlive checks the
+      // generation, so the stale kill below is rejected instead.
+      //
+      // KillEntity's "not alive" diagnostic is throttled by a thread_local
+      // counter (see common/ecs.cpp) shared with every other spec that
+      // exercises this exact rejection on the main thread — by the time this
+      // case runs, that budget is normally already spent. Doing the stale
+      // kill on a fresh thread gives it its own, untouched budget, the same
+      // way MissingUpdateSpec above does for the ~Registry throttle.
       Registry registry;
       registry.AddSystem<PositionSystem>();
 
@@ -349,7 +360,7 @@ Describe(RegistrySpec) {
       registry.KillEntity(doomed);
       registry.Update(); // id 0 freed
 
-      Entity recycled = registry.CreateEntity(); // takes id 0 back
+      Entity recycled = registry.CreateEntity(); // takes id 0 back, new generation
       registry.AddComponent<PositionComponent>(recycled, 1.f, 2.f);
       registry.Update();
       Assert::That(recycled.GetId(), Equals(doomed.GetId()));
@@ -357,14 +368,28 @@ Describe(RegistrySpec) {
           registry.GetSystem<PositionSystem>().GetSystemEntities().size(),
           Equals(1u));
 
-      registry.KillEntity(doomed); // stale, but indistinguishable from
-                                   // `recycled`
+      Logger::messages.clear();
+      std::thread([&] {
+        registry.KillEntity(doomed); // stale, but indistinguishable from
+                                     // `recycled` by id alone
+      }).join();
       registry.Update();
 
+      // The stale kill must not touch the new, live entity.
       Assert::That(
           registry.GetSystem<PositionSystem>().GetSystemEntities().size(),
-          Equals(0u));
-      Assert::That(registry.IsAlive(recycled), Equals(false));
+          Equals(1u));
+      Assert::That(registry.IsAlive(recycled), Equals(true));
+      Assert::That(registry.IsAlive(doomed), Equals(false));
+      // Not just alive — intact. A kill that half-succeeded would still
+      // report alive.
+      PositionComponent &pos =
+          registry.GetComponent<PositionComponent>(recycled);
+      Assert::That(pos.x, Equals(1.f));
+      Assert::That(pos.y, Equals(2.f));
+      Assert::That(SpecRegistryErrorCount(),
+                   Is().GreaterThanOrEqualTo(static_cast<std::size_t>(1)));
+      Logger::messages.clear();
     };
 
     It(should_ignore_a_kill_of_an_entity_that_was_never_created) {

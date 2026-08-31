@@ -37,7 +37,10 @@ jobs:
   version:
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      # read, not write: nothing here pushes any more. The tag-minting
+      # fallback that needed write is gone, and its absence is the point --
+      # a job that cannot push a tag cannot invent a release.
+      contents: read
     outputs:
       version: ${{ steps.calc.outputs.version }}
 
@@ -91,53 +94,49 @@ jobs:
       - name: Calculate version
         id: calc
         run: |
+          set -euo pipefail
+
           # A tag push is authoritative: use the ref being built, not a search.
-          # Picking by refname sort would resolve v1.9.9 over a freshly pushed
-          # v2.0.0 on the same commit, and publish the new artifacts to the old
-          # release.
+          # Searching by refname sort would resolve v1.9.9 over a freshly
+          # pushed v2.0.0 on the same commit, and publish the new artifacts to
+          # the old release.
           if [ "${GITHUB_REF_TYPE:-}" = "tag" ]; then
             EXISTING="${GITHUB_REF_NAME}"
           else
             # workflow_dispatch. Rebuilding an existing release is fine;
             # minting a NEW one from the button is what produced the deleted
             # v1.3.2, so require the dispatched ref to carry a tag.
-            EXISTING=$(git tag --points-at HEAD | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1)
+            #
+            # The `|| true` matters: grep exits 1 when nothing matches, which
+            # is the expected case here, and under `-o pipefail` that aborts
+            # the assignment before the message below can print. The guard
+            # still failed closed without it, but the operator saw a bare exit
+            # code instead of being told what to do.
+            EXISTING=$(git tag --points-at HEAD \
+                       | { grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' || true; } \
+                       | head -1)
             if [ -z "$EXISTING" ]; then
               echo "::error::workflow_dispatch on a commit with no vX.Y.Z tag. This workflow rebuilds an existing release; it does not create one. Push a tag deliberately, or dispatch against a tag ref."
               exit 1
             fi
           fi
 
-          if [ -n "$EXISTING" ]; then
-            # You pushed a manual major/minor tag — use it as-is
-            VERSION="${EXISTING#v}"
-            echo "Using existing tag: $EXISTING"
-          else
-            # Find the latest vX.Y.Z tag anywhere in history
-            LATEST=$(git tag --list 'v*.*.*' \
-              | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
-              | sort -V | tail -1)
-
-            if [ -z "$LATEST" ]; then
-              # No tags yet — start at v0.0.1
-              VERSION="0.0.1"
-            else
-              # Bump the patch component
-              MAJOR=$(echo "$LATEST" | cut -d. -f1 | tr -d 'v')
-              MINOR=$(echo "$LATEST" | cut -d. -f2)
-              PATCH=$(echo "$LATEST" | cut -d. -f3)
-              VERSION="${MAJOR}.${MINOR}.$((PATCH + 1))"
-            fi
-
-            echo "Bumping from ${LATEST:-none} → v${VERSION}"
-
-            # Create and push the new tag
-            git config user.name  "github-actions[bot]"
-            git config user.email "github-actions[bot]@users.noreply.github.com"
-            git tag "v${VERSION}"
-            git push origin "v${VERSION}"
+          # Validate the TAG, not just the tree.
+          #
+          # The trigger filter `v*.*.*` is an fnmatch glob, not a regex: `*`
+          # matches any character except `/`, so `v2.0.0-rc1` matches it and
+          # fires this workflow. Before this job trusted GITHUB_REF_NAME it
+          # searched with this same strict regex, which filtered such tags out
+          # by accident. Taking the ref directly removed that filter and left
+          # a pre-release tag able to publish as a stable release, with
+          # `prerelease: false`, whenever the tree's own VERSION was final.
+          if ! printf '%s' "$EXISTING" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::Refusing to release '${EXISTING}': not a final vX.Y.Z tag. Pre-release tags (v2.0.0-rc1, v2.0.0~rc1) are rejected here because this workflow publishes with prerelease: false."
+            exit 1
           fi
 
+          VERSION="${EXISTING#v}"
+          echo "Releasing ${EXISTING}"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 
   # ── Linux packages ──────────────────────────────────────────────────────────

@@ -111,9 +111,22 @@ struct Tile {
 
 Animated tiles therefore render as static ones, and the editor's animation UI has no effect at runtime.
 
-**Why it stays.** The fix adds fields to `Tile`, changing `sizeof(Tile)` from 80. `Map` is `std::vector<Tile>` and games iterate it directly, so a game built against the old header walking a vector produced by a new library reads misaligned garbage. It is an ABI break with no compile-time warning — the most dangerous kind.
+**Why it stayed.** The fix adds fields to `Tile`, changing `sizeof(Tile)` from 80. `Map` is `std::vector<Tile>` and games iterate it directly, so a game built against the old header walking a vector produced by a new library reads misaligned garbage. It is an ABI break with no compile-time warning — the most dangerous kind.
 
-**Meanwhile.** Drive tile animation from game code with `AnimationComponent`, not from the editor's fields.
+**Resolved in 2.0.0.** `Tile` carries `isAnimated`, `numFrames`, `frameSpeedRate`, `vertical`, `isLooped` and `frameOffset`, named to match `AnimationComponent` so building one is a direct copy:
+
+```cpp
+if (tile.isAnimated)
+  e.AddComponent<AnimationComponent>(tile.numFrames, tile.frameSpeedRate,
+                                     tile.vertical, tile.isLooped,
+                                     tile.frameOffset);
+```
+
+The same pass found a second field being discarded: `colliderOffset`. The editor has written collider offsets since colliders were added, and the loader read them off the line purely to advance the stream — so a tile whose collider the editor had nudged collided from its unnudged position. `Tile` now carries it.
+
+The engine still does not build the component for you. `TileMapLoader` hands back a `Map` and nothing else; spawning entities stays the game's job.
+
+`sizeof(Tile)` is 80 → 104. The new fields are appended rather than grouped beside the fields they belong with, which costs 8 bytes of padding — deliberately, so that a game constructing a `Tile` positionally still assigns the same eight fields. Reordering would have shifted a `bool` onto `colliderW`, which converts without a diagnostic.
 
 ## 8. Including a state header compiles the entire engine
 

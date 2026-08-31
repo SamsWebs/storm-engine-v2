@@ -236,9 +236,22 @@ This has already produced two wrong conclusions during development: examples wer
 declared clean after being exercised against an engine that did not contain the
 feature under test.
 
-**Fix this before the layout wave, not after.** Today a stale-header build is a
-confusing compile error. Once `sizeof(Entity)`, `sizeof(System)` and `sizeof(Tile)`
-change, the same mistake is silent memory corruption.
+**Status: documented, not enforced.** An automated tree-vs-install mismatch
+check was written and reverted — it broke CI, because CI builds the engine from
+a separate tree at `/opt/library`, so tree-and-install equality is false there
+by construction. Any future attempt has to account for that.
+
+What landed instead is a comment in `base.mk` explaining the behaviour and what
+it costs. That is weaker than a check: the layout wave has since shipped, so
+`sizeof(Entity)`, `sizeof(System)` and `sizeof(Tile)` have already changed, and
+a stale install is now silent memory corruption rather than a compile error.
+`specs/layout.spec.cpp` pins the sizes but only inside the engine's own build —
+it cannot see a game's stale headers.
+
+Worth noting how nearly this was lost: the PR meant to land that comment
+(#46) merged a **net-empty diff**. One commit added the reverted check, the
+next removed it and never wrote the documentation its own message promised.
+The comment reached `main` only when the omission was spotted afterwards.
 
 ### Comments cite line numbers, and the line numbers rot
 
@@ -254,11 +267,37 @@ The fix is not to correct the numbers. Cite function names instead — `grep -n`
 drift. This is worth doing as a sweep rather than opportunistically, because a half-swept file is exactly
 the state that makes the remaining citations look trustworthy.
 
-### `editor/` does not build under GCC 13
+### `editor/` does not build under GCC 13 — **DONE**
 
-Vendored `ImGuiFileDialog.cpp` is missing `<cstdint>`. Pre-existing and unrelated to
-any current work, but `pr-validate.yml` compiles the editor, so it will surface in
-CI eventually.
+There were two breakages, not one, the second only visible once the first was
+fixed:
+
+1. Vendored `ImGuiFileDialog.cpp` used `intptr_t` with no header declaring it.
+   Older toolchains supplied it transitively; GCC 13 stopped. Fixed by
+   including `<cstdint>`.
+2. `sol.hpp` includes `<lua.h>` unqualified, while `base.mk`'s `INCLUDE` only
+   reaches `vendor/`, so only `<lua/lua.h>` resolved. The editor's Makefile now
+   adds `-I$(ROOT_DIR)/vendor/lua`, editor-only because no example includes
+   sol2.
+
+All 25 editor translation units compile. The **link** still requires `libnfd`,
+which Debian and Ubuntu do not package — that is why CI compiles the editor to
+objects and stops short of linking. README now states the prerequisite, which
+nothing did before: `cd editor && make` was the only instruction and it cannot
+succeed without building libnfd from source.
+
+Two lessons worth keeping:
+
+- The `<cstdint>` patch would have shipped as a 4827-line diff. An editor pass
+  had rewritten the whole CRLF file to LF, burying a three-line change. Caught
+  at `git diff --stat`. Check line endings before committing to `vendor/`.
+- Patching vendored source with no record of it creates a delta the next vendor
+  update silently reverts, so `vendor/MANIFEST.md` landed *with* the patch
+  rather than after it. It also surfaced that Dear ImGui is pinned at 1.79 WIP
+  from around 2020 — now a decision someone can make on evidence.
+
+Editor warnings that remain (narrowing, sign-compare, a duplicate `clean`
+recipe between `editor/Makefile` and `base.mk`) are pre-existing and untouched.
 
 ---
 

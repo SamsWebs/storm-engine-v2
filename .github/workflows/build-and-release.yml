@@ -12,8 +12,13 @@ on:
     # hand them misaligned memory. It happened: v1.3.2 was auto-created over the
     # 2.0.0 wave-one merge and had to be deleted before anyone fetched it.
     #
-    # PR validation already builds and tests every change (pr-validate.yml), so
-    # main did not need this to stay honest.
+    # pr-validate.yml still builds and tests every PR, but only linux/amd64 in
+    # a debug profile. The arm64/QEMU leg, the release-profile build, strip,
+    # DESTDIR staging and the dpkg-shlibdeps Depends check now run for the
+    # first time at tag push rather than on every merge -- so a break in those
+    # surfaces when you cut a release instead of when you open the PR. That is
+    # a real trade: worth a scheduled packaging run or extending pr-validate to
+    # the matrix. Tracked in docs/ROADMAP.md.
     tags:
       - 'v*.*.*'
   workflow_dispatch:  # manual button for rebuilding a release
@@ -42,18 +47,43 @@ jobs:
         with:
           fetch-depth: 0
 
-      # Belt and braces against the trigger change above. Makefile.debian's
-      # VERSION is what the headers and the .pc file are built with, and a
-      # tilde marks a pre-release: 2.0.0~dev sorts below 2.0.0 to both dpkg and
-      # pkg-config, which is the whole point of the character. If the tree says
-      # it is not finished, a pushed tag does not make it finished.
+      # Belt and braces against the trigger change above.
+      #
+      # This is a POLICY gate, not a build input. Makefile.debian's VERSION is
+      # metadata (see its own comment: "pkg-config reports it, nothing links
+      # against it"), and the build overrides it below with the tag's version
+      # anyway. What it records is whether the tree considers itself finished:
+      # a tilde or a hyphen marks a pre-release, and 2.0.0~dev sorts below
+      # 2.0.0 to both dpkg and pkg-config. If the tree says it is not ready, a
+      # pushed tag does not make it ready.
+      #
+      # It must fail CLOSED. An earlier version of this step parsed with a
+      # narrow sed and let `case` fall through on an empty result, so a
+      # `VERSION :=` form, a leading space, or a renamed file silently passed
+      # and would have shipped the pre-release.
       - name: Refuse to release a pre-release version
         run: |
-          TREE_VERSION=$(sed -n 's/^VERSION *?*= *//p' Makefile.debian | head -1)
+          set -euo pipefail
+
+          if [ ! -f Makefile.debian ]; then
+            echo "::error::Makefile.debian not found; cannot verify the tree is releasable."
+            exit 1
+          fi
+
+          # Accepts `VERSION = x`, `?=`, `:=`, `::=`, and leading whitespace.
+          TREE_VERSION=$(sed -nE 's/^[[:space:]]*VERSION[[:space:]]*:?:?\??=[[:space:]]*([^[:space:]#]+).*/\1/p' \
+                         Makefile.debian | head -1)
+
+          if [ -z "$TREE_VERSION" ]; then
+            echo "::error::Could not read VERSION from Makefile.debian. Refusing to release rather than assuming it is releasable."
+            exit 1
+          fi
+
           echo "Makefile.debian declares VERSION=${TREE_VERSION}"
+
           case "$TREE_VERSION" in
-            *"~"*)
-              echo "::error::Refusing to release: Makefile.debian's VERSION is '${TREE_VERSION}', a pre-release. Set a final version before tagging."
+            *"~"*|*-*)
+              echo "::error::Refusing to release: VERSION is '${TREE_VERSION}', a pre-release. Set a final version before tagging."
               exit 1
               ;;
           esac
@@ -61,8 +91,22 @@ jobs:
       - name: Calculate version
         id: calc
         run: |
-          # Check whether the current commit is already tagged with vX.Y.Z
-          EXISTING=$(git tag --points-at HEAD | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1)
+          # A tag push is authoritative: use the ref being built, not a search.
+          # Picking by refname sort would resolve v1.9.9 over a freshly pushed
+          # v2.0.0 on the same commit, and publish the new artifacts to the old
+          # release.
+          if [ "${GITHUB_REF_TYPE:-}" = "tag" ]; then
+            EXISTING="${GITHUB_REF_NAME}"
+          else
+            # workflow_dispatch. Rebuilding an existing release is fine;
+            # minting a NEW one from the button is what produced the deleted
+            # v1.3.2, so require the dispatched ref to carry a tag.
+            EXISTING=$(git tag --points-at HEAD | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1)
+            if [ -z "$EXISTING" ]; then
+              echo "::error::workflow_dispatch on a commit with no vX.Y.Z tag. This workflow rebuilds an existing release; it does not create one. Push a tag deliberately, or dispatch against a tag ref."
+              exit 1
+            fi
+          fi
 
           if [ -n "$EXISTING" ]; then
             # You pushed a manual major/minor tag — use it as-is

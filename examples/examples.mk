@@ -23,6 +23,29 @@ all: $(TARGET)
 
 include ../../base.mk
 
+# The examples build against the INSTALLED engine -- base.mk's INCLUDE is
+# -I/usr/local/include, and every example includes <stormengine2/...>, which
+# exists only there. That is deliberate: an example should exercise the shipped
+# artifact, not the working tree.
+#
+# The hazard is that a stale install is silent. The example compiles, links and
+# runs against an engine that is not the one you are working on. During 2.0.0's
+# development that produced two wrong conclusions -- examples reported clean
+# after being exercised against a version containing none of the features under
+# test, and a build failure blamed on the branch that came from the installed
+# copy. It gets worse from here: 2.0.0 changes type layouts, so a stale-header
+# build stops being a confusing compile error and becomes silent memory
+# corruption.
+#
+# Checked at parse time rather than as a prerequisite of $(TARGET). A
+# prerequisite would race the compile under -j, exactly as this file's `clean`
+# prerequisite used to (see the note above `all`), and would run after the
+# objects were already built anyway.
+ENGINE_MATCH := $(shell $(ROOT_DIR)/scripts/check-installed-engine.sh $(ROOT_DIR)/common >&2 || echo MISMATCH)
+ifeq ($(ENGINE_MATCH),MISMATCH)
+$(error installed engine does not match this checkout -- see above)
+endif
+
 run:
 	$(TARGET)
 

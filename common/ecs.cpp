@@ -511,7 +511,7 @@ void Registry::GroupEntity(Entity entity, const std::string &group) {
   // can't leave it stranded in a group groupPerEntity no longer records.
   RemoveEntityGroup(entity);
 
-  entitiesPerGroup.emplace(group, std::set<Entity>());
+  entitiesPerGroup.emplace(group, std::set<Entity, EntityOrder>());
   entitiesPerGroup[group].emplace(entity);
   groupPerEntity.insert_or_assign(entity.GetId(), group);
 }
@@ -572,6 +572,11 @@ void Registry::RemoveEntityGroup(Entity entity) {
     }
     groupPerEntity.erase(groupedEntity);
   }
+}
+
+std::vector<Entity> Registry::GetEntitiesToBeKilled() const {
+  return std::vector<Entity>(entitiesToBeKilled.begin(),
+                             entitiesToBeKilled.end());
 }
 
 Registry &Registry::Instance() {

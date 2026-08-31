@@ -711,3 +711,25 @@ Describe(TryGetEntityByTagSpec) {
                  Equals(true));
   };
 };
+
+Describe(StaleHandleContainerSpec) {
+  It(should_not_find_a_live_entity_through_a_stale_handle_in_a_group) {
+    Registry registry;
+    Entity first = registry.CreateEntity();
+    first.Group("enemies");
+    registry.Update();
+
+    first.Kill();
+    registry.Update();                       // id freed, generation bumped
+
+    Entity second = registry.CreateEntity(); // same id, new generation
+    second.Group("enemies");
+    registry.Update();
+
+    // The stale handle must not resolve to the live entity's group entry.
+    Assert::That(registry.EntityBelongsToGroup(second, "enemies"),
+                 Equals(true));
+    Assert::That(registry.EntityBelongsToGroup(first, "enemies"),
+                 Equals(false));
+  };
+};

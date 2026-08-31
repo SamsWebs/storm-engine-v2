@@ -129,7 +129,7 @@ public:
 
     if (onEnd) {
       std::vector<Entity> live(entities.begin(), entities.end());
-      std::sort(live.begin(), live.end());
+      std::sort(live.begin(), live.end(), EntityOrder{});
 
       for (const PairKey &key : previous) {
         if (std::binary_search(current.begin(), current.end(), key))
@@ -228,7 +228,8 @@ private:
 
   static const Entity *FindLive(const std::vector<Entity> &live,
                                 std::size_t id) {
-    auto found = std::lower_bound(live.begin(), live.end(), Entity(id));
+    auto found =
+        std::lower_bound(live.begin(), live.end(), Entity(id), EntityOrder{});
     if (found == live.end() || found->GetId() != id)
       return nullptr;
     return &(*found);

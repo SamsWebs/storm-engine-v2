@@ -78,14 +78,10 @@ Describe(EcsSpec) {
 
       Assert::That(entity != entity2, Equals(false));
       Assert::That(entity != entity3, Equals(true));
-
-      Assert::That(entity > entity2, Equals(false));
-      Assert::That(entity > entity3, Equals(false));
-      Assert::That(entity3 > entity, Equals(true));
-
-      Assert::That(entity < entity2, Equals(false));
-      Assert::That(entity < entity3, Equals(true));
-      Assert::That(entity3 < entity, Equals(false));
+      // Entity has no operator</operator> since 2.0.0: std::set found
+      // elements through < alone, which let a stale handle (id-only equal)
+      // alias a live entity's entry. Ordering, where genuinely needed, is
+      // now explicit via EntityOrder.
     };
   };
 

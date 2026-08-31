@@ -124,6 +124,7 @@ public:
   explicit Entity(std::size_t id) : id(id){};
   void Kill();
   std::size_t GetId() const;
+  std::uint32_t GetGeneration() const { return generation; }
 
   // Manage entity tags and groups
   void Tag(const std::string &tag);
@@ -136,8 +137,6 @@ public:
     return id == other.id && generation == other.generation;
   };
   bool operator!=(const Entity &other) const { return !(*this == other); };
-  bool operator>(const Entity &other) const { return id > other.id; };
-  bool operator<(const Entity &other) const { return id < other.id; };
 
   template <typename TComponent, typename... TArgs>
   void AddComponent(TArgs &&... args);
@@ -154,6 +153,18 @@ public:
 
   // Hold a pointer to the entity's owner registry
   class Registry *registry = nullptr; // Be careful for cyclic dependencies
+};
+
+// Ordering for the containers that need one. Named for what it orders: this
+// is not "by id", and calling it that is how the deleted operator< gets
+// quietly reintroduced.
+struct EntityOrder {
+  bool operator()(const Entity &a, const Entity &b) const {
+    if (a.GetId() != b.GetId()) {
+      return a.GetId() < b.GetId();
+    }
+    return a.GetGeneration() < b.GetGeneration();
+  }
 };
 
 /*******************************************/
@@ -265,8 +276,8 @@ private:
 
   // Set of entities that are flagged to be added or removed the
   // next registry Update()
-  std::set<Entity> entitiesToBeAdded;
-  std::set<Entity> entitiesToBeKilled;
+  std::set<Entity, EntityOrder> entitiesToBeAdded;
+  std::set<Entity, EntityOrder> entitiesToBeKilled;
 
   // Entity tags (one tag name per entity)
   std::unordered_map<std::string, Entity> entityPerTag;
@@ -274,7 +285,8 @@ private:
       tagPerEntity; // Int is used to go by ID #
 
   // Entiy groups (a set of entities per group name)
-  std::unordered_map<std::string, std::set<Entity>> entitiesPerGroup;
+  std::unordered_map<std::string, std::set<Entity, EntityOrder>>
+      entitiesPerGroup;
   std::unordered_map<int, std::string> groupPerEntity;
   ;
 
@@ -443,7 +455,10 @@ public:
   std::vector<Entity> GetEntitiesByGroup(const std::string &group) const;
   bool DoesGroupExist(const std::string &group) const;
   void RemoveEntityGroup(Entity entity);
-  std::set<Entity> GetEntitiesToBeKilled() const { return entitiesToBeKilled; }
+
+  // The entities queued for reaping at the next Update(). Order is
+  // unspecified.
+  std::vector<Entity> GetEntitiesToBeKilled() const;
 
   static Registry &Instance();
 };

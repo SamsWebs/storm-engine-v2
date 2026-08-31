@@ -378,9 +378,13 @@ public:
   // safe to call every frame, and it cannot alias. This is the correct
   // accessor whenever absence is possible.
   //
-  // EXCEPTION: a stale handle (its id has since been recycled to a different
-  // entity) is not a legitimate miss — it means the caller kept an Entity
-  // past its death — so that one case logs (throttled) even here.
+  // EXCEPTIONS, logged (throttled) even here, because neither is a
+  // legitimate miss: a stale handle (its id has since been recycled to a
+  // different entity) means the caller kept an Entity past its death; a
+  // component id past MAX_COMPONENTS means some system's signature is stuck
+  // empty and therefore matches every entity in the world. Both are worth
+  // surfacing through every accessor, TryGetComponent included — a
+  // deliberate strengthening of this accessor's silence, not a side effect.
   template <typename TComponent>
   TComponent *TryGetComponent(Entity entity) const;
 
@@ -692,9 +696,22 @@ TComponent *Registry::FindComponent(Entity entity, ComponentMiss &miss) const {
   }
 
   // Checked before any bitset::test below — past MAX_COMPONENTS that call
-  // throws, and this template compiles into the game's TU.
+  // throws, and this template compiles into the game's TU. Reported here,
+  // directly and unconditionally, for the same reason Stale is above: a
+  // process-wide component-type overflow means some system's signature is
+  // stuck empty and therefore matches every entity in the world, which is
+  // worth surfacing through every accessor, not just GetComponent's own
+  // throttled diagnostic below (which HasComponent and TryGetComponent never
+  // reach, since they only look at the returned pointer).
   if (componentId >= MAX_COMPONENTS) {
     miss = ComponentMiss::TooManyTypes;
+    static thread_local unsigned int overflowReports = 0;
+    if (EcsShouldReport(overflowReports)) {
+      logger.Err("FindComponent: entity " + std::to_string(entityId) + " " +
+                 ComponentMissDescription(ComponentMiss::TooManyTypes) +
+                 " for component type '" + typeid(TComponent).name() + "'" +
+                 EcsSuppressionNote(overflowReports));
+    }
     return nullptr;
   }
 
@@ -735,9 +752,9 @@ TComponent &Registry::GetComponent(Entity entity) const {
     return *component;
   }
 
-  // Stale is reported directly by FindComponent, unconditionally — logging
-  // it again here would double the report for this one reason alone.
-  if (miss != ComponentMiss::Stale) {
+  // Stale and TooManyTypes are both reported directly by FindComponent,
+  // unconditionally — logging either again here would double the report.
+  if (miss != ComponentMiss::Stale && miss != ComponentMiss::TooManyTypes) {
     // One budget per (component type, reason): the counters are static
     // inside a template instantiated per TComponent, so a game that misses
     // this lookup every frame logs a handful of lines and then stays

@@ -347,26 +347,48 @@ Describe(EcsSpec) {
   // P4 — GetComponent used to hand every miss the same shared static, so a
   // write through one miss was read back by an unrelated later one.
   Describe(ComponentMissSpec) {
+    // Task 4b: this used to reach the pool via two hand-built, out-of-range
+    // handles (Entity(999)/Entity(1000)). Since the staleness check now runs
+    // ahead of OutOfRange, a hand-built id misses as Stale before ever
+    // reaching the leak this case exists to catch — so both misses below are
+    // now real, live entities that were simply never given SpecArmor
+    // (a NotOwned miss), which still exercises the one property this case
+    // cares about: a write through one miss must not be visible through a
+    // different miss, nor through the live entity.
     It(should_not_leak_a_write_through_one_miss_into_another_miss) {
       Registry registry;
       Entity live = registry.CreateEntity();
+      Entity firstMiss = registry.CreateEntity();  // never given SpecArmor
+      Entity secondMiss = registry.CreateEntity(); // never given SpecArmor
       registry.Update();
       registry.AddComponent<SpecArmor>(live, SpecArmor{7});
 
-      registry.GetComponent<SpecArmor>(Entity(999)).value = 4242;
+      registry.GetComponent<SpecArmor>(firstMiss).value = 4242;
 
       // A different miss, and the live entity, must both be untouched.
-      Assert::That(registry.GetComponent<SpecArmor>(Entity(1000)).value,
+      Assert::That(registry.GetComponent<SpecArmor>(secondMiss).value,
                    Equals(0));
       Assert::That(registry.GetComponent<SpecArmor>(live).value, Equals(7));
     };
 
+    // Task 4b: this used to hit NoPool through a hand-built Entity(999) on
+    // each registry, which is now Stale instead (never issued by
+    // CreateEntity). Rebuilt with a real, live entity per registry that is
+    // never given SpecMana at all — a genuine NoPool miss on each side —
+    // so this still exercises what it is named for: the fallback static is
+    // per component type per thread, not per Registry, and a write through
+    // one registry's miss must not leak into another registry's.
     It(should_not_leak_a_miss_across_registries) {
       Registry first;
-      first.GetComponent<SpecMana>(Entity(999)).value = 1234;
+      Entity firstEntity = first.CreateEntity();
+      first.Update();
+      first.GetComponent<SpecMana>(firstEntity).value = 1234;
 
       Registry second;
-      Assert::That(second.GetComponent<SpecMana>(Entity(999)).value, Equals(0));
+      Entity secondEntity = second.CreateEntity();
+      second.Update();
+      Assert::That(second.GetComponent<SpecMana>(secondEntity).value,
+                   Equals(0));
     };
 
     It(should_return_null_from_try_get_component_on_a_miss) {
@@ -385,7 +407,13 @@ Describe(EcsSpec) {
       Assert::That(found == nullptr, Equals(false));
       Assert::That(found->value, Equals(3));
 
-      // Entity id past the end of the pool.
+      // Entity(150) here was never issued by CreateEntity, so it is now
+      // rejected as Stale (Task 4b's staleness check runs ahead of
+      // OutOfRange) rather than exercising the pool-bounds check this case
+      // was originally written for. Genuine "real, live entity past the end
+      // of a resized pool" OutOfRange coverage lives in
+      // should_not_read_out_of_bounds_past_the_end_of_a_component_pool
+      // below, which uses 151 real entities to get there.
       Assert::That(registry.TryGetComponent<SpecStamina>(Entity(150)) ==
                        nullptr,
                    Equals(true));

@@ -23,7 +23,7 @@ constexpr int SPRITE = 32;
 constexpr int START_LIVES = 3;
 
 // Marker components. Three custom types plus the five engine built-ins stay
-// well under MAX_COMPONENTS, which is 32 per BINARY rather than per Registry.
+// well under MAX_COMPONENTS, which is 64 per BINARY rather than per Registry.
 struct PlayerComponent {};
 struct EnemyComponent {};
 struct BulletComponent {};

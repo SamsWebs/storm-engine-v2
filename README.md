@@ -27,24 +27,26 @@ A lightweight, ECS-based 2D game engine built on SDL2 - made for game jams and p
 
 ## Component type limit
 
-An entity's component set is tracked as a bitmask, so the engine supports **32 distinct component types**:
+An entity's component set is tracked as a bitmask, so the engine supports **64 distinct component types** (32 before 2.0.0):
 
 ```cpp
-constexpr unsigned int MAX_COMPONENTS = 32;   // common/ecs.h
+constexpr unsigned int MAX_COMPONENTS = 64;   // common/ecs.h
 using Signature = std::bitset<MAX_COMPONENTS>;
 ```
 
 Two things about that number are easy to get wrong:
 
-**It is per binary, not per `Registry`.** Type ids come from a single process-wide counter, handed out on first use of each distinct `Component<T>`. Every `Registry` you create draws from the same pool of 32, so splitting your world across several registries - one per game state, as the examples do - does not buy you more types. The five components the engine ships (`TransformComponent`, `RigidBodyComponent`, `SpriteComponent`, `BoxColliderComponent`, `AnimationComponent`) count against your budget as soon as you use them, leaving 27 for the game.
+**It is per binary, not per `Registry`.** Type ids come from a single process-wide counter, handed out on first use of each distinct `Component<T>`. Every `Registry` you create draws from the same pool of 64, so splitting your world across several registries - one per game state, as the examples do - does not buy you more types. The five components the engine ships (`TransformComponent`, `RigidBodyComponent`, `SpriteComponent`, `BoxColliderComponent`, `AnimationComponent`) count against your budget as soon as you use them, leaving 59 for the game.
 
-**It counts types, not instances.** Ten thousand entities carrying `TransformComponent` use one id. Component types are cheap to instance and expensive to *declare*, so prefer widening an existing component over adding a new one - a `kind` enum inside one component costs nothing, a new struct costs a permanent 1/32.
+**It counts types, not instances.** Ten thousand entities carrying `TransformComponent` use one id. Component types are cheap to instance and expensive to *declare*, so prefer widening an existing component over adding a new one - a `kind` enum inside one component costs nothing, a new struct costs a permanent 1/64.
 
-Declaring a 33rd type is reported on the error log and the type is ignored; it does not throw, so it will not abort the Switch build. But a system whose requirement was dropped this way ends up matching **every** entity rather than none, so treat overflow as a bug to fix, not a degraded mode to ship. Count your types before you get close.
+Declaring a 65th type is reported on the error log and the type is ignored; it does not throw, so it will not abort the Switch build. Since 2.0.0 a system whose requirement was dropped this way is **latched off** and matches nothing, rather than matching every entity as it did before - `System::IsDisabled()` reports it. That is still a bug to fix rather than a degraded mode to ship, but it now fails in the direction a game can survive.
 
-Raising the cap means editing `MAX_COMPONENTS` and rebuilding **everything** that includes `ecs.h`. Anything less is undefined behaviour: `Signature` is `std::bitset<MAX_COMPONENTS>`, so two translation units compiled with different values disagree about what type `Signature` *is*.
+Raising the cap further means editing `MAX_COMPONENTS` and rebuilding **everything** that includes `ecs.h`. Anything less is undefined behaviour: `Signature` is `std::bitset<MAX_COMPONENTS>`, so two translation units compiled with different values disagree about what type `Signature` *is*.
 
-Note that this mismatch is silent up to 64. `sizeof(std::bitset<N>)` is 8 bytes for every `N` from 1 to 64 and 16 bytes from 65, so bumping 32 → 64 changes no struct layout and no size check will catch a stale object file - a game built against a 32-component header linked to a 64-component `.so` will simply misbehave. If you raise it, rebuild the library, the editor, and every game against the same header in one go.
+That mismatch is silent up to 64, which is why the 32 → 64 bump needed a major release rather than a point one. `sizeof(std::bitset<N>)` is 8 bytes for every `N` from 1 to 64 and 16 bytes from 65, so the change moved no struct and no size check could catch a stale object file - a game built against a 32-component header and linked to a 64-component `.so` simply misbehaves. `specs/layout.spec.cpp` therefore pins the *value* alongside the sizes, since the sizes cannot see it.
+
+64 is also the last free step. At 65 the bitset doubles to 16 bytes, moving `sizeof(Registry)` and `sizeof(System)` with it - a second ABI break, not a recompile.
 
 ## Diagnostics
 

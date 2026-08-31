@@ -20,6 +20,13 @@ Describe(LayoutSpec) {
     Assert::That(sizeof(Entity), Equals(static_cast<std::size_t>(24)));
     Assert::That(sizeof(System), Equals(static_cast<std::size_t>(40)));
     Assert::That(sizeof(Signature), Equals(static_cast<std::size_t>(8)));
+
+    // The size pin above cannot see MAX_COMPONENTS: sizeof(std::bitset<N>) is
+    // 8 for every N from 1 to 64, so it reads the same at 32 and at 64. Pin
+    // the value itself, because it is the one ABI-relevant constant no size
+    // check can catch. If this ever goes past 64 the bitset becomes 16 bytes
+    // and the Registry and System pins move with it.
+    Assert::That(static_cast<unsigned int>(MAX_COMPONENTS), Equals(64u));
     Assert::That(sizeof(Tile), Equals(static_cast<std::size_t>(104)));
   };
 };

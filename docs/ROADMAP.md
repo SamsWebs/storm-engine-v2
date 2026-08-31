@@ -120,11 +120,22 @@ proven by specs rather than end to end. Wiring one would need the engine
 installed over `/usr/local` to verify locally, since examples build against the
 install prefix rather than the checkout.
 
-### 5. `MAX_COMPONENTS` 32 → 64 — `KNOWN_ISSUES.md` item 3
+### 5. `MAX_COMPONENTS` 32 → 64 — `KNOWN_ISSUES.md` item 3 — **DONE**
 
 No size change: `sizeof(std::bitset<N>)` is 8 bytes for every N up to 64. That is
-precisely why it needs a major — no size check catches a stale object file, so a
+precisely why it needed a major — no size check catches a stale object file, so a
 mismatch between translation units is silent.
+
+Because the size pins in `specs/layout.spec.cpp` read identically at 32 and 64,
+they cannot see this change at all. The spec now pins `MAX_COMPONENTS` itself
+next to the sizes, with a comment saying why a value is being pinned in a file
+that otherwise pins only layout.
+
+64 is the last free step. At 65 `std::bitset` becomes 16 bytes and carries
+`sizeof(Registry)` and `sizeof(System)` with it — a second ABI break rather than
+a recompile. That is recorded at the constant, in the README and in
+`KNOWN_ISSUES.md`, since the next person to want more types will not otherwise
+know the ceiling has a cliff behind it.
 
 ### 6. The engine moves into `namespace storm` — `KNOWN_ISSUES.md` item 9
 

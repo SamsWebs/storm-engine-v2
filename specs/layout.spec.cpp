@@ -1,3 +1,4 @@
+#include "../common/assetStore.h"
 #include "../common/ecs.h"
 #include "../common/tilemapLoader.h"
 #include <igloo/igloo_alt.h>
@@ -18,6 +19,14 @@ using namespace storm;
 Describe(LayoutSpec) {
   It(pins_the_sizes_that_are_abi) {
     Assert::That(sizeof(Registry), Equals(static_cast<std::size_t>(488)));
+
+    // AssetStore is the struct the comment above blames for the 1.3.0
+    // incident, and it was the one this file never pinned. A game does
+    // `assetStore = std::make_unique<AssetStore>()`, so the size is emitted at
+    // the game's call site: 1.3.0 took it 112 -> 208 and every game built
+    // against 1.2.x headers allocated the smaller one and ran a constructor
+    // that initialised past it.
+    Assert::That(sizeof(AssetStore), Equals(static_cast<std::size_t>(208)));
     Assert::That(sizeof(Entity), Equals(static_cast<std::size_t>(24)));
     Assert::That(sizeof(System), Equals(static_cast<std::size_t>(40)));
     Assert::That(sizeof(Signature), Equals(static_cast<std::size_t>(8)));

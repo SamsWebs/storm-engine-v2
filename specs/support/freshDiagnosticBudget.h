@@ -2,7 +2,6 @@
 
 #include <thread>
 #include <utility>
-using namespace storm;
 
 // Every ECS diagnostic throttle is a static thread_local counter (see
 // EcsShouldReport's comment in common/ecs.h), shared process-wide on

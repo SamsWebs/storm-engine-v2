@@ -245,6 +245,13 @@ template <typename TComponent> void System::RequireComponent() {
     // signature matches EVERY entity: a system that should have seen nothing
     // would run on the whole world. Latching it off makes the failure
     // "matches nothing", which is the direction a game can survive.
+    //
+    // Note what this does NOT do: it leaves componentSignature alone. A system
+    // whose FIRST requirement resolved and whose second overflowed keeps the
+    // first bit, so a latched signature is not necessarily empty. Every path
+    // that decides membership must therefore test IsDisabled() rather than
+    // infer it from the signature -- GetComponentSignature().none() is not a
+    // proxy for "latched" in either direction.
     disabled = true;
     return;
   }

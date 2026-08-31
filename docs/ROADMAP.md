@@ -83,13 +83,24 @@ admission: `AddEntityToSystems`, and `ForEachMissedEntity`, which backs both
 was the dangerous one — unguarded, `AdmitExistingEntitiesTo` would hand the
 entire world to the one system the latch exists to keep empty.
 
-A fourth site, `SystemMissedByLateComponent`, deliberately has **no** guard.
-Its `matchedAtAdmission` test is `(asAdmitted & required) == required`, which an
-empty signature satisfies for every entity, so the loop already skips a latched
-system. A guard there was written, then removed: mutation testing showed it
-survived, and it survived because no test could distinguish its presence from
-its absence. The reasoning is recorded in a comment at the site so it is not
-re-added.
+A fourth site, `SystemMissedByLateComponent`, was left **without** a guard on
+the reasoning that `matchedAtAdmission` is `(asAdmitted & required) == required`,
+which an empty signature satisfies for every entity. **That reasoning was wrong
+and an adversarial review caught it.** `RequireComponent` latches and returns
+*without clearing `componentSignature`*, so a system whose first requirement
+resolved and whose second overflowed keeps the first bit: its signature is not
+empty, `matchedAtAdmission` is not trivially true, and the `alreadyMember`
+escape is guaranteed to fail — the latch is what emptied the member list. Every
+system in this engine has two or more requirements, so that is the ordinary
+shape, not an exotic one. The guard is restored.
+
+**The methodology failure is the part worth keeping.** The guard was removed
+because a mutant survived. The mutant survived because `SpecOverflowSystem` has
+exactly one requirement and nothing covered partial overflow — "no test
+distinguishes this" meant *untested*, and it was read as *unreachable*. That
+conclusion was then written into a code comment, this roadmap and a commit
+message, where it looked like a considered decision. A surviving mutant is a
+question about the tests first and the code second.
 
 ### 4. `Tile` carries the editor's animation fields — `KNOWN_ISSUES.md` item 7 — **DONE**
 
@@ -166,9 +177,23 @@ Four things this turned up that were not obvious from the plan:
   staging prefix. It is `override INCLUDE +=` now.
 
 `specs/compat/global.spec.cpp` is the one spec in the suite deliberately written
-**without** `using namespace storm;` — it names every type unqualified through
-the bridge alone, so it fails if the bridge misses a name. Adding the directive
-there would make it pass whether the bridge exported anything or not.
+**without** `using namespace storm;`, since the directive would make it pass
+whether the bridge exported anything or not.
+
+Its original claim — "it names every type unqualified through the bridge alone,
+so it fails if the bridge misses a name" — **was false**, and an adversarial
+review caught it. The file named 33 of 133 exports, chosen from the same mental
+list that produced the bridge, so a name forgotten in one was forgotten in the
+other. Two were: `EcsSuppressionNote` and `ComponentMissDescription`, both
+public since 1.x, both used by any game with its own throttled diagnostic.
+
+The fix is that the list no longer comes from memory.
+`scripts/generate-compat-probes.py` parses the engine headers and emits
+`specs/compat/bridgedNames.h`, one `using ::Name;` per public name — a form
+legal for every entity kind that fails to compile when the name is absent. CI
+re-runs the generator with `--check` and fails if the committed file is stale,
+because a generated file nobody regenerates is the same hole wearing a
+different hat.
 
 Verified against a staging install (`make install DESTDIR=…`) rather than by
 overwriting `/usr/local`: all nine desktop examples build and link, the editor
@@ -202,11 +227,23 @@ A second source joining mid-hold is not a new press.
 `Gamepad`, because `GamepadState` is a plain struct — that is what lets the whole
 header be spec'd with no controller attached, the same seam `gamepad.h` uses.
 
-**One known coverage gap.** The four-argument convenience overload cannot be
-tested: `Gamepad::Update()` samples a real device, so with nothing attached
-`Current()` and `Previous()` are both zeroed and identical, and no spec can tell
-correct forwarding from swapped forwarding — the mutant that swaps them survives.
-It is recorded at the overload. Test it on hardware if it changes.
+**A claimed coverage gap that was not one.** The four-argument convenience
+overload was documented three times — header, spec and here — as untestable,
+because `Gamepad::Update()` samples a real device and with nothing attached
+`Current()` and `Previous()` hold identical values. That reasoning only
+considered their *contents*. They are distinct objects at distinct addresses
+whether or not a device is attached, so asserting on pointer identity settles it
+with no hardware at all. The forwarding is a public `SourcesFrom()` seam now,
+and the swap mutant is killed.
+
+The adversarial review also found four real defects in this header, all fixed:
+a release edge that fired for an action that was never down; `Bind()` leaving
+stale edge state that fabricated a release or swallowed a press; `binding.pad`
+indexing a fixed array with no range check; and source-pointer stability being
+an unstated precondition that failed in opposite directions for the stateful and
+stateless sources. Both "map every control" specs were vacuous — they set every
+flag, then one flag, which left every other control free to swap — and now sweep
+each control held alone.
 
 Mutation testing also removed one term and added one case. On the press side
 `stateless && !statelessPrev` could never differ from `stateless`, because the

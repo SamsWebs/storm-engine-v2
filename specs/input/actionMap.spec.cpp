@@ -349,38 +349,193 @@ Describe(ActionMapSpec) {
     Assert::That(actions.IsDown(MoveLeft), Equals(true));
   };
 
+  // Every control held, then each control held ALONE in turn. The all-held
+  // phase alone proves nothing about the mapping: with all eight flags set,
+  // any permutation of the switch passes. Holding only `x` was barely better
+  // -- it anchors X and leaves Up/Down, Left/Right, A/B and Y free to swap,
+  // since every one of those reads false either way. Only the full sweep
+  // fails when two cases in VPadHeld are exchanged.
+  // A release edge arriving for an action that was never down must not be
+  // reported. The realistic route is a source released across a state change:
+  // the player holds SPACE, the new state binds it in OnEnter, the player lets
+  // go, and the game would see a release for a press it never saw.
+  It(should_not_report_a_release_for_an_action_that_was_never_down) {
+    ActionMap actions;
+    actions.Bind(Jump, JumpOnEverything());
+
+    // The button was down last frame and is up now, but this map has never
+    // seen it held.
+    GamepadState previous;
+    previous.buttons[static_cast<int>(GamepadButton::A)] = true;
+    GamepadState current;
+
+    ActionSources sources;
+    sources.gamepad = &current;
+    sources.gamepadPrevious = &previous;
+    actions.Update(sources);
+
+    Assert::That(actions.IsDown(Jump), Equals(false));
+    Assert::That(actions.WasPressed(Jump), Equals(false));
+    Assert::That(actions.WasReleased(Jump), Equals(false));
+  };
+
+  // ... but the release half of a within-frame tap must still be reported.
+  // The tap never appears in the held state, so gating the release on `down`
+  // alone would swallow it -- which is why the gate is (down || pressed).
+  It(should_still_report_the_release_half_of_a_within_frame_tap) {
+    Keyboard keyboard;
+    ActionMap actions;
+    actions.Bind(Jump, JumpOnEverything());
+
+    keyboard.BeginFrame();
+    keyboard.HandleEvent(ActionKeyEvent(SDL_KEYDOWN, SDL_SCANCODE_SPACE, 0));
+    keyboard.HandleEvent(ActionKeyEvent(SDL_KEYUP, SDL_SCANCODE_SPACE, 0));
+
+    ActionSources sources;
+    sources.keyboard = &keyboard;
+    actions.Update(sources);
+
+    Assert::That(actions.WasPressed(Jump), Equals(true));
+    Assert::That(actions.WasReleased(Jump), Equals(true));
+    Assert::That(actions.IsDown(Jump), Equals(false));
+  };
+
+  // Rebinding must reset the edge state with the binding. Stale state
+  // describes the OLD binding's sources.
+  It(should_not_fabricate_a_release_when_rebinding_a_held_action) {
+    ActionMap actions;
+    actions.Bind(Jump, JumpOnEverything());
+
+    VPadState vpad;
+    vpad.a = true;
+    ActionSources sources;
+    sources.vpad = &vpad;
+    actions.Update(sources);
+    Assert::That(actions.IsDown(Jump), Equals(true));
+
+    // Rebound to keyboard only, while the player is still touching the
+    // on-screen A. The vpad no longer contributes to this action at all.
+    ActionBinding keyboardOnly;
+    keyboardOnly.key = SDL_SCANCODE_SPACE;
+    actions.Bind(Jump, keyboardOnly);
+
+    actions.Update(sources);
+
+    Assert::That(actions.IsDown(Jump), Equals(false));
+    Assert::That(actions.WasReleased(Jump), Equals(false));
+    Assert::That(actions.WasPressed(Jump), Equals(false));
+  };
+
+  // And the mirror: rebinding onto a source that IS held reports a fresh
+  // press, the same as Unbind-then-Bind. The two spellings of the same
+  // operation must not diverge.
+  It(should_report_a_press_when_rebinding_onto_a_held_source) {
+    VPadState vpad;
+    vpad.a = true;
+    ActionSources sources;
+    sources.vpad = &vpad;
+
+    ActionMap rebound;
+    ActionBinding keyboardOnly;
+    keyboardOnly.key = SDL_SCANCODE_SPACE;
+    rebound.Bind(Jump, keyboardOnly);
+    rebound.Update(sources);
+    rebound.Bind(Jump, JumpOnEverything());
+    rebound.Update(sources);
+
+    ActionMap recreated;
+    recreated.Bind(Jump, keyboardOnly);
+    recreated.Update(sources);
+    recreated.Unbind(Jump);
+    recreated.Bind(Jump, JumpOnEverything());
+    recreated.Update(sources);
+
+    Assert::That(rebound.WasPressed(Jump), Equals(true));
+    Assert::That(rebound.WasPressed(Jump), Equals(recreated.WasPressed(Jump)));
+    Assert::That(rebound.IsDown(Jump), Equals(recreated.IsDown(Jump)));
+  };
+
+  // `pad` is a public field and GamepadDown indexes a fixed array with no
+  // bounds check of its own, so a value outside the enum's range must be
+  // rejected here rather than read out of bounds.
+  It(should_ignore_a_gamepad_button_outside_the_valid_range) {
+    ActionMap actions;
+    ActionBinding bogus;
+    bogus.pad = static_cast<GamepadButton>(50);
+    actions.Bind(Jump, bogus);
+
+    GamepadState previous;
+    GamepadState current;
+    ActionSources sources;
+    sources.gamepad = &current;
+    sources.gamepadPrevious = &previous;
+    actions.Update(sources);
+
+    Assert::That(actions.IsDown(Jump), Equals(false));
+  };
+
+  // The convenience overload forwards Current() and Previous() in that order.
+  // Their VALUES are identical with no controller attached, which is what made
+  // this look untestable -- but they are distinct objects, so pointer identity
+  // distinguishes correct forwarding from swapped forwarding with no hardware.
+  It(should_forward_the_gamepad_current_and_previous_states_in_order) {
+    Keyboard keyboard;
+    Gamepad gamepad;
+    VPadState vpad;
+    TouchInput touch;
+
+    const ActionSources sources =
+        ActionMap::SourcesFrom(&keyboard, &gamepad, &vpad, &touch);
+
+    Assert::That(sources.gamepad == &gamepad.Current(), Equals(true));
+    Assert::That(sources.gamepadPrevious == &gamepad.Previous(), Equals(true));
+    Assert::That(sources.keyboard == &keyboard, Equals(true));
+    Assert::That(sources.vpad == &vpad, Equals(true));
+    Assert::That(sources.touch == &touch, Equals(true));
+  };
+
+  It(should_leave_the_gamepad_states_null_when_no_gamepad_is_passed) {
+    const ActionSources sources =
+        ActionMap::SourcesFrom(nullptr, nullptr, nullptr, nullptr);
+    Assert::That(sources.gamepad == nullptr, Equals(true));
+    Assert::That(sources.gamepadPrevious == nullptr, Equals(true));
+  };
+
   It(should_map_every_virtual_gamepad_control) {
     ActionMap actions;
     const VPadControl controls[] = {
         VPadControl::Up, VPadControl::Down, VPadControl::Left,
         VPadControl::Right, VPadControl::A, VPadControl::B,
         VPadControl::X, VPadControl::Y};
+    bool VPadState::*fields[] = {&VPadState::up, &VPadState::down,
+                                 &VPadState::left, &VPadState::right,
+                                 &VPadState::a,  &VPadState::b,
+                                 &VPadState::x,  &VPadState::y};
     for (int i = 0; i < 8; ++i) {
       ActionBinding binding;
       binding.vpad = controls[i];
       actions.Bind(i, binding);
     }
 
-    VPadState vpad;
-    vpad.up = vpad.down = vpad.left = vpad.right = true;
-    vpad.a = vpad.b = vpad.x = vpad.y = true;
+    VPadState all;
+    all.up = all.down = all.left = all.right = true;
+    all.a = all.b = all.x = all.y = true;
 
     ActionSources sources;
-    sources.vpad = &vpad;
+    sources.vpad = &all;
     actions.Update(sources);
-
     for (int i = 0; i < 8; ++i) {
       Assert::That(actions.IsDown(i), Equals(true));
     }
 
-    // And each one independently: only `x` held resolves only the x action.
-    VPadState onlyX;
-    onlyX.x = true;
-    sources.vpad = &onlyX;
-    actions.Update(sources);
-
-    for (int i = 0; i < 8; ++i) {
-      Assert::That(actions.IsDown(i), Equals(controls[i] == VPadControl::X));
+    for (int held = 0; held < 8; ++held) {
+      VPadState only;
+      only.*fields[held] = true;
+      sources.vpad = &only;
+      actions.Update(sources);
+      for (int i = 0; i < 8; ++i) {
+        Assert::That(actions.IsDown(i), Equals(i == held));
+      }
     }
   };
 
@@ -417,25 +572,29 @@ Describe(ActionMapSpec) {
     Assert::That(actions.IsDown(Jump), Equals(false));
   };
 
+  // Same sweep, same reason: setting only `right` left Left and Jump free to
+  // swap in TouchHeld, because both read false either way.
   It(should_map_every_touch_control) {
     ActionMap actions;
     const TouchControl controls[] = {TouchControl::Left, TouchControl::Right,
                                      TouchControl::Jump};
+    bool TouchInput::*fields[] = {&TouchInput::left, &TouchInput::right,
+                                  &TouchInput::jump};
     for (int i = 0; i < 3; ++i) {
       ActionBinding binding;
       binding.touch = controls[i];
       actions.Bind(i, binding);
     }
 
-    TouchInput touch;
-    touch.right = true;
-
     ActionSources sources;
-    sources.touch = &touch;
-    actions.Update(sources);
-
-    Assert::That(actions.IsDown(0), Equals(false)); // left
-    Assert::That(actions.IsDown(1), Equals(true));  // right
-    Assert::That(actions.IsDown(2), Equals(false)); // jump
+    for (int held = 0; held < 3; ++held) {
+      TouchInput only;
+      only.*fields[held] = true;
+      sources.touch = &only;
+      actions.Update(sources);
+      for (int i = 0; i < 3; ++i) {
+        Assert::That(actions.IsDown(i), Equals(i == held));
+      }
+    }
   };
 };

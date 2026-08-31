@@ -116,7 +116,29 @@ bool Entity::BelongsToGroup(const std::string &group) const {
   return registry->EntityBelongsToGroup(*this, group);
 }
 
-void System::AddEntityToSystem(Entity entity) { entities.push_back(entity); }
+void System::AddEntityToSystem(Entity entity) {
+  // Public, so a game holding a System& from GetSystem<T>() reaches this
+  // directly and bypasses Registry::AddEntityToSystems and its IsAlive gate.
+  // That matters more here than almost anywhere: nothing removes an entry
+  // from this list except a matching entitiesToBeKilled pass in
+  // Registry::Update(), and a stale handle never goes through that -- so a
+  // stale entity added here is iterated by this system every frame, forever.
+  //
+  // A bare Entity carries no registry and cannot be checked, so it passes
+  // through. That is the handle a spec builds to exercise System on its own,
+  // and it is the caller's to get right.
+  if (entity.registry != nullptr && !entity.registry->IsAlive(entity)) {
+    static thread_local unsigned int reports = 0;
+    if (EcsShouldReport(reports)) {
+      EcsReportErr("System::AddEntityToSystem: entity " +
+                   std::to_string(entity.GetId()) + " " +
+                   ComponentMissDescription(ComponentMiss::Stale) +
+                   "; ignoring" + EcsSuppressionNote(reports));
+    }
+    return;
+  }
+  entities.push_back(entity);
+}
 
 void System::RemoveEntityFromSystem(Entity entity) {
   entities.erase(
@@ -193,10 +215,12 @@ bool Registry::IsIdInUse(std::size_t id) const {
 template <typename TVisitor>
 void Registry::ForEachMissedEntity(const System &system,
                                    TVisitor &&visit) const {
-  // A latched system's signature is empty, so every live entity would look
-  // like one it missed. That is wrong for both callers and dangerous for one:
-  // CountEntitiesMissedBySystem would report the whole world, and
-  // AdmitExistingEntitiesTo would then hand the whole world to a system the
+  // A latched system must be handed nothing. Note the reason is the latch
+  // itself, NOT the shape of its signature: RequireComponent latches without
+  // clearing componentSignature, so a partially-overflowed system's signature
+  // is non-empty and would match a real subset of entities here rather than
+  // all of them. Either way it must match none. Dangerous for one caller in
+  // particular: AdmitExistingEntitiesTo would hand entities to the system the
   // latch exists to keep empty. See System::RequireComponent in ecs.h.
   if (system.IsDisabled()) {
     return;
@@ -216,6 +240,14 @@ void Registry::ForEachMissedEntity(const System &system,
     entity.generation = generations[id];
 
     if (IsPendingAdmission(entity)) {
+      continue;
+    }
+    // On its way out; its membership will never matter again. The same guard
+    // SystemMissedByLateComponent carries, and for the same reason -- without
+    // it AdmitExistingEntitiesTo hands a system an entity that Update() is
+    // about to reap, and CountEntitiesMissedBySystem reports an inflated
+    // count that includes it.
+    if (entitiesToBeKilled.find(entity) != entitiesToBeKilled.end()) {
       continue;
     }
     if ((entityComponentSignatures[id] & required) != required) {
@@ -330,13 +362,26 @@ Registry::SystemMissedByLateComponent(Entity entity,
   asAdmitted.reset(componentId);
 
   for (const auto &entry : systems) {
-    // No IsDisabled() guard here, unlike AddEntityToSystems and
-    // ForEachMissedEntity. A latched system's signature is empty, so
-    // matchedAtAdmission below is (asAdmitted & 0) == 0 -- true for every
-    // entity -- and the loop already skips it. A guard would be unreachable
-    // code that no test can distinguish from its absence. If the condition
-    // below is ever rewritten, re-check that a latched system still cannot
-    // be named here.
+    // A latched system must never be named here. This guard was removed once,
+    // on the reasoning that a latched system's signature is empty so
+    // matchedAtAdmission below is trivially true and the loop already skips
+    // it. That reasoning is wrong: System::RequireComponent latches and
+    // returns WITHOUT clearing componentSignature, so a system whose second
+    // requirement overflowed keeps the bit its first requirement set. Its
+    // signature is non-empty, matchedAtAdmission is not trivially true, and
+    // the alreadyMember escape below is guaranteed to fail -- the latch is
+    // precisely what kept its entity list empty. Every system in this engine
+    // has two or more requirements, so that is the ordinary shape, not an
+    // exotic one.
+    //
+    // Naming it produces advice that cannot work: "add the component before
+    // the Update() that admits the entity" does nothing for a system that is
+    // latched off. It also spends the shared late-component report budget on
+    // a system that will never take an entity.
+    if (entry.second->IsDisabled()) {
+      continue;
+    }
+
     const Signature &required = entry.second->GetComponentSignature();
     const bool matchedAtAdmission = (asAdmitted & required) == required;
     const bool matchesNow = (now & required) == required;
@@ -451,9 +496,11 @@ void Registry::AddEntityToSystems(Entity entity) {
 
   // loop all the systems
   for (auto &system : systems) {
-    // A latched system holds an empty signature, which would match every
-    // entity here. Skip it: the whole point of the latch is that it matches
-    // nothing. See System::RequireComponent in ecs.h.
+    // Skip a latched system: the point of the latch is that it matches
+    // nothing. Not because its signature is empty -- RequireComponent latches
+    // without clearing componentSignature, so a partially-overflowed system
+    // still carries the bits its earlier requirements set. See
+    // System::RequireComponent in ecs.h.
     if (system.second->IsDisabled()) {
       continue;
     }

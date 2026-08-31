@@ -40,6 +40,23 @@ struct SpecComponentIdCounter : IComponent {
   static void Set(std::size_t value) { nextId = value; }
 };
 
+// Parks IComponent::nextId past the cap for a scope and always puts it back.
+//
+// Restoring by hand after the assertions was a leak waiting to happen: igloo's
+// Assert::That throws, the suite runs every remaining context after a failed
+// one, and the counter is process-global. A single failure inside the window
+// left nextId past the cap for the rest of the run, which silently latches
+// every system whose component type is first used afterwards -- turning one
+// real failure into a cascade of unrelated ones, some of which then "pass"
+// vacuously.
+struct SpecComponentIdPark {
+  std::size_t saved;
+  SpecComponentIdPark() : saved(SpecComponentIdCounter::Get()) {
+    SpecComponentIdCounter::Set(MAX_COMPONENTS);
+  }
+  ~SpecComponentIdPark() { SpecComponentIdCounter::Set(saved); }
+};
+
 // Only ever used while the counter is parked past MAX_COMPONENTS.
 struct SpecOverflowComponent {
   int value = 0;
@@ -48,6 +65,18 @@ struct SpecOverflowComponent {
 class SpecOverflowSystem : public System {
 public:
   SpecOverflowSystem() { RequireComponent<SpecOverflowComponent>(); }
+};
+
+// The shape every real system has: more than one requirement, of which only
+// some overflow. The first RequireComponent resolves and sets its bit; the
+// second latches. The signature is therefore NON-empty and latched at once --
+// which is the case that disproves "a latched system's signature is empty".
+class SpecPartialOverflowSystem : public System {
+public:
+  SpecPartialOverflowSystem() {
+    RequireComponent<SpecHealth>();            // resolves, sets a bit
+    RequireComponent<SpecOverflowComponent>(); // overflows, latches
+  }
 };
 
 // Test seam for the generation-wrap spec below. Reaching 2^32 kills for real
@@ -149,6 +178,32 @@ Describe(EcsSpec) {
       system.AddEntityToSystem(Entity(88));
       Assert::That(system.GetSystemEntities().size(), Equals(2));
       Assert::That(system.GetSystemEntities()[1].GetId(), Equals(88));
+    };
+
+    // The one ungated write path into system membership. A stale handle added
+    // here is never removed -- Registry::Update()'s kill pass only reaps
+    // entities it queued -- so the system iterates it every frame forever.
+    // A bare Entity carries no registry and still passes through, since there
+    // is nothing to check it against.
+    It(should_reject_a_stale_handle_added_directly_to_a_system) {
+      Registry registry;
+      Entity entity = registry.CreateEntity();
+      registry.AddComponent<SpecHealth>(entity, SpecHealth{1});
+      registry.Update();
+
+      Entity stale = entity; // copy taken while it was alive
+      registry.KillEntity(entity);
+      registry.Update(); // id recycled, generation bumped
+
+      System system;
+      system.AddEntityToSystem(stale);
+      Assert::That(system.GetSystemEntities().size(), Equals(0u));
+
+      // A live handle still goes in.
+      Entity live = registry.CreateEntity();
+      registry.Update();
+      system.AddEntityToSystem(live);
+      Assert::That(system.GetSystemEntities().size(), Equals(1u));
     };
 
     It(should_remove_entity_from_system) {
@@ -501,9 +556,14 @@ Describe(EcsSpec) {
           Equals(false));
     };
 
-    It(should_ignore_the_thirty_third_component_type_instead_of_throwing) {
-      const std::size_t saved = SpecComponentIdCounter::Get();
-      SpecComponentIdCounter::Set(MAX_COMPONENTS);
+    // Named for the cap, not for a number: it was
+    // should_ignore_the_thirty_third_component_type until MAX_COMPONENTS went
+    // 32 -> 64 and the name silently became wrong. The assertions use the
+    // constant, so only the name ever rotted.
+    It(should_ignore_a_component_type_past_the_cap_instead_of_throwing) {
+      // RAII rather than a restore at the end: four assertions follow, igloo
+      // throws on failure, and a leaked counter poisons the rest of the run.
+      SpecComponentIdPark park;
 
       // Caches an id of exactly MAX_COMPONENTS for the lifetime of the
       // process — SpecOverflowComponent is used nowhere else.
@@ -527,8 +587,6 @@ Describe(EcsSpec) {
                    Equals(0));
 
       registry.RemoveComponent<SpecOverflowComponent>(e); // must be a no-op
-
-      SpecComponentIdCounter::Set(saved);
     };
 
     // KNOWN_ISSUES.md §4 — PINS A KNOWN LIMITATION, NOT DESIRED BEHAVIOUR.
@@ -542,11 +600,11 @@ Describe(EcsSpec) {
     It(should_match_no_entity_when_a_systems_requirement_overflowed) {
       // Order-independent: force SpecOverflowComponent's cached id to
       // MAX_COMPONENTS whether or not the case above has run yet.
-      const std::size_t saved = SpecComponentIdCounter::Get();
-      SpecComponentIdCounter::Set(MAX_COMPONENTS);
-      Assert::That(Component<SpecOverflowComponent>::GetId(),
-                   Equals(static_cast<std::size_t>(MAX_COMPONENTS)));
-      SpecComponentIdCounter::Set(saved);
+      {
+        SpecComponentIdPark park;
+        Assert::That(Component<SpecOverflowComponent>::GetId(),
+                     Equals(static_cast<std::size_t>(MAX_COMPONENTS)));
+      }
 
       Registry registry;
       registry.AddSystem<SpecOverflowSystem>();
@@ -595,11 +653,11 @@ Describe(EcsSpec) {
     // matches -- against an empty signature that is the entire world, handed
     // to the one system that must stay empty.
     It(should_not_admit_existing_entities_to_a_latched_system) {
-      const std::size_t saved = SpecComponentIdCounter::Get();
-      SpecComponentIdCounter::Set(MAX_COMPONENTS);
-      Assert::That(Component<SpecOverflowComponent>::GetId(),
-                   Equals(static_cast<std::size_t>(MAX_COMPONENTS)));
-      SpecComponentIdCounter::Set(saved);
+      {
+        SpecComponentIdPark park;
+        Assert::That(Component<SpecOverflowComponent>::GetId(),
+                     Equals(static_cast<std::size_t>(MAX_COMPONENTS)));
+      }
 
       Registry registry;
       Entity first = registry.CreateEntity();
@@ -626,6 +684,88 @@ Describe(EcsSpec) {
       registry.AdmitExistingEntitiesTo(system);
 
       Assert::That(system.GetSystemEntities().size(), Equals(0u));
+    };
+
+    // A latched system's signature is NOT necessarily empty.
+    // System::RequireComponent latches and returns without clearing
+    // componentSignature, so a system whose first requirement resolved keeps
+    // that bit. Three guards in the engine were once justified by the claim
+    // that a latched signature is empty; this case is what disproves it.
+    It(should_keep_earlier_requirement_bits_when_a_later_one_latches) {
+      {
+        SpecComponentIdPark park;
+        Assert::That(Component<SpecOverflowComponent>::GetId(),
+                     Equals(static_cast<std::size_t>(MAX_COMPONENTS)));
+      }
+
+      Registry registry;
+      registry.AddSystem<SpecPartialOverflowSystem>();
+      SpecPartialOverflowSystem &system =
+          registry.GetSystem<SpecPartialOverflowSystem>();
+
+      Assert::That(system.IsDisabled(), Equals(true));
+      // The bit SpecHealth set survived the latch.
+      Assert::That(system.GetComponentSignature().none(), Equals(false));
+    };
+
+    // The diagnostic must not name a latched system. Its advice -- "add the
+    // component before the Update() that admits the entity" -- cannot help a
+    // system that is latched off, and naming it also spends the shared
+    // late-component report budget on a system that will never take an entity.
+    //
+    // This is the case whose absence let a mutation survive: with only
+    // single-requirement overflow systems under test, removing the guard in
+    // SystemMissedByLateComponent looked free.
+    It(should_not_name_a_latched_system_as_missed_by_a_late_component) {
+      {
+        SpecComponentIdPark park;
+        Assert::That(Component<SpecOverflowComponent>::GetId(),
+                     Equals(static_cast<std::size_t>(MAX_COMPONENTS)));
+      }
+
+      Registry registry;
+      registry.AddSystem<SpecPartialOverflowSystem>();
+
+      Entity entity = registry.CreateEntity();
+      registry.Update(); // the latch keeps the system's entity list empty
+
+      // Setting the bit the system's *resolvable* requirement asked for is
+      // what used to make the loop name it: matchedAtAdmission is false,
+      // matchesNow is true, and alreadyMember is guaranteed false because the
+      // latch is what emptied the member list.
+      registry.AddComponent<SpecHealth>(entity, SpecHealth{1});
+
+      Assert::That(registry.SystemMissedByLateComponent(
+                       entity, Component<SpecHealth>::GetId()) == nullptr,
+                   Equals(true));
+    };
+
+    // An entity queued for death is on its way out and its membership will
+    // never matter again. SystemMissedByLateComponent has always skipped one;
+    // ForEachMissedEntity did not, so the retrofit path both over-counted and
+    // handed a system an entity that the next Update() reaps.
+    It(should_not_admit_an_entity_that_is_queued_for_death) {
+      Registry registry;
+
+      Entity doomed = registry.CreateEntity();
+      registry.AddComponent<SpecHealth>(doomed, SpecHealth{1});
+      Entity survivor = registry.CreateEntity();
+      registry.AddComponent<SpecHealth>(survivor, SpecHealth{2});
+      registry.Update(); // both admitted; no system exists yet
+
+      registry.KillEntity(doomed); // queued, not yet reaped
+
+      // Registered late, so both entities are candidates for the retrofit --
+      // except that one of them is already dead.
+      registry.AddSystem<SpecHealthSystem>();
+      SpecHealthSystem &system = registry.GetSystem<SpecHealthSystem>();
+
+      Assert::That(registry.CountEntitiesMissedBySystem(system), Equals(1u));
+      Assert::That(registry.AdmitExistingEntitiesTo(system), Equals(1u));
+
+      const std::vector<Entity> &members = system.GetSystemEntities();
+      Assert::That(members.size(), Equals(1u));
+      Assert::That(members[0] == survivor, Equals(true));
     };
 
     // A system whose requirements all resolved is not latched -- the latch

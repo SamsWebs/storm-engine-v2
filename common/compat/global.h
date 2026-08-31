@@ -65,10 +65,12 @@
 using storm::Component;
 using storm::ComponentMiss;
 using storm::ECS_MAX_DIAGNOSTIC_REPORTS;
+using storm::ComponentMissDescription;
 using storm::EcsComponentIdIsValid;
 using storm::EcsFallbackComponent;
 using storm::EcsReportErr;
 using storm::EcsShouldReport;
+using storm::EcsSuppressionNote;
 using storm::Entity;
 using storm::EntityOrder;
 using storm::IComponent;

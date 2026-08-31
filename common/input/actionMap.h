@@ -44,6 +44,16 @@ namespace storm {
 // nothing. A desktop game passes keyboard and gamepad; a phone build passes
 // vpad and touch; nothing has to change in between.
 //
+// PRECONDITION: pass the same set of sources every frame. "Optional" means
+// chosen once at startup, not toggled per frame. Dropping a source mid-hold
+// is not a release and is not reported as one consistently: a keyboard or
+// gamepad that disappears takes its held state with it and no release edge is
+// produced, while a vpad or touch that disappears DOES produce one, because
+// the previous-frame flag it is diffed against is still set. If a game must
+// switch input sets at runtime, call Bind() again for the affected actions --
+// that resets the edge state deliberately rather than leaving it describing
+// sources that are no longer being read.
+//
 // Header-only, holds no SDL resource, and safe to construct before SDL_Init.
 
 // Which control on the on-screen virtual gamepad a binding listens to.
@@ -91,6 +101,22 @@ public:
     for (Entry &entry : entries_) {
       if (entry.action == action) {
         entry.binding = binding;
+        // Reset the edge state with the binding. Carrying it across a rebind
+        // describes the OLD binding's sources: a player still holding the
+        // on-screen A while the action is rebound to a keyboard-only binding
+        // would otherwise get a fabricated release on the next Update (the
+        // stale statelessPrev with nothing holding it now), and a rebind onto
+        // a source already held would swallow the press. It also made
+        // `Bind(a, b)` behave differently from `Unbind(a); Bind(a, b);`,
+        // which is the same operation spelled two ways.
+        //
+        // Resetting `down` is what keeps the removed press term redundant:
+        // the invariant `statelessPrev implies down` must hold after every
+        // mutation, so these two are reset together or not at all.
+        entry.down = false;
+        entry.pressed = false;
+        entry.released = false;
+        entry.statelessPrev = false;
         return;
       }
     }
@@ -144,7 +170,14 @@ public:
             edgeReleased || sources.keyboard->WasReleased(binding.key);
       }
 
-      if (sources.gamepad != nullptr && binding.pad != GamepadButton::Count) {
+      // Range-checked, not just compared against the sentinel: GamepadDown
+      // indexes a fixed array with no bounds check of its own, and `pad` is a
+      // public field a caller can set to any value a cast produces. The
+      // keyboard path is guarded inside Keyboard::Test and the two stateless
+      // paths are switches that fall through to false, so this was the only
+      // unvalidated index in the header.
+      if (sources.gamepad != nullptr && binding.pad >= GamepadButton::Up &&
+          binding.pad < GamepadButton::Count) {
         held = held || GamepadDown(*sources.gamepad, binding.pad);
         if (sources.gamepadPrevious != nullptr) {
           edgePressed = edgePressed || GamepadPressed(*sources.gamepad,
@@ -183,23 +216,43 @@ public:
 
       // A press only counts if nothing was already holding the action, and a
       // release only counts once nothing holds it any more.
-      entry.pressed = edgePressed && !entry.down;
-      entry.released = edgeReleased && !held;
+      //
+      // The release also requires that the action was actually down. Without
+      // that, a release edge arriving while the action was never held reports
+      // a release with no press before it -- a source released across a Bind()
+      // is the realistic case: the player holds a key through a state change,
+      // the new state binds it in OnEnter, the player lets go, and the game
+      // sees WasReleased for a press it never saw.
+      //
+      // `|| entry.pressed` is not redundant with `entry.down`: a key pressed
+      // AND released inside one frame never appears in the held state at all,
+      // so `down` is false throughout while `pressed` is true. Gating on
+      // `down` alone would swallow the release half of a fast tap.
+      // Order matters: the release has to see the press computed for THIS
+      // frame, not the previous frame's. A within-frame tap sets both edges in
+      // one Update, and reading the stale entry.pressed here swallowed the
+      // release half of exactly the case the (down || pressed) gate exists to
+      // preserve.
+      const bool pressedNow = edgePressed && !entry.down;
+      entry.released = edgeReleased && !held && (entry.down || pressedNow);
+      entry.pressed = pressedNow;
       entry.down = held;
     }
   }
 
-  // Convenience overload for the common case. Equivalent to filling an
-  // ActionSources with gamepad->Current() and gamepad->Previous().
+  // Builds the ActionSources the convenience overload below passes on.
   //
-  // Not covered by the specs, and it cannot be: Gamepad::Update() samples a
-  // real device, so with no controller attached Current() and Previous() are
-  // both zeroed and identical. A spec cannot tell correct forwarding from
-  // swapped forwarding. The specs cover the ActionSources form instead, which
-  // takes the two states directly; this overload is the two-line adapter onto
-  // it. Test it on hardware if you change it.
-  void Update(const Keyboard *keyboard, const Gamepad *gamepad,
-              const VPadState *vpad, const TouchInput *touch) {
+  // Public because it is the seam that makes that overload testable. It was
+  // once documented as untestable -- Gamepad::Update() samples a real device,
+  // so with nothing attached Current() and Previous() hold identical values
+  // and no assertion on their CONTENTS can tell correct forwarding from
+  // swapped forwarding. That reasoning missed that the two are distinct
+  // objects at distinct addresses whether or not a device is attached, so
+  // asserting on pointer identity settles it with no hardware at all.
+  static ActionSources SourcesFrom(const Keyboard *keyboard,
+                                   const Gamepad *gamepad,
+                                   const VPadState *vpad,
+                                   const TouchInput *touch) {
     ActionSources sources;
     sources.keyboard = keyboard;
     if (gamepad != nullptr) {
@@ -208,7 +261,13 @@ public:
     }
     sources.vpad = vpad;
     sources.touch = touch;
-    Update(sources);
+    return sources;
+  }
+
+  // Convenience overload for the common case.
+  void Update(const Keyboard *keyboard, const Gamepad *gamepad,
+              const VPadState *vpad, const TouchInput *touch) {
+    Update(SourcesFrom(keyboard, gamepad, vpad, touch));
   }
 
   // All three return false for an action that was never bound, rather than

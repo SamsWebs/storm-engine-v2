@@ -79,10 +79,10 @@ void Application::Init() {
   mAssetManager = std::make_unique<AssetManager>();
 
   // Add all Necessary Systems to registry
-  Registry::Instance().AddSystem<RenderSystem>();
+  Registry::Instance().AddSystem<EditorRenderSystem>();
   Registry::Instance().AddSystem<RenderCollisionSystem>();
   Registry::Instance().AddSystem<RenderGuiSystem>();
-  Registry::Instance().AddSystem<AnimationSystem>();
+  Registry::Instance().AddSystem<EditorAnimationSystem>();
   // Add the mouse hand texture right away
   mAssetManager->AddTexture(mRenderer, "mouse_hand",
                             "./assets/mouse_hand.png");
@@ -98,7 +98,7 @@ void Application::Draw() {
   // Render Application Systems
   Registry::Instance().GetSystem<RenderGuiSystem>().RenderGrid(mRenderer,
                                                                mCamera, mZoom);
-  Registry::Instance().GetSystem<RenderSystem>().Update(
+  Registry::Instance().GetSystem<EditorRenderSystem>().Update(
       mRenderer.get(), mAssetManager, mCamera, mZoom);
 
   if (mShowColliders)
@@ -107,7 +107,7 @@ void Application::Draw() {
 
   Registry::Instance().GetSystem<RenderGuiSystem>().Update(
       mAssetManager, mRenderer, mMouseBox, mCamera, mEvent, mZoom, mDeltaTime);
-  Registry::Instance().GetSystem<AnimationSystem>().Update();
+  Registry::Instance().GetSystem<EditorAnimationSystem>().Update();
 
   /*
           This is a little hack to get SDL and ImGui to stop Ghosting!

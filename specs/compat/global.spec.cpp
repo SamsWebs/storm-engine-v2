@@ -1,9 +1,29 @@
 // The one spec in the suite with no `using namespace storm;`. That is the
-// point: this file proves <stormengine2/compat/global.h> alone is enough for a
-// 1.x game whose sources name every engine type unqualified. Adding the
-// using-directive here would make the case pass whether the bridge exported
+// point: this file checks that <stormengine2/compat/global.h> alone is enough
+// for a 1.x game whose sources name every engine type unqualified. Adding the
+// using-directive here would make every case pass whether the bridge exported
 // anything or not.
+//
+// The coverage comes from bridgedNames.h, generated from the engine headers.
+// This file's hand-written cases cover 33 of 133 exports and were once the
+// whole check -- which could not work, because the same list produced both the
+// bridge and the spec.
 #include "../../common/compat/global.h"
+
+// Generated from the ENGINE headers, not from the bridge -- one
+// `using ::Name;` for every public engine name. That form is legal for any
+// entity kind and fails to compile when the name is absent from the global
+// namespace, so a name added to the engine and not to the bridge breaks the
+// build here.
+//
+// The hand-written cases below name 33 of the 133 exports. They were the whole
+// check once, and could not do the job: the same author wrote the bridge and
+// the list, so a name forgotten in one was forgotten in the other and the
+// spec passed anyway. Two really were missing (EcsSuppressionNote,
+// ComponentMissDescription) and this file said nothing. The generated header
+// is the check; the cases below are the worked examples.
+#include "bridgedNames.h"
+
 #include <igloo/igloo_alt.h>
 
 using namespace igloo;

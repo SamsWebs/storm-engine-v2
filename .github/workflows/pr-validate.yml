@@ -11,6 +11,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
+      # The generated probe is what makes specs/compat/global.spec.cpp able to
+      # fail. It is committed so the spec suite needs no Python, which means it
+      # can go stale -- a public name added to the engine and not regenerated
+      # here would leave the bridge unchecked again, which is the exact hole
+      # this replaced. Runs on the host: it is stdlib Python over the headers
+      # and needs no toolchain.
+      - name: Check the compat probe is not stale
+        run: python3 scripts/generate-compat-probes.py --check
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 

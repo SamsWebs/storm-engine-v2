@@ -15,7 +15,11 @@
 #include "../ecs.h"
 #include "../logger.h"
 #include "../systems/animation.h"
-#include "../systems/collision.h"
+// contact.h replaces the transitive path that ../systems/collision.h used to
+// provide: it included this header itself, so deleting it silently withdrew
+// ContactSystem from every game that only includes gameState.h. Do not drop
+// this as redundant.
+#include "../systems/contact.h"
 #include "../systems/movement.h"
 #include "../systems/render.h"
 #include "../systems/renderCollider.h"

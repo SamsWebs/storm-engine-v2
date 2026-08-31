@@ -39,14 +39,20 @@ bool PlayState::onExit() {
 }
 
 void PlayState::processInput() {
+  // This state is the single SDL_PollEvent owner for the whole game (see the
+  // comment in Game::Run) - keyboard_ is fed from that one poll rather than
+  // polling again, which is exactly the double-consumer trap Keyboard exists
+  // to avoid.
+  keyboard_.BeginFrame();
   SDL_Event event;
   while (SDL_PollEvent(&event)) {
+    keyboard_.HandleEvent(event);
     if (event.type == SDL_QUIT) {
       isRunning_ = false;
     }
-    if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_ESCAPE) {
-      isRunning_ = false;
-    }
+  }
+  if (keyboard_.WasPressed(SDL_SCANCODE_ESCAPE)) {
+    isRunning_ = false;
   }
 }
 

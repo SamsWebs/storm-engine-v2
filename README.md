@@ -12,11 +12,12 @@ A lightweight, ECS-based 2D game engine built on SDL2 - made for game jams and p
 - **Sprite rendering** with camera, z-index sorting, and flip support
 - **Tilemap support** - load maps painted with the built-in tile editor (`.map` format, auto-detected)
 - **Box collider** components with debug overlay
-- **Contact detection** - AABB overlaps reported as `Contact{a, b, normal, depth}`, with begin/end callbacks and a pair filter that is where layers, masks and sensors live (`<stormengine2/systems/contact.h>`); the older kill-on-contact `CollisionSystem` still works but is deprecated
+- **Contact detection** - AABB overlaps reported as `Contact{a, b, normal, depth}`, with begin/end callbacks and a pair filter that is where layers, masks and sensors live (`<stormengine2/systems/contact.h>`)
 - **Asset store** for textures, fonts and sounds
 - **Text drawing** - `Text::Draw` / `DrawCentred` / `Measure` over SDL_ttf, header-only and null-safe (`<stormengine2/text.h>`)
 - **Game state machine** for managing scenes, with frame pacing built in (`GameState::CapFrameRate()`)
 - **Logger** utility
+- **Keyboard** input - edge-triggered `IsDown`/`WasPressed`/`WasReleased` over the full `SDL_Scancode` range, header-only and does not poll (`<stormengine2/input/keyboard.h>`)
 - **Gamepad** support - an `SDL_GameController` wrapper with edge-detected `Pressed`/`Released` and a configurable stick deadzone (`<stormengine2/input/gamepad.h>`), used by the shooter, strategy and sports examples
 - **Virtual gamepad** for touch devices - d-pad + action-button layout, pure and spec'd (`<stormengine2/input/virtualGamepad.h>`), driven by `examples/android-platformer`
 - **UDP networking** - host/join LAN play: reliable + unreliable chunks, kick/ban/timeout, snapshot replication with per-client deltas and a prediction cache (`<stormengine2/net/net.h>`, see [docs/networking.md](docs/networking.md))
@@ -44,6 +45,19 @@ Declaring a 33rd type is reported on the error log and the type is ignored; it d
 Raising the cap means editing `MAX_COMPONENTS` and rebuilding **everything** that includes `ecs.h`. Anything less is undefined behaviour: `Signature` is `std::bitset<MAX_COMPONENTS>`, so two translation units compiled with different values disagree about what type `Signature` *is*.
 
 Note that this mismatch is silent up to 64. `sizeof(std::bitset<N>)` is 8 bytes for every `N` from 1 to 64 and 16 bytes from 65, so bumping 32 → 64 changes no struct layout and no size check will catch a stale object file - a game built against a 32-component header linked to a 64-component `.so` will simply misbehave. If you raise it, rebuild the library, the editor, and every game against the same header in one go.
+
+## Diagnostics
+
+The engine logs a small, fixed number of occurrences of each of the following misuses at `Err` level - never more than a handful per call site - and then goes quiet. They are on in every build, debug and release alike, so a game that sees one of these in its log has a real bug to fix, not a warning to suppress:
+
+- A component added to an entity **after** it was already admitted by `Registry::Update()`, so it never joins the system that needed it
+- A system registered **after** matching entities already exist, so it never sees them
+- A `Registry` destroyed having created entities but never having called `Update()` on them, so nothing it owned ever rendered or moved
+- A sprite's `srcRect` falling outside its texture, which `SDL_RenderCopyEx` draws as nothing and reports nothing
+- `Registry::GetSystem<T>()` about to throw for a system that was never registered
+- `Registry::GetComponent<T>()` missing and falling back to a shared default instance
+
+Each is throttled independently and stays silent afterward, so it will not flood a game that hits the same misuse every frame.
 
 ## Installation
 

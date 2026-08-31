@@ -1,6 +1,11 @@
 #include <igloo/igloo_alt.h>
 
+#include <new>
+#include <stdexcept>
+#include <thread>
+
 #include "../common/ecs.h"
+#include "../common/logger.h"
 
 using namespace igloo;
 
@@ -405,5 +410,304 @@ Describe(RegistrySpec) {
       registry.Update();
       Assert::That(registry.DoesTagExist("player"), Equals(false));
     };
+  };
+};
+
+struct SpecLateSystemMarker {
+  int value = 0;
+  SpecLateSystemMarker(int value = 0) : value(value) {}
+};
+
+class SpecLateRegisteredSystem : public System {
+public:
+  SpecLateRegisteredSystem() { RequireComponent<SpecLateSystemMarker>(); }
+};
+
+static std::size_t SpecRegistryErrorCount() {
+  std::size_t errors = 0;
+  for (const auto &entry : Logger::messages) {
+    if (entry.type == LogType::LOG_ERROR) {
+      ++errors;
+    }
+  }
+  return errors;
+}
+
+Describe(LateSystemRegistrationSpec) {
+  It(should_report_when_matching_entities_were_already_admitted) {
+    Registry registry;
+    Entity first = registry.CreateEntity();
+    first.AddComponent<SpecLateSystemMarker>();
+    Entity second = registry.CreateEntity();
+    second.AddComponent<SpecLateSystemMarker>();
+    registry.Update();
+
+    Logger::messages.clear();
+    registry.AddSystem<SpecLateRegisteredSystem>();
+
+    Assert::That(SpecRegistryErrorCount(),
+                 Is().GreaterThanOrEqualTo(static_cast<std::size_t>(1)));
+    Logger::messages.clear();
+  };
+
+  It(should_stay_silent_when_registered_before_any_entity_exists) {
+    Registry registry;
+    Logger::messages.clear();
+    registry.AddSystem<SpecLateRegisteredSystem>();
+
+    Entity entity = registry.CreateEntity();
+    entity.AddComponent<SpecLateSystemMarker>();
+    registry.Update();
+
+    Assert::That(SpecRegistryErrorCount(), Equals(static_cast<std::size_t>(0)));
+  };
+
+  It(should_stay_silent_when_no_existing_entity_matches) {
+    Registry registry;
+    registry.CreateEntity();
+    registry.Update();
+
+    Logger::messages.clear();
+    registry.AddSystem<SpecLateRegisteredSystem>();
+
+    Assert::That(SpecRegistryErrorCount(), Equals(static_cast<std::size_t>(0)));
+  };
+
+  It(should_backfill_the_admitted_entities_on_request) {
+    Registry registry;
+    Entity first = registry.CreateEntity();
+    first.AddComponent<SpecLateSystemMarker>(11);
+    Entity second = registry.CreateEntity();
+    second.AddComponent<SpecLateSystemMarker>(22);
+    registry.Update();
+
+    registry.AddSystem<SpecLateRegisteredSystem>();
+    Assert::That(
+        registry.GetSystem<SpecLateRegisteredSystem>().GetSystemEntities().size(),
+        Equals(static_cast<std::size_t>(0)));
+
+    const std::size_t admitted =
+        registry.AdmitExistingEntities<SpecLateRegisteredSystem>();
+
+    Assert::That(admitted, Equals(static_cast<std::size_t>(2)));
+    const std::vector<Entity> &backfilled =
+        registry.GetSystem<SpecLateRegisteredSystem>().GetSystemEntities();
+    Assert::That(backfilled.size(), Equals(static_cast<std::size_t>(2)));
+
+    // A count alone cannot tell a healthy back-filled entity from a poisoned
+    // one: ForEachMissedEntity hands AdmitExistingEntitiesTo bare
+    // Entity(id) candidates with a null `registry`, and every Entity
+    // forwarder short-circuits a null registry to a shared, zeroed fallback
+    // component instead of segfaulting. That would still pass a
+    // size()-only assertion. Dereference a real component off each
+    // back-filled entity and check its actual value: a poisoned entity
+    // reads back value == 0 (the fallback), not the 11/22 that was really
+    // stored.
+    int total = 0;
+    for (const Entity &entity : backfilled) {
+      total += entity.GetComponent<SpecLateSystemMarker>().value;
+    }
+    Assert::That(total, Equals(11 + 22));
+
+    Logger::messages.clear();
+  };
+
+  It(should_admit_nothing_for_a_system_that_was_never_registered) {
+    Registry registry;
+    Assert::That(registry.AdmitExistingEntities<SpecLateRegisteredSystem>(),
+                 Equals(static_cast<std::size_t>(0)));
+  };
+
+  It(should_not_report_missed_entities_when_a_system_is_registered_twice) {
+    Registry registry;
+    registry.AddSystem<SpecLateRegisteredSystem>();
+
+    Entity entity = registry.CreateEntity();
+    entity.AddComponent<SpecLateSystemMarker>();
+    registry.Update();
+
+    Logger::messages.clear();
+    // Duplicate registration: unordered_map::insert no-ops, so this second
+    // instance is discarded. Before the fix, the diagnostic ran
+    // CountEntitiesMissedBySystem against that discarded instance (an empty
+    // member list) instead of the real, already-populated one, and falsely
+    // reported every matching entity as missed.
+    registry.AddSystem<SpecLateRegisteredSystem>();
+
+    Assert::That(SpecRegistryErrorCount(), Equals(static_cast<std::size_t>(0)));
+    Assert::That(
+        registry.GetSystem<SpecLateRegisteredSystem>().GetSystemEntities().size(),
+        Equals(static_cast<std::size_t>(1)));
+  };
+};
+
+// The ~Registry throttle counter (missingUpdateReports, a file-scope static
+// thread_local in common/ecs.cpp) is shared process-wide on whichever thread
+// touches it and never resets — unlike the per-registry side table it used
+// to (wrongly) live in. Plenty of other specs, in this file and elsewhere,
+// create a Registry, create an entity, and destroy it without ever calling
+// Update(); on the main thread that budget of ECS_MAX_DIAGNOSTIC_REPORTS (4)
+// is normally spent well before this Describe runs. The two cases below
+// exist specifically to exercise this diagnostic, so each does its
+// create/destroy on a fresh std::thread: a new thread gets its own,
+// untouched instance of the thread_local counter, independent of whatever
+// the main thread has already reported.
+Describe(MissingUpdateSpec) {
+  It(should_report_a_registry_destroyed_without_ever_flushing) {
+    Logger::messages.clear();
+    std::thread([] {
+      Registry registry;
+      (void)registry.CreateEntity();
+      (void)registry.CreateEntity();
+    }).join(); // destroyed here, Update() never called
+
+    Assert::That(SpecRegistryErrorCount(),
+                 Is().GreaterThanOrEqualTo(static_cast<std::size_t>(1)));
+    Logger::messages.clear();
+  };
+
+  It(should_stay_silent_when_update_was_called) {
+    Logger::messages.clear();
+    {
+      Registry registry;
+      (void)registry.CreateEntity();
+      registry.Update();
+      (void)registry.CreateEntity();
+    }
+
+    Assert::That(SpecRegistryErrorCount(), Equals(static_cast<std::size_t>(0)));
+  };
+
+  It(should_stay_silent_for_a_registry_that_never_created_an_entity) {
+    // A registry built and dropped without being used is not a mistake.
+    Logger::messages.clear();
+    { Registry registry; }
+
+    Assert::That(SpecRegistryErrorCount(), Equals(static_cast<std::size_t>(0)));
+  };
+
+  It(should_stay_silent_for_a_large_batch_flushed_once) {
+    // The pattern the previous design got wrong: a level loader spawning a
+    // burst and flushing once afterwards is correct, not a misuse.
+    Logger::messages.clear();
+    {
+      Registry registry;
+      for (int i = 0; i < 200; ++i) {
+        (void)registry.CreateEntity();
+      }
+      registry.Update();
+    }
+
+    Assert::That(SpecRegistryErrorCount(), Equals(static_cast<std::size_t>(0)));
+  };
+
+  It(should_not_inherit_diagnostic_state_from_a_destroyed_registry) {
+    // The side table is keyed on `this`, and an allocator hands the same
+    // address back readily — but not deterministically, so this places both
+    // registries in the same raw storage via placement new rather than
+    // relying on the heap to reuse a freed address. That controls the
+    // address while still exercising the real ~Registry / CreateEntity code
+    // paths. Without the erase in ~Registry, this second registry inherits
+    // the first's updateCalls and the diagnostic silently stops working for
+    // it. Deleting the erase(this) line MUST fail this case.
+    //
+    // Runs on a fresh thread (see the comment above MissingUpdateSpec) so the
+    // shared missingUpdateReports throttle has its own untouched budget,
+    // regardless of what the main thread has already reported elsewhere in
+    // the suite. Assert::That stays on the main thread: an uncaught
+    // assertion failure inside the spawned thread would call std::terminate
+    // instead of failing the case.
+    alignas(Registry) unsigned char storage[sizeof(Registry)];
+    bool addressReused = false;
+
+    std::thread([&] {
+      Registry *first = new (storage) Registry();
+      (void)first->CreateEntity();
+      first->Update(); // marks this address as having flushed
+      first->~Registry();
+
+      Logger::messages.clear();
+
+      Registry *second = new (storage) Registry();
+      addressReused =
+          static_cast<void *>(second) == static_cast<void *>(storage);
+      (void)second->CreateEntity();
+      second->~Registry(); // never flushed — must report, despite `first`
+                           // having flushed
+    }).join();
+
+    // Assert the address was actually reused, so the case cannot pass by
+    // testing nothing.
+    Assert::That(addressReused, Equals(true));
+    Assert::That(SpecRegistryErrorCount(),
+                 Is().GreaterThanOrEqualTo(static_cast<std::size_t>(1)));
+    Logger::messages.clear();
+  };
+};
+
+Describe(TryGetSystemSpec) {
+  It(should_return_null_for_a_system_that_was_never_registered) {
+    Registry registry;
+    Assert::That(registry.TryGetSystem<SpecLateRegisteredSystem>() == nullptr,
+                 Equals(true));
+  };
+
+  It(should_return_the_system_when_it_is_registered) {
+    Registry registry;
+    registry.AddSystem<SpecLateRegisteredSystem>();
+    SpecLateRegisteredSystem *system =
+        registry.TryGetSystem<SpecLateRegisteredSystem>();
+
+    Assert::That(system == nullptr, Equals(false));
+    Assert::That(system == &registry.GetSystem<SpecLateRegisteredSystem>(),
+                 Equals(true));
+  };
+
+  It(should_log_before_get_system_throws) {
+    Registry registry;
+    Logger::messages.clear();
+
+    bool threw = false;
+    try {
+      (void)registry.GetSystem<SpecLateRegisteredSystem>();
+    } catch (const std::out_of_range &) {
+      threw = true;
+    }
+
+    Assert::That(threw, Equals(true));
+    Assert::That(SpecRegistryErrorCount(),
+                 Is().GreaterThanOrEqualTo(static_cast<std::size_t>(1)));
+    Logger::messages.clear();
+  };
+};
+
+Describe(TryGetEntityByTagSpec) {
+  It(should_return_null_for_a_tag_no_entity_holds) {
+    Registry registry;
+    Assert::That(registry.TryGetEntityByTag("player") == nullptr, Equals(true));
+  };
+
+  It(should_return_the_tagged_entity) {
+    Registry registry;
+    Entity player = registry.CreateEntity();
+    player.Tag("player");
+    registry.Update();
+
+    const Entity *found = registry.TryGetEntityByTag("player");
+    Assert::That(found == nullptr, Equals(false));
+    Assert::That(found->GetId(), Equals(player.GetId()));
+  };
+
+  It(should_return_null_after_the_tagged_entity_is_killed) {
+    Registry registry;
+    Entity player = registry.CreateEntity();
+    player.Tag("player");
+    registry.Update();
+
+    player.Kill();
+    registry.Update();
+
+    Assert::That(registry.TryGetEntityByTag("player") == nullptr,
+                 Equals(true));
   };
 };

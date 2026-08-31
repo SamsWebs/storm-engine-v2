@@ -1,9 +1,11 @@
 #include <chrono>
 #include <cstring>
 #include <functional>
+#include <memory>
 #include <set>
 #include <string>
 #include <thread>
+#include <type_traits>
 #include <vector>
 
 #include <igloo/igloo_alt.h>
@@ -64,6 +66,27 @@ bool PumpServerUntil(NetServer &server, int timeoutMs,
   while (NetNowMs() - start < (uint32_t)timeoutMs) {
     server.Update();
     server.Poll();
+    if (done())
+      return true;
+    std::this_thread::sleep_for(std::chrono::milliseconds(kPumpStepMs));
+  }
+  return false;
+}
+
+// Pumps the server and every client until `done` returns true or the timeout
+// expires. Returns whether `done` became true. Generalises PumpUntil /
+// PumpUntil2, which handle one and two clients.
+bool PumpUntilSettled(NetServer &server,
+                      std::vector<std::unique_ptr<NetClient>> &clients,
+                      int timeoutMs, const std::function<bool()> &done) {
+  uint32_t start = NetNowMs();
+  while (NetNowMs() - start < (uint32_t)timeoutMs) {
+    server.Update();
+    server.Poll();
+    for (auto &client : clients) {
+      client->Update();
+      client->Poll();
+    }
     if (done())
       return true;
     std::this_thread::sleep_for(std::chrono::milliseconds(kPumpStepMs));
@@ -664,5 +687,197 @@ Describe(NetLoopbackSpec) {
     uint8_t payload[4] = {};
     Assert::That(NetSendControl(sender, to, kNetControlConnect, payload, -1),
                  Equals(false));
+  };
+};
+
+// KNOWN_ISSUES item 6, fixed in 2.0.0: these four own a socket descriptor and
+// install callbacks capturing `this`. A copy gives two objects whose callbacks
+// point at the original and two destructors closing one descriptor.
+static_assert(!std::is_copy_constructible<NetServer>::value,
+              "NetServer must not be copy constructible");
+static_assert(!std::is_copy_assignable<NetServer>::value,
+              "NetServer must not be copy assignable");
+static_assert(!std::is_copy_constructible<NetClient>::value,
+              "NetClient must not be copy constructible");
+static_assert(!std::is_copy_assignable<NetClient>::value,
+              "NetClient must not be copy assignable");
+static_assert(!std::is_copy_constructible<NetConnection>::value,
+              "NetConnection must not be copy constructible");
+static_assert(!std::is_copy_assignable<NetConnection>::value,
+              "NetConnection must not be copy assignable");
+static_assert(!std::is_copy_constructible<NetSocket>::value,
+              "NetSocket must not be copy constructible");
+static_assert(!std::is_copy_assignable<NetSocket>::value,
+              "NetSocket must not be copy assignable");
+
+Describe(MaxClientsPerIpSpec) {
+  It(should_default_to_the_engine_wide_cap) {
+    NetServer server;
+    Assert::That(server.GetMaxClientsPerIp(), Equals(kNetMaxClientsPerIp));
+  };
+
+  It(should_refuse_the_fifth_client_from_one_address_by_default) {
+    NetServer server;
+    Assert::That(server.Start(0, 12), Equals(true));
+
+    // Five clients, all from 127.0.0.1. The default cap is 4.
+    std::vector<std::unique_ptr<NetClient>> clients;
+    for (int i = 0; i < 5; ++i) {
+      clients.push_back(std::unique_ptr<NetClient>(new NetClient()));
+      clients.back()->Connect("127.0.0.1", server.GetPort());
+    }
+    // Settled once the four admitted clients are online; the fifth is
+    // refused and never joins, so waiting on a count of 5 would just burn
+    // the whole deadline instead of catching the refusal.
+    PumpUntilSettled(server, clients, kPumpDeadlineMs, [&]() {
+      return server.GetClientCount() == kNetMaxClientsPerIp;
+    });
+
+    Assert::That(server.GetClientCount(), Equals(kNetMaxClientsPerIp));
+  };
+
+  It(should_admit_more_once_the_cap_is_raised) {
+    NetServer server;
+    server.SetMaxClientsPerIp(12);
+    Assert::That(server.Start(0, 12), Equals(true));
+
+    std::vector<std::unique_ptr<NetClient>> clients;
+    for (int i = 0; i < 6; ++i) {
+      clients.push_back(std::unique_ptr<NetClient>(new NetClient()));
+      clients.back()->Connect("127.0.0.1", server.GetPort());
+    }
+    PumpUntilSettled(server, clients, kPumpDeadlineMs,
+                     [&]() { return server.GetClientCount() == 6; });
+
+    Assert::That(server.GetClientCount(), Equals(6));
+  };
+
+  It(should_clamp_a_limit_above_the_slot_count) {
+    NetServer server;
+    server.SetMaxClientsPerIp(999);
+    Assert::That(server.GetMaxClientsPerIp(), Equals(NetServer::kMaxClients));
+  };
+
+  It(should_reject_a_limit_below_one_and_keep_the_previous_value) {
+    NetServer server;
+    server.SetMaxClientsPerIp(12);
+    server.SetMaxClientsPerIp(0);
+    Assert::That(server.GetMaxClientsPerIp(), Equals(12));
+  };
+
+  It(should_not_leak_the_setting_to_a_later_server_at_the_same_address) {
+    // The side table is keyed on `this`, and an allocator hands the same
+    // address back readily — but not deterministically, so this places both
+    // servers in the same raw storage via placement new rather than relying
+    // on the heap or the stack to reuse a freed address. That controls the
+    // address while still exercising the real ~NetServer / SetMaxClientsPerIp
+    // code paths. Without the erase in ~NetServer, the second server
+    // inherits the first's cap and this case fails. Deleting the erase(this)
+    // line MUST fail this case.
+    alignas(NetServer) unsigned char storage[sizeof(NetServer)];
+
+    NetServer *first = new (storage) NetServer();
+    first->SetMaxClientsPerIp(12);
+    first->~NetServer();
+
+    NetServer *second = new (storage) NetServer();
+    // Assert the address was actually reused, so the case cannot pass by
+    // testing nothing.
+    Assert::That(static_cast<void *>(second) == static_cast<void *>(storage),
+                 Equals(true));
+    Assert::That(second->GetMaxClientsPerIp(), Equals(kNetMaxClientsPerIp));
+    second->~NetServer();
+  };
+};
+
+Describe(ConnectedClientIdsSpec) {
+  It(should_report_no_ids_for_a_server_with_no_clients) {
+    NetServer server;
+    int ids[NetServer::kMaxClients] = {};
+    Assert::That(server.GetConnectedClientIds(ids, NetServer::kMaxClients),
+                 Equals(0));
+  };
+
+  It(should_report_the_ids_of_connected_clients) {
+    NetServer server;
+    server.SetMaxClientsPerIp(12);
+    Assert::That(server.Start(0, 12), Equals(true));
+
+    std::vector<std::unique_ptr<NetClient>> clients;
+    for (int i = 0; i < 3; ++i) {
+      clients.push_back(std::unique_ptr<NetClient>(new NetClient()));
+      clients.back()->Connect("127.0.0.1", server.GetPort());
+    }
+    PumpUntilSettled(server, clients, kPumpDeadlineMs,
+                     [&]() { return server.GetClientCount() == 3; });
+
+    int ids[NetServer::kMaxClients] = {};
+    const int count =
+        server.GetConnectedClientIds(ids, NetServer::kMaxClients);
+
+    Assert::That(count, Equals(3));
+    for (int i = 0; i < count; ++i) {
+      Assert::That(server.IsClientConnected(ids[i]), Equals(true));
+    }
+  };
+
+  It(should_skip_a_hole_left_by_a_client_that_quit) {
+    // The whole point: after a middle client leaves, the surviving ids are no
+    // longer 0..count-1, which is what the naive GetClientCount loop assumes.
+    NetServer server;
+    server.SetMaxClientsPerIp(12);
+    Assert::That(server.Start(0, 12), Equals(true));
+
+    std::vector<std::unique_ptr<NetClient>> clients;
+    for (int i = 0; i < 3; ++i) {
+      clients.push_back(std::unique_ptr<NetClient>(new NetClient()));
+      clients.back()->Connect("127.0.0.1", server.GetPort());
+    }
+    PumpUntilSettled(server, clients, kPumpDeadlineMs,
+                     [&]() { return server.GetClientCount() == 3; });
+
+    int before[NetServer::kMaxClients] = {};
+    const int countBefore =
+        server.GetConnectedClientIds(before, NetServer::kMaxClients);
+    Assert::That(countBefore, Equals(3));
+
+    const int departing = before[1];
+    server.DisconnectClient(departing, "spec");
+    PumpUntilSettled(server, clients, kPumpDeadlineMs,
+                     [&]() { return server.GetClientCount() == 2; });
+
+    int after[NetServer::kMaxClients] = {};
+    const int countAfter =
+        server.GetConnectedClientIds(after, NetServer::kMaxClients);
+
+    Assert::That(countAfter, Equals(2));
+    for (int i = 0; i < countAfter; ++i) {
+      Assert::That(after[i] == departing, Equals(false));
+      Assert::That(server.IsClientConnected(after[i]), Equals(true));
+    }
+  };
+
+  It(should_write_no_more_than_the_caller_asked_for) {
+    NetServer server;
+    server.SetMaxClientsPerIp(12);
+    Assert::That(server.Start(0, 12), Equals(true));
+
+    std::vector<std::unique_ptr<NetClient>> clients;
+    for (int i = 0; i < 3; ++i) {
+      clients.push_back(std::unique_ptr<NetClient>(new NetClient()));
+      clients.back()->Connect("127.0.0.1", server.GetPort());
+    }
+    PumpUntilSettled(server, clients, kPumpDeadlineMs,
+                     [&]() { return server.GetClientCount() == 3; });
+
+    int ids[2] = {-1, -1};
+    Assert::That(server.GetConnectedClientIds(ids, 2), Equals(2));
+  };
+
+  It(should_return_zero_for_a_null_buffer) {
+    NetServer server;
+    Assert::That(server.GetConnectedClientIds(nullptr, 4), Equals(0));
+    int ids[1] = {};
+    Assert::That(server.GetConnectedClientIds(ids, 0), Equals(0));
   };
 };

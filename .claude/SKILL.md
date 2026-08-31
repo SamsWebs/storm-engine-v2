@@ -12,7 +12,10 @@ date_added: "2026-08-03"
 
 # Storm! Engine v2
 
-> **Current release: v1.3.0** - public API stable for the 1.x line.
+> **Current release: v2.0.0~dev** (`Makefile.debian`) - the compatibility
+> promise that kept the 1.x line's public API stable no longer governs this
+> tree. 2.0.0 is the breaking release `KNOWN_ISSUES.md` describes; several of
+> its items are resolved here, and the rest stay open for a later release.
 > Repo: `github.com/WillSams/storm-engine-v2` · License: WTFPL
 >
 > Since v1.2.1: v1.2.2 added the safe accessors (`TryGetComponent`, `IsAlive`,
@@ -99,7 +102,7 @@ player.AddComponent<SpriteComponent>("player", 64, 64, 1);
 registry.AddSystem<MovementSystem>();
 registry.AddSystem<RenderSystem>();
 registry.AddSystem<AnimationSystem>();
-registry.AddSystem<ContactSystem>();  // CollisionSystem is deprecated in 1.3.0
+registry.AddSystem<ContactSystem>();  // CollisionSystem was removed in 2.0.0
 
 // Reference accessor — PRECONDITION: the entity has the component. On a miss it
 // logs (throttled) and returns a shared default-constructed fallback.
@@ -200,9 +203,13 @@ These are the biggest correctness traps — understand them before writing ECS c
 | `MovementSystem` | Transform + RigidBody | Moves entities by `velocity * deltaTime` |
 | `RenderSystem` | Transform + Sprite | Draws sprites sorted by `zIndex`; applies the camera offset except to sprites with `isFixed` (HUD/screen-space), and honours `sprite.offset`, `transform.scale`, `transform.rotation` and `sprite.flip` |
 | `AnimationSystem` | Sprite + Animation | Advances sprite sheet frames. **`vertical == true` (the default) advances `srcRect.y`; `false` advances `srcRect.x`.** Mismatching the flag against the sheet's layout is silent — the sprite samples outside the texture and draws nothing, or sits on frame 0. `examples/platformer`'s `rabbit.png` is a vertical strip (37x1026) and passes `true`; the scaffold's sheet is horizontal and passes `false`. |
-| `ContactSystem` | Transform + BoxCollider | **Preferred since 1.3.0.** Reports AABB overlaps with a normal and a penetration depth, plus begin/end callbacks and a pair filter. Never kills, moves or writes anything |
-| `CollisionSystem` | Transform + BoxCollider | AABB collision detection; kills entities with RigidBody on contact. **Deprecated in 1.3.0** - behaviour byte-identical, kept for source compatibility with 1.0-1.2 games |
+| `ContactSystem` | Transform + BoxCollider | The engine's only collision system as of 2.0.0. Reports AABB overlaps with a normal and a penetration depth, plus begin/end callbacks and a pair filter. Never kills, moves or writes anything |
 | `RenderColliderSystem` | Transform + BoxCollider | Debug overlay: draws collider outlines in green |
+
+`CollisionSystem` - the kill-both-entities-on-contact system deprecated in
+1.3.0 - was deleted in 2.0.0. Code still calling `AddSystem<CollisionSystem>()`
+no longer compiles; register `ContactSystem` and act on `GetContacts()`
+yourself instead.
 
 ### Contacts
 
@@ -242,8 +249,9 @@ Rules to know before you use it:
   `Update()`. `Update()` is safe to call twice in a frame: the second call
   reports the same contacts and fires nothing new.
 - **`Overlaps` is strict - a shared edge is not a contact**, because a
-  zero-area overlap has no meaningful normal. `CollisionSystem::isCollision` is
-  inclusive and deliberately still is, so the two disagree on touching boxes.
+  zero-area overlap has no meaningful normal. (The deleted `CollisionSystem`'s
+  `isCollision` was inclusive of a shared edge; if you are porting logic that
+  relied on that, design for the strict behaviour instead.)
 - **`SetOnEndContact` silently drops a pair whose entity died.**
   `Registry::Update()` returns a killed id to the free list in the same pass
   that removes it from the system, so handing it back would be KNOWN_ISSUES #1.
@@ -251,8 +259,7 @@ Rules to know before you use it:
   live entity never gets it into `ContactSystem`; create the entity with its
   collider.
 - **`BoundsOf`, `Overlaps`, `Manifold` and `MinimumTranslation` are static** -
-  usable with no system registered. `CollisionSystem` now calls `BoundsOf` too,
-  so there is exactly one copy of the bounds math.
+  usable with no system registered.
 - **The broadphase sweeps X only.** Everything stacked in one column degrades to
   all-pairs. Fine for a puck and six boards, or bullets and enemies.
 - **Do not build tilemap collision out of one collider entity per tile.** The
@@ -344,9 +351,10 @@ include those themselves.
 
 Do not *rely* on that transitive reach — include what you use. The breadth of
 this header is a documented defect (`KNOWN_ISSUES.md` §8: ~713 headers and ~145k
-preprocessed lines to declare a 23-line interface) and trimming it is a 2.0.0 goal,
-so code leaning on the transitive path breaks when it is fixed. Listing your own
-includes costs nothing and makes that upgrade a no-op.
+preprocessed lines to declare a 23-line interface); trimming it was ruled out
+of scope for 2.0.0 and is deferred to a later breaking release, so code
+leaning on the transitive path breaks when it eventually is fixed. Listing
+your own includes costs nothing and makes that upgrade a no-op.
 
 **If the game does not use the ECS, include
 `<stormengine2/states/gameStateBase.h>` instead** (1.3.0+). Same `GameState`
@@ -1052,7 +1060,7 @@ General 2D game dev principles, mapped to how Storm Engine v2 implements them.
 |-----------|-------------------------------|
 | **Tile size** — 16x16, 32x32, 64x64 | `TileMapLoader` constructor takes `tileSize` (default 32). The JRPG example uses 8 to preserve exact editor pixel coordinates. |
 | **Auto-tiling** — use for terrain | Not built in. The tile editor is manual paint/erase. Auto-tiling is a game-side concern. |
-| **Collision** - simplified shapes | `TileMapLoader` parses `hasCollider` + `colliderW`/`colliderH` into each `Tile` and creates **no entities at all** - its whole output is `const Map &getMap()`. The game iterates `getMap()` and decides. Prefer a solid-grid array plus per-axis snapping over one collider entity per tile: `ContactSystem`'s per-box manifold catches on the seams between adjacent tiles, and `CollisionSystem` would kill the player outright. |
+| **Collision** - simplified shapes | `TileMapLoader` parses `hasCollider` + `colliderW`/`colliderH` into each `Tile` and creates **no entities at all** - its whole output is `const Map &getMap()`. The game iterates `getMap()` and decides. Prefer a solid-grid array plus per-axis snapping over one collider entity per tile: `ContactSystem`'s per-box manifold catches on the seams between adjacent tiles. (`CollisionSystem`, which killed on contact and would have been fatal here, was removed in 2.0.0 — it is not an option any more.) |
 | **Animated tiles** — editor-authored | Not supported at runtime. The editor writes animation fields into `.map` files and `TileMapLoader` parses and discards them, because `Tile` has nowhere to put them (fixing that changes `sizeof(Tile)`, an ABI break). Drive tile animation from game code with `AnimationComponent`. |
 
 | Layer | Content | Engine support |
@@ -1071,7 +1079,7 @@ General 2D game dev principles, mapped to how Storm Engine v2 implements them.
 | Capsule | Characters | Not built in — implement as custom component + custom system |
 | Polygon | Complex shapes | Not built in — implement as custom component + custom system |
 
-- **Pixel-perfect vs physics-based:** pick one approach per game. `ContactSystem` gives you detection plus a manifold (unit normal along the axis of least penetration, and the depth on that axis); the response is yours to write. The deprecated `CollisionSystem` kills entities with `RigidBodyComponent` on contact - simple arcade collision, not a physics solver, and not one you can steer.
+- **Pixel-perfect vs physics-based:** `ContactSystem` gives you detection plus a manifold (unit normal along the axis of least penetration, and the depth on that axis); the response is yours to write. (`CollisionSystem`, which killed entities with `RigidBodyComponent` on contact - simple arcade collision, not a physics solver - was removed in 2.0.0; `ContactSystem` is the only collision system now.)
 - **Fixed timestep for consistency:** the engine paces a frame but does not schedule one. `GameState::CapFrameRate()` is the only `SDL_Delay` in `common/` (`common/states/gameState.h`): it sleeps out the 60 FPS budget defined by `FPS`/`MILLISECS_PER_FRAME` and hands back a variable, hitch-clamped dt. There is still no fixed-step accumulator, so a game wanting a deterministic timestep writes its own loop on top. (Related to Key Design Decision 6, "no main loop".)
 - **Layers for filtering:** use entity groups (`registry.GroupEntity`) to partition entities for collision logic. Note: one group per entity and one tag per entity. `GroupEntity` calls `RemoveEntityGroup` first, so re-grouping *moves* an entity rather than adding a second membership; groups are not a bitmask layer system.
 
@@ -1099,7 +1107,7 @@ different engine capabilities and game-side patterns.
 - **Coyote time** (leniency after edge) — game-side timer in your state's `update()`
 - **Jump buffering** — game-side input queue
 - **Variable jump height** — game-side: track button hold time, modify `RigidBodyComponent.velocity.y`
-- **Tile collision** - resolve against a solid-tile grid by hand. `ContactSystem` reports overlaps but never resolves one, and its per-box manifold catches on seams between adjacent tiles; `CollisionSystem` kills on contact, which is fatal here
+- **Tile collision** - resolve against a solid-tile grid by hand. `ContactSystem` reports overlaps but never resolves one, and its per-box manifold catches on seams between adjacent tiles. (`CollisionSystem` would have been fatal here since it kills on contact, but it was removed in 2.0.0.)
 
 All four are game-side state on the `PlayState`, not engine features. Members:
 
@@ -1154,9 +1162,10 @@ rb.velocity.y += GRAVITY * static_cast<float>(deltaTime);
 ```
 
 `MovementSystem` integrates `velocity * deltaTime` and nothing else — there is
-no gravity, no ground, and no resolution in the engine. `CollisionSystem`
-detects AABB overlap and **kills** entities carrying a `RigidBodyComponent`,
-which is fatal for a platformer, so do not register it. `ContactSystem` is safe
+no gravity, no ground, and no resolution in the engine. (The removed
+`CollisionSystem` detected AABB overlap and **killed** entities carrying a
+`RigidBodyComponent`, which would have been fatal for a platformer — it no
+longer exists to reach for by mistake.) `ContactSystem` is safe
 to register (it only reports), but do not build the tile layer out of one
 collider entity per tile: the manifold is per box, so a player sliding along a
 floor picks up a sideways normal from the next tile along and gets shoved out of
@@ -1240,10 +1249,10 @@ The `android-platformer` variant is not a pure port: it is the reference consume
 - **Scrolling background layers** — multiple `SpriteComponent` entities at different `zIndex` values, scroll at different rates for parallax (game-side)
 - **Collision as gameplay** - register `ContactSystem` and act on `GetContacts()`; a bullet-vs-enemy hit needs a score bump and an explosion, not just two deaths
 
-`CollisionSystem` looks like a fit here ("one hit = death") and is not: it kills
-**both** entities, so the player dies on any enemy touch, and it gives you no
-hook to score the kill or spawn the explosion. `examples/shooter` moved to
-`ContactSystem` with a pair filter:
+The removed `CollisionSystem` looked like a fit here ("one hit = death") and
+was not: it killed **both** entities, so the player would die on any enemy
+touch, and it gave no hook to score the kill or spawn the explosion.
+`examples/shooter` uses `ContactSystem` with a pair filter:
 
 ```cpp
 registry_.AddSystem<ContactSystem>();
@@ -1337,7 +1346,7 @@ The engine's `shooter` example (Alien Attack) demonstrates this pattern.
 - **Entity reuse** — the `puzzle` example reuses a pool of block entities rather than creating/destroying each frame, avoiding `registry.Update()` churn
 - **Custom components for game state** — e.g., `CellComponent` with grid coordinates, `ShapeComponent` for tetromino identity
 - **Text for the HUD** - score, level, next-piece preview. Cache the font once with `AssetStore::AddFont` and draw with `Text::Draw`/`Text::DrawCentred`; the `puzzle` example does exactly that and no longer opens a font by hand
-- **No physics needed** - blocks snap to grid; `RigidBodyComponent`, `ContactSystem` and `CollisionSystem` are all typically unused
+- **No physics needed** - blocks snap to grid; `RigidBodyComponent` and `ContactSystem` are typically unused
 
 The board is a plain array — the ECS holds only what is *drawn*. Keeping the
 rules out of the ECS is what makes a puzzle game testable:
@@ -1454,8 +1463,9 @@ you never touched. Note these two alone spend 2 of your 32 process-wide
 component ids.
 
 Interaction is a proximity scan over a group, not a contact query: you want the
-*closest* NPC inside a radius, which neither collision system reports. Do not
-reach for `CollisionSystem` here - it kills on contact:
+*closest* NPC inside a radius, which `ContactSystem` does not report (and the
+removed `CollisionSystem`, which killed on contact, would have been wrong here
+regardless):
 
 ```cpp
 // Returns the closest NPC in range, or nullopt. Pure query, no side effects.
@@ -1678,12 +1688,12 @@ The engine's `netplay-checkers` example demonstrates graphical, authoritative-ne
 |-------|-----|
 | Call `SDL_PollEvent` in both Game and State | Let the active state own all event polling |
 | Forget `registry.Update()` before systems | Always flush deferred adds/kills first |
-| Lean on `gameState.h`'s transitive includes instead of including what you use | It is true that `gameState.h` drags in SDL2 and every component/system — ~713 headers, ~145k preprocessed lines, to declare a 23-line interface — but that path is a documented defect (KNOWN_ISSUES #8) and goes away in 2.0.0. Include what you use in your own headers. On 1.3.0+, a game that does not use the ECS should include `states/gameStateBase.h` instead: same interface, 80,265 lines, 45% less. |
+| Lean on `gameState.h`'s transitive includes instead of including what you use | It is true that `gameState.h` drags in SDL2 and every component/system — ~713 headers, ~145k preprocessed lines, to declare a 23-line interface — but that path is a documented defect (KNOWN_ISSUES #8), and trimming it was ruled out of scope for 2.0.0 (deferred to a later breaking release; this release even adds an include to that header). Include what you use in your own headers. On 1.3.0+, a game that does not use the ECS should include `states/gameStateBase.h` instead: same interface, 80,265 lines, 45% less. |
 | Move `AssetStore_Ptr` to multiple states | Move once to first state, pass raw ptr/ref after |
 | Delete states inline on transition | Use the state machine's push/pop/change (deferred deletion) |
 | Add components before registering systems | Register systems first, then create entities |
 | `AddComponent` on a live entity to get it into a system | Kill and recreate the entity — membership is computed once |
-| Register `CollisionSystem` in new code | Register `ContactSystem`: it reports overlaps with a normal and depth and touches nothing. `CollisionSystem` is deprecated in 1.3.0 and can only respond by killing both movable entities |
+| Port old code that registers `CollisionSystem` | Register `ContactSystem` instead: it reports overlaps with a normal and depth and touches nothing. `CollisionSystem` (deprecated in 1.3.0, which could only respond by killing both movable entities) was deleted in 2.0.0 - the old call site no longer compiles |
 | Build tilemap collision from one collider entity per tile | Keep a solid-grid array and resolve per axis; a per-box manifold catches on the seam between adjacent tiles |
 | Retype the `SDL_Delay` budget, or shadow `millisecondsPreviousFrame` with your own member | Call `CapFrameRate()` at the top of `update()`: protected, non-virtual, returns the dt and rolls the timestamp forward |
 | Hand-roll the `TTF_Render*` / `CreateTextureFromSurface` / free dance, or re-open a font per draw | Cache the font with `AssetStore::AddFont` and draw with `Text::Draw` / `Text::DrawCentred` |
@@ -1755,9 +1765,10 @@ the game's own headers.
   once-per-pair begin/end transitions) and never touches an entity, so bounce,
   damage, triggers and pickups are all writable, but every response is still
   written by the game, and `MinimumTranslation` is a value it hands you rather
-  than something it applies. The deprecated `CollisionSystem` is the opposite
-  trade: it acts and cannot be observed, calling `Kill()` on each entity that
-  has a `RigidBodyComponent` (static scenery survives). There is still no event
+  than something it applies. The removed `CollisionSystem` was the opposite
+  trade: it acted and could not be observed, calling `Kill()` on each entity
+  that had a `RigidBodyComponent` (static scenery survived) - it was deleted in
+  2.0.0, so `ContactSystem` is now the only collision system. There is still no event
   bus and no event queue (`KNOWN_ISSUES.md` #10), and the broadphase sweeps one
   axis.
 - **Thirty-two component types, process-wide.** `MAX_COMPONENTS` is 32 and
@@ -1786,14 +1797,17 @@ the game's own headers.
 - The editor's shadowing copy of `common/components/sprite.h` is gone;
   `editor/include/` was deleted and the editor now compiles against the
   installed engine headers with `#include <stormengine2/components/sprite.h>`.
-- Ten further defects are **real, understood and deliberately unfixed in 1.x**
-  because each needs a source or ABI break; they are tracked in
-  `KNOWN_ISSUES.md` with a workaround apiece. Highlights: recycled entity ids
-  with no generation counter, implicit `Entity(std::size_t)` conversion,
-  component set frozen at admission, copyable `NetServer`/`NetClient`, tile
-  animation fields discarded by the loader, and **no namespaces — every engine
-  type (`Entity`, `Registry`, `Logger`, `Tile`…) is a global symbol**, so a game
-  declaring its own collides. (`docs/TECH_DEBT.md` is gitignored and local-only;
+- Ten further defects were **real, understood and deliberately unfixed in
+  1.x** because each needed a source or ABI break; they are tracked in
+  `KNOWN_ISSUES.md` with a workaround apiece. 2.0.0 closes several of them:
+  `Entity(std::size_t)` is now `explicit`, `NetServer`/`NetClient`/
+  `NetConnection`/`NetSocket` are no longer copyable, and item 10's collision
+  half is closed (`CollisionSystem` is deleted — its event-bus half stays
+  open). Highlights of what remains: recycled entity ids with no generation
+  counter, component set frozen at admission, tile animation fields discarded
+  by the loader, and **no namespaces — every engine type (`Entity`,
+  `Registry`, `Logger`, `Tile`…) is a global symbol**, so a game declaring its
+  own collides. (`docs/TECH_DEBT.md` is gitignored and local-only;
   `KNOWN_ISSUES.md` is the tracked record.)
 
 

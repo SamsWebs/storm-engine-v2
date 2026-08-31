@@ -10,6 +10,7 @@
 #include <set>
 #include <type_traits>
 #include <typeindex>
+#include <typeinfo>
 #include <unordered_map>
 #include <vector>
 
@@ -111,7 +112,9 @@ private:
   std::size_t id;
 
 public:
-  Entity(std::size_t id) : id(id){};
+  // explicit since 2.0.0: without it any function taking an Entity silently
+  // accepted a bare number, so registry.KillEntity(88) compiled.
+  explicit Entity(std::size_t id) : id(id){};
   void Kill();
   std::size_t GetId() const;
 
@@ -276,7 +279,7 @@ private:
 public:
   Registry() { logger.Log("Registry constructor called"); }
 
-  ~Registry() { logger.Log("Registry destructor called."); }
+  ~Registry();
 
   // The Registru Update finally process the entities that
   // are waiting to be added/killed
@@ -295,6 +298,24 @@ public:
   // would make this O(1) but adds a data member to Registry, and games embed
   // `Registry` by value, so sizeof(Registry) is ABI. Tracked as P49.
   bool IsAlive(Entity entity) const;
+
+  // True while `entity` is queued for the next Registry::Update() and has not
+  // yet been given to any system.
+  bool IsPendingAdmission(Entity entity) const;
+
+  // Names a registered system that `entity` would have joined had
+  // `componentId` been present before Registry::Update() admitted it, or
+  // nullptr when there is none. Call it *after* the signature bit is set.
+  //
+  // System membership is computed once, at admission, so a component added
+  // afterwards never changes it (KNOWN_ISSUES.md item 5). This is how that
+  // silent mistake is detected: replay the signature as the systems last saw
+  // it and look for a requirement the new bit alone satisfies.
+  //
+  // The returned name comes from std::type_index::name() and is
+  // implementation-mangled; it is for a log line, not for parsing.
+  const char *SystemMissedByLateComponent(Entity entity,
+                                          std::size_t componentId) const;
 
   // Component management
   template <typename TComponent, typename... Targs>
@@ -332,13 +353,34 @@ public:
 
   // System Management
   template <typename TSystem, typename... Targs>
-  void AddSystem(Targs &... args);
+  void AddSystem(Targs &&... args);
 
   template <typename TSystem> void RemoveSystem();
 
   template <typename TSystem> bool HasSystem() const;
 
+  // Prefer this over GetSystem wherever absence is possible: GetSystem calls
+  // .at, which throws std::out_of_range — and aborts outright under the
+  // Switch build's -fno-exceptions. The returned pointer is owned by the
+  // registry and is invalidated by RemoveSystem<TSystem>() or the registry's
+  // destruction.
+  template <typename TSystem> TSystem *TryGetSystem() const;
+
   template <typename TSystem> TSystem &GetSystem() const;
+
+  // How many live, already-admitted entities match `system`'s signature
+  // without being members of it. Non-zero means the system was registered too
+  // late to ever see them.
+  std::size_t CountEntitiesMissedBySystem(const System &system) const;
+
+  // Adds those entities to `system` and returns how many were added. Opt-in
+  // and never automatic: a game may register a system late on purpose, and a
+  // silent back-fill would change its behaviour.
+  std::size_t AdmitExistingEntitiesTo(System &system);
+
+  // AdmitExistingEntitiesTo for a system looked up by type. Returns 0 when
+  // TSystem is not registered.
+  template <typename TSystem> std::size_t AdmitExistingEntities();
 
   // Add and remove entities from their systems
   void AddEntityToSystems(Entity entity);
@@ -351,6 +393,17 @@ public:
   // PRECONDITION: DoesTagExist(tag). Entity has no "none" value, so this
   // cannot report a miss through its return type — guard the call.
   Entity GetEntityByTag(const std::string &tag) const;
+
+  // The guarded lookup in one call. Returns nullptr when no entity holds the
+  // tag, where GetEntityByTag has a precondition and throws.
+  //
+  // The pointer aliases the registry's tag map: it is invalidated by TagEntity,
+  // RemoveEntityTag, and by the Update() that reaps a killed entity. Read it
+  // and let it go; do not store it across a frame. Entity ids are recycled and
+  // carry no generation counter (KNOWN_ISSUES.md item 1), so the same is true
+  // of the Entity you copy out of it.
+  const Entity *TryGetEntityByTag(const std::string &tag) const;
+
   void RemoveEntityTag(Entity entity);
 
   // Group Management
@@ -365,10 +418,49 @@ public:
 };
 
 template <typename TSystem, typename... Targs>
-void Registry::AddSystem(Targs &... args) {
+void Registry::AddSystem(Targs &&... args) {
   std::shared_ptr<TSystem> newSystem =
       std::make_shared<TSystem>(std::forward<Targs>(args)...);
-  systems.insert(std::make_pair(std::type_index(typeid(TSystem)), newSystem));
+  const auto result = systems.insert(
+      std::make_pair(std::type_index(typeid(TSystem)), newSystem));
+  if (!result.second) {
+    // Duplicate registration: unordered_map::insert is a no-op when the key
+    // already exists, so `newSystem` above was never stored — the system
+    // registered earlier is still the one in `systems`, untouched, and it
+    // already has every matching entity as a member. Returning here (rather
+    // than falling through) matters: CountEntitiesMissedBySystem below would
+    // otherwise run against this stray, never-stored `newSystem`, whose
+    // member list is empty, and report every live matching entity as
+    // "missed" even though the real system already sees them — a false
+    // positive the late-registration diagnostic exists specifically to
+    // avoid.
+    //
+    // Silent, not its own diagnostic: a second AddSystem<T>() changes
+    // nothing observable — the first registration keeps running exactly as
+    // it was — so there is no state for a caller to have gotten wrong here,
+    // unlike the late-registration case where entities really are left
+    // stranded. The rest of Registry treats absence/duplication as
+    // routine rather than newsworthy (RemoveSystem<T> on an unregistered
+    // system, HasSystem<T> both no-op silently); adding a log here would be
+    // the odd one out, and risks flagging a deliberately idempotent
+    // AddSystem<T>() call in setup code as if it were a mistake.
+    return;
+  }
+
+  // TSystem's constructor has run its RequireComponent calls by now, so the
+  // signature is final and the scan is meaningful.
+  static thread_local unsigned int lateSystemReports = 0;
+  if (lateSystemReports < ECS_MAX_DIAGNOSTIC_REPORTS) {
+    const std::size_t missed = CountEntitiesMissedBySystem(*newSystem);
+    if (missed > 0 && EcsShouldReport(lateSystemReports)) {
+      logger.Err("AddSystem: '" + std::string(typeid(TSystem).name()) +
+                 "' was registered after " + std::to_string(missed) +
+                 " matching entities were already admitted; it will never see "
+                 "them. Register every system before creating entities, or "
+                 "call Registry::AdmitExistingEntities<T>()." +
+                 EcsSuppressionNote(lateSystemReports));
+    }
+  }
 }
 
 template <typename TSystem> void Registry::RemoveSystem() {
@@ -382,11 +474,41 @@ template <typename TSystem> bool Registry::HasSystem() const {
   return systems.find(std::type_index(typeid(TSystem))) != systems.end();
 }
 
+template <typename TSystem> TSystem *Registry::TryGetSystem() const {
+  auto found = systems.find(std::type_index(typeid(TSystem)));
+  if (found == systems.end()) {
+    return nullptr;
+  }
+  return std::static_pointer_cast<TSystem>(found->second).get();
+}
+
 template <typename TSystem> TSystem &Registry::GetSystem() const {
+  auto found = systems.find(std::type_index(typeid(TSystem)));
+  if (found != systems.end()) {
+    return *(std::static_pointer_cast<TSystem>(found->second));
+  }
+
+  // .at is about to throw, and under -fno-exceptions that is an abort with
+  // no message at all. Say which system first.
+  static thread_local unsigned int reports = 0;
+  if (EcsShouldReport(reports)) {
+    logger.Err("GetSystem: system '" + std::string(typeid(TSystem).name()) +
+               "' was never registered; this call is about to throw. Use "
+               "TryGetSystem or HasSystem where absence is possible." +
+               EcsSuppressionNote(reports));
+  }
   // .at throws for a missing system — defined behavior instead of the UB of
   // dereferencing end(). Check HasSystem() first if absence is expected.
   return *(std::static_pointer_cast<TSystem>(
       systems.at(std::type_index(typeid(TSystem)))));
+}
+
+template <typename TSystem> std::size_t Registry::AdmitExistingEntities() {
+  auto found = systems.find(std::type_index(typeid(TSystem)));
+  if (found == systems.end()) {
+    return 0;
+  }
+  return AdmitExistingEntitiesTo(*found->second);
 }
 
 template <typename TComponent, typename... Targs>
@@ -438,6 +560,24 @@ void Registry::AddComponent(Entity entity, Targs &&... args) {
 
   logger.Log("Component id = " + std::to_string(componentId) +
              " was added to entity id " + std::to_string(entityId));
+
+  // Gate on the budget before the search — an exhausted diagnostic must cost
+  // one comparison, not a scan of every registered system.
+  static thread_local unsigned int lateReports = 0;
+  if (lateReports < ECS_MAX_DIAGNOSTIC_REPORTS) {
+    if (const char *missed =
+            SystemMissedByLateComponent(entity, componentId)) {
+      if (EcsShouldReport(lateReports)) {
+        logger.Err(
+            "AddComponent: entity " + std::to_string(entityId) +
+            " was already admitted by Registry::Update(), so adding this "
+            "component will not put it in system '" + std::string(missed) +
+            "'. Add every component before the Update() that admits the "
+            "entity, or kill it and create a replacement." +
+            EcsSuppressionNote(lateReports));
+      }
+    }
+  }
 }
 
 template <typename TComponent> void Registry::RemoveComponent(Entity entity) {
@@ -535,9 +675,9 @@ TComponent &Registry::GetComponent(Entity entity) const {
   unsigned int &counter = reports[static_cast<std::size_t>(miss)];
   if (EcsShouldReport(counter)) {
     logger.Err("GetComponent: entity " + std::to_string(entity.GetId()) + " " +
-               ComponentMissDescription(miss) + " (component id " +
-               std::to_string(Component<TComponent>::GetId()) +
-               "); returning a default component" +
+               ComponentMissDescription(miss) + " for component type '" +
+               typeid(TComponent).name() +
+               "'; returning a default component" +
                EcsSuppressionNote(counter));
   }
 

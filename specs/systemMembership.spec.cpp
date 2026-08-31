@@ -2,7 +2,9 @@
 
 #include "../common/ecs.h"
 
+#include <string>
 #include <type_traits>
+#include <vector>
 
 using namespace igloo;
 
@@ -41,6 +43,18 @@ public:
     sortEntities(
         [](const Entity &a, const Entity &b) { return b.GetId() < a.GetId(); });
   }
+};
+
+// Systems used only by the AddSystem argument-passing cases below.
+struct SpecCountingSystem : public System {
+  int seed = 0;
+  explicit SpecCountingSystem(int seed) : seed(seed) {}
+};
+
+struct SpecNameCarryingSystem : public System {
+  std::vector<std::string> names;
+  explicit SpecNameCarryingSystem(std::vector<std::string> names)
+      : names(std::move(names)) {}
 };
 
 Describe(SystemMembershipSpec) {
@@ -226,27 +240,56 @@ Describe(SystemMembershipSpec) {
   // KNOWN_ISSUES.md §2 — Entity(std::size_t) is not explicit, so a bare
   // integer converts to an Entity at any call site that takes one.
   //
-  // PINS A KNOWN LIMITATION. Adding `explicit` is a source break, so it is
-  // frozen out of 1.x; a 2.0.0 that adds it must update this case deliberately.
+  // FIXED in 2.0.0: Entity's id constructor is now explicit, so the implicit
+  // conversion this block used to pin (registry.KillEntity(88) compiling) is
+  // now a compile error — pinned below as a static_assert at file scope
+  // instead. What survives here is the rest of the original case: KillEntity
+  // on an id that was never allocated is a no-op rather than corrupting
+  // memory. It now constructs the id explicitly, as callers must.
   //////////////////////////////////////////////////////////////////////////
   Describe(ImplicitEntityConversion) {
 
-    It(should_still_convert_a_bare_integer_to_an_entity) {
-      Assert::That(std::is_convertible<std::size_t, Entity>::value,
-                   Equals(true));
-
+    It(should_leave_a_live_entity_alone_when_killing_an_unallocated_id) {
       Registry registry;
       Entity real = registry.CreateEntity();
       registry.Update();
 
-      // The conversion at work: 88 is not an entity, and this still compiles.
-      // It is a no-op because KillEntity rejects an id that is not alive
-      // (common/ecs.cpp:175) — but it should never have been callable.
-      registry.KillEntity(88);
+      // 88 was never allocated by this registry. KillEntity rejects an id
+      // that is not alive (common/ecs.cpp:328), so this is a no-op rather
+      // than corrupting memory.
+      registry.KillEntity(Entity(88));
       registry.Update();
 
       Assert::That(registry.IsAlive(real), Equals(true));
       Assert::That(registry.IsAlive(Entity(88)), Equals(false));
     };
   };
+
+  Describe(AddSystemArgumentPassingSpec) {
+    It(should_accept_an_rvalue_constructor_argument) {
+      Registry registry;
+      registry.AddSystem<SpecCountingSystem>(5);
+      Assert::That(registry.HasSystem<SpecCountingSystem>(), Equals(true));
+      Assert::That(registry.GetSystem<SpecCountingSystem>().seed, Equals(5));
+    };
+
+    It(should_not_move_out_of_a_caller_lvalue) {
+      Registry registry;
+      std::vector<std::string> names{"first", "second"};
+      registry.AddSystem<SpecNameCarryingSystem>(names);
+
+      // The system got its own copy; the caller's vector is untouched.
+      Assert::That(names.size(), Equals(static_cast<std::size_t>(2)));
+      Assert::That(names[0], Equals("first"));
+      Assert::That(registry.GetSystem<SpecNameCarryingSystem>().names.size(),
+                   Equals(static_cast<std::size_t>(2)));
+    };
+  };
 };
+
+// KNOWN_ISSUES.md §2, fixed in 2.0.0: a bare integer must not implicitly
+// convert to an Entity. registry.KillEntity(88) used to compile; the
+// ImplicitEntityConversion case above now constructs Entity(88) explicitly
+// instead.
+static_assert(!std::is_convertible<std::size_t, Entity>::value,
+              "a bare size_t must not implicitly convert to an Entity");

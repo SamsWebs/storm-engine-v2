@@ -280,8 +280,10 @@ force-closes every controller.
 ### Two entities are touching but no contact is reported
 
 `ContactSystem::Overlaps` is **strict**: a shared edge is a zero-area overlap
-with no meaningful normal, so it is not a contact. `CollisionSystem::isCollision`
-is inclusive and counts one; the two deliberately disagree here.
+with no meaningful normal, so it is not a contact. If you are porting logic
+that expected an edge touch to count (the old `CollisionSystem`, removed in
+2.0.0, was inclusive there), treat this as the correct behaviour to design
+around rather than a bug.
 
 The other silent cause is membership: system membership is computed once, when
 `Registry::Update()` admits the entity, so a `BoxColliderComponent` added to an

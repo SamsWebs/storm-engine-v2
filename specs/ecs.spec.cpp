@@ -1,4 +1,6 @@
 #include <igloo/igloo_alt.h>
+#include <type_traits>
+#include <typeinfo>
 
 #include "../common/ecs.h"
 
@@ -85,6 +87,35 @@ Describe(EcsSpec) {
       Assert::That(entity < entity3, Equals(true));
       Assert::That(entity3 < entity, Equals(false));
     };
+  };
+
+  // P48 — the miss diagnostic's throttle counter is per-TComponent, static
+  // thread_local, and never reset within a process. This case must run before
+  // ComponentMissSpec exhausts the SpecMana/NoPool budget. Three tests share
+  // one counter: this case (1 report), should_not_leak_a_miss_across_registries
+  // (2 reports), and should_throttle_the_diagnostic_for_a_repeated_miss (needs
+  // >= 1 remaining). SpecMana is reused deliberately rather than declaring a
+  // fresh component type, because every type costs one of 32 process-wide ids.
+  // If the budget exhausts first, nothing logs, named stays false, and the
+  // assertion fails visibly — making order-position acceptable rather than
+  // dangerous.
+  It(should_name_the_component_type_in_the_miss_diagnostic) {
+    Registry registry;
+    Entity live = registry.CreateEntity();
+    registry.Update();
+
+    Logger::messages.clear();
+    (void)registry.GetComponent<SpecMana>(live).value;
+
+    bool named = false;
+    for (const auto &entry : Logger::messages) {
+      if (entry.type == LogType::LOG_ERROR &&
+          entry.message.find(typeid(SpecMana).name()) != std::string::npos) {
+        named = true;
+      }
+    }
+    Assert::That(named, Equals(true));
+    Logger::messages.clear();
   };
 
   Describe(SystemSpec) {
@@ -567,3 +598,83 @@ Describe(EcsSpec) {
     };
   };
 };
+struct SpecLateA { int value = 0; };
+struct SpecLateB { int value = 0; };
+
+class SpecLateSystem : public System {
+public:
+  SpecLateSystem() {
+    RequireComponent<SpecLateA>();
+    RequireComponent<SpecLateB>();
+  }
+};
+
+Describe(LateComponentSpec) {
+  It(should_report_a_component_added_after_the_entity_was_admitted) {
+    Registry registry;
+    registry.AddSystem<SpecLateSystem>();
+
+    Entity entity = registry.CreateEntity();
+    entity.AddComponent<SpecLateA>();
+    registry.Update(); // membership decided here, without SpecLateB
+
+    Logger::messages.clear();
+    entity.AddComponent<SpecLateB>();
+
+    Assert::That(SpecErrorCount(), Is().GreaterThanOrEqualTo(
+                                       static_cast<std::size_t>(1)));
+    Logger::messages.clear();
+  };
+
+  It(should_stay_silent_when_the_component_is_added_before_admission) {
+    Registry registry;
+    registry.AddSystem<SpecLateSystem>();
+
+    Entity entity = registry.CreateEntity();
+    Logger::messages.clear();
+    entity.AddComponent<SpecLateA>();
+    entity.AddComponent<SpecLateB>();
+    registry.Update();
+
+    Assert::That(SpecErrorCount(), Equals(static_cast<std::size_t>(0)));
+  };
+
+  It(should_stay_silent_when_the_late_component_changes_no_membership) {
+    Registry registry;
+    registry.AddSystem<SpecLateSystem>();
+
+    Entity entity = registry.CreateEntity();
+    entity.AddComponent<SpecLateA>();
+    registry.Update();
+
+    Logger::messages.clear();
+    // SpecMana is required by no registered system, so adding it late costs
+    // the entity nothing and must not be reported.
+    entity.AddComponent<SpecMana>();
+
+    Assert::That(SpecErrorCount(), Equals(static_cast<std::size_t>(0)));
+  };
+
+  It(should_report_nothing_for_an_entity_that_already_belongs_to_the_system) {
+    Registry registry;
+    registry.AddSystem<SpecLateSystem>();
+
+    Entity entity = registry.CreateEntity();
+    entity.AddComponent<SpecLateA>();
+    entity.AddComponent<SpecLateB>();
+    registry.Update(); // already a member
+
+    Logger::messages.clear();
+    entity.AddComponent<SpecLateB>(); // re-adding changes no membership
+
+    Assert::That(SpecErrorCount(), Equals(static_cast<std::size_t>(0)));
+  };
+};
+
+// KNOWN_ISSUES.md item 2, fixed in 2.0.0: a bare integer must not become an
+// Entity. Direct initialisation — Entity(7) — stays legal and is how the
+// Registry builds them; only the implicit conversion goes away.
+static_assert(!std::is_convertible<std::size_t, Entity>::value,
+              "a bare size_t must not implicitly convert to an Entity");
+static_assert(std::is_constructible<Entity, std::size_t>::value,
+              "Entity must still be constructible from an id");

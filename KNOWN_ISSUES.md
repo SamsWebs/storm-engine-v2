@@ -44,6 +44,8 @@ Every `Entity` member now null-checks its registry pointer, so this no-ops and l
 
 **Why it stays.** Adding `explicit` is a source break for any out-of-tree game that relies on the conversion. Nothing in this repo does (`grep -rnE 'KillEntity\([0-9]|TagEntity\([0-9]' examples/ editor/ common/` is empty), and it would break loudly at compile time rather than silently — but "loudly" is still a break, and 1.x promises not to.
 
+**Resolved in 2.0.0.** `Entity(std::size_t)` is now `explicit`. `registry.KillEntity(88)` no longer compiles; a bare integer must be wrapped in an `Entity` explicitly.
+
 ## 3. Thirty-two component types, process-wide
 
 `MAX_COMPONENTS` is 32 and `Signature` is `std::bitset<32>`. Type ids come from one process-wide counter, so the cap is per binary, not per `Registry`. See the README's *Component type limit* section for the full explanation and how to budget against it.
@@ -87,6 +89,8 @@ Copying one gives you two objects whose callbacks point at whichever was copied 
 
 **Meanwhile.** Hold them by reference or `unique_ptr`, never by value, and never in a `std::vector` that can reallocate. Also note `NetServer` is ~372 KB and `NetClient` ~188 KB — both are far too large for the stack regardless.
 
+**Resolved in 2.0.0.** `NetServer`, `NetClient`, `NetConnection` and `NetSocket` all `= delete` their copy constructor and copy assignment operator. Copying one is now a compile error instead of a dangling callback and a double-close.
+
 ## 7. The engine discards the animation data the editor writes
 
 The tile editor writes animation fields into `.map` files. `TileMapLoader` parses them and throws them away, because `Tile` has nowhere to put them:
@@ -119,8 +123,10 @@ lines against `gameState.h`'s 146,748, a 45% saving per translation unit.
 `gameState.h` now includes it and adds the rest, so nothing existing changed
 and the two cannot drift. A game that does not want the whole engine in every
 state includes the base header and includes what it uses. The defect itself
-stays: `gameState.h` still pulls everything, and trimming *that* is the source
-break 2.0.0 is for.
+stays: `gameState.h` still pulls everything, and trimming *that* was ruled out
+of scope for 2.0.0 — this release adds an include to that header rather than
+removing any. Trimming it is the source break a later breaking release is
+for.
 
 
 ## 9. Every engine type is a global symbol
@@ -141,7 +147,9 @@ Any game needing collision *response* — bouncing, damage, triggers, pickups �
 
 **Why it stays.** An event bus is new architecture, and changing what `CollisionSystem::Update()` does to entities is a silent behaviour break for anything relying on the current kill semantics.
 
-**Resolved for new code in 1.3.0.** `ContactSystem` (`common/systems/contact.h`) is the observe-without-acting path: it reports overlaps with a normal and penetration depth, fires begin/end callbacks once per pair, and never touches an entity. `CollisionSystem` is unchanged and stays unchanged for the whole 1.x line - the two share one copy of the bounds math via `ContactSystem::BoundsOf`. Deleting `CollisionSystem` is a 2.0.0 item, listed below.
+**Resolved for new code in 1.3.0.** `ContactSystem` (`common/systems/contact.h`) is the observe-without-acting path: it reports overlaps with a normal and penetration depth, fires begin/end callbacks once per pair, and never touches an entity. `CollisionSystem` is unchanged and stays unchanged for the whole 1.x line - the two share one copy of the bounds math via `ContactSystem::BoundsOf`. Deleting `CollisionSystem` is a 2.0.0 item.
+
+**Resolved in 2.0.0.** `CollisionSystem` is deleted. The kill-on-overlap behaviour this entry describes no longer exists in the engine at all; a game that wants entities to die on contact now writes that against `ContactSystem` itself. The entry's other half stays open — there is still no general event bus, only `ContactSystem`'s begin/end callbacks, which cover contacts and nothing else.
 
 ## Also on the 2.0.0 list
 
@@ -153,8 +161,7 @@ Not defects exactly — design decisions worth revisiting when compatibility is 
 - **`GameStateMachine` owns raw pointers** with implicitly generated copy operations, so copying one double-frees every state.
 - **Frame pacing lives in game code**, not the engine — every state re-implements the same `SDL_Delay` budget against `MILLISECS_PER_FRAME`.
 - **Three member-naming schemes** across the engine (bare, `m_`, trailing underscore) and two method casings (PascalCase in the ECS, camelCase in the state machine).
-- **`CollisionSystem` should be deleted.** `ContactSystem` supersedes it entirely as of 1.3.0 and no in-repo game registers it - only `specs/systems/collision.spec.cpp` does. It survives only because `KNOWN_ISSUES.md` line 5 rules out deleting a public member inside 1.x. Delete the class, its spec, and its `TUTORIAL.md` row together.
-- **The collider offset is not scaled by the transform.** `ContactSystem::BoundsOf`, `CollisionSystem::isCollision` and `RenderColliderSystem::Update` (`common/systems/renderCollider.h:22-26`) all compute `position + offset` while scaling the extents by `transform.scale`. So a collider with `offset = {4, 0}` on an entity at `scale = {2, 2}` starts 4 px from the origin, not 8. The three agree, so nothing is visibly broken today; scaling the offset would be more consistent but silently moves every collider a game has ever authored with a non-unit scale.
+- **The collider offset is not scaled by the transform.** `ContactSystem::BoundsOf` and `RenderColliderSystem::Update` (`common/systems/renderCollider.h:22-26`) both compute `position + offset` while scaling the extents by `transform.scale`. So a collider with `offset = {4, 0}` on an entity at `scale = {2, 2}` starts 4 px from the origin, not 8. The two agree, so nothing is visibly broken today; scaling the offset would be more consistent but silently moves every collider a game has ever authored with a non-unit scale.
 - **`ContactSystem`'s broadphase sweeps one axis.** It sorts by `minX` and breaks the inner loop on the first candidate starting past the current right edge, which degrades back to all-pairs for anything stacked in a single column. A uniform grid is the upgrade, and nothing in-repo is near the entity count where it would matter.
 
 *Items that can be fixed without breaking compatibility are tracked separately and are not listed here.*

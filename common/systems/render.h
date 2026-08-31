@@ -6,6 +6,7 @@
 #include "../ecs.h"
 #include <SDL2/SDL.h>
 #include <algorithm>
+#include <string>
 
 class RenderSystem : public System {
 public:
@@ -44,9 +45,39 @@ public:
                           static_cast<int>(sprite.width * transform.scale.x),
                           static_cast<int>(sprite.height * transform.scale.y)};
 
-      SDL_RenderCopyEx(renderer, assetStore.GetTexture(sprite.assetId),
-                       &srcRect, &dstRect, transform.rotation, NULL,
-                       sprite.flip);
+      SDL_Texture *texture = assetStore.GetTexture(sprite.assetId);
+
+      // A srcRect outside the texture makes SDL_RenderCopyEx draw nothing and
+      // report nothing. The two ways to arrive here are a SpriteComponent
+      // width/height that does not match the sheet cell, and an
+      // AnimationComponent vertical flag that does not match the sheet layout
+      // — the frame offset then walks off the wrong axis. Gate on the budget
+      // before the query so an exhausted diagnostic costs one comparison.
+      static thread_local unsigned int srcRectReports = 0;
+      if (texture != nullptr && srcRectReports < ECS_MAX_DIAGNOSTIC_REPORTS) {
+        int textureW = 0;
+        int textureH = 0;
+        SDL_QueryTexture(texture, nullptr, nullptr, &textureW, &textureH);
+        const bool outside =
+            srcRect.x < 0 || srcRect.y < 0 || srcRect.w <= 0 ||
+            srcRect.h <= 0 || srcRect.x + srcRect.w > textureW ||
+            srcRect.y + srcRect.h > textureH;
+        if (outside && EcsShouldReport(srcRectReports)) {
+          EcsReportErr(
+              "RenderSystem: srcRect {" + std::to_string(srcRect.x) + "," +
+              std::to_string(srcRect.y) + "," + std::to_string(srcRect.w) +
+              "," + std::to_string(srcRect.h) + "} is outside texture '" +
+              sprite.assetId + "' (" + std::to_string(textureW) + "x" +
+              std::to_string(textureH) +
+              ") — nothing will draw. Check that SpriteComponent width/height "
+              "match the sheet cell, and that AnimationComponent.vertical "
+              "matches the sheet layout." +
+              EcsSuppressionNote(srcRectReports));
+        }
+      }
+
+      SDL_RenderCopyEx(renderer, texture, &srcRect, &dstRect,
+                       transform.rotation, NULL, sprite.flip);
     }
   }
 };

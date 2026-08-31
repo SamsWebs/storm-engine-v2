@@ -6,6 +6,7 @@
 
 #include <stormengine2/input/gamepad.h>
 #include <stormengine2/states/gameState.h>
+#include <stormengine2/systems/contact.h>
 
 #include <glm/glm.hpp>
 #include <optional>

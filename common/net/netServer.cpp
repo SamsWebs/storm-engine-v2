@@ -1,11 +1,55 @@
 #include <cstring>
+#include <unordered_map>
 
 #include "netPacket.h"
 #include "netServer.h"
 
+namespace {
+
+// Per-NetServer settings that cannot live on NetServer itself: games allocate
+// the server with std::make_unique<NetServer>(), so sizeof(NetServer) is
+// emitted in game code and 1.x may not change it. Keyed on `this` and erased
+// by ~NetServer — without that erase, a recycled address hands the next
+// server this one's settings.
+//
+// Not thread-safe, in keeping with the rest of the networking layer.
+std::unordered_map<const NetServer *, int> &MaxClientsPerIpTable() {
+  // Intentionally leaked. No in-tree consumer destroys a NetServer during
+  // static teardown today, but a game is free to hold one in a static, and a
+  // function-local static here would already be gone by the time such a
+  // ~NetServer ran. Leaking it makes the destructor safe at any point in the
+  // program's life. One map, freed by the OS at exit.
+  static auto &table = *new std::unordered_map<const NetServer *, int>();
+  return table;
+}
+
+} // namespace
+
 NetServer::NetServer() = default;
 
-NetServer::~NetServer() { Stop(); }
+NetServer::~NetServer() {
+  MaxClientsPerIpTable().erase(this);
+  Stop();
+}
+
+void NetServer::SetMaxClientsPerIp(int limit) {
+  if (limit < 1) {
+    logger_.Err("NetServer::SetMaxClientsPerIp: limit " +
+                std::to_string(limit) +
+                " is below 1; ignoring. The per-address cap is unchanged.");
+    return;
+  }
+  if (limit > kMaxClients) {
+    limit = kMaxClients;
+  }
+  MaxClientsPerIpTable()[this] = limit;
+}
+
+int NetServer::GetMaxClientsPerIp() const {
+  auto found = MaxClientsPerIpTable().find(this);
+  return found == MaxClientsPerIpTable().end() ? kNetMaxClientsPerIp
+                                               : found->second;
+}
 
 bool NetServer::Start(uint16_t port, int maxClients) {
   Stop();
@@ -160,6 +204,19 @@ int NetServer::GetClientCount() const {
   return count;
 }
 
+int NetServer::GetConnectedClientIds(int *out, int maxOut) const {
+  if (out == nullptr || maxOut < 1) {
+    return 0;
+  }
+  int count = 0;
+  for (int i = 0; i < kMaxClients && count < maxOut; i++) {
+    if (IsClientConnected(i)) {
+      out[count++] = i;
+    }
+  }
+  return count;
+}
+
 bool NetServer::IsClientConnected(int clientId) const {
   return clientId >= 0 && clientId < kMaxClients && slots_[clientId].online;
 }
@@ -260,7 +317,7 @@ void NetServer::HandleConnect(const NetAddress &from,
     SendControl(from, kNetControlClose, "server full", 12);
     return;
   }
-  if (CountSlotsWithIp(from) >= kNetMaxClientsPerIp) {
+  if (CountSlotsWithIp(from) >= GetMaxClientsPerIp()) {
     SendControl(from, kNetControlClose, "too many connections", 21);
     return;
   }

@@ -70,7 +70,7 @@ The shipped map is 295 tiles, 72 of them solid, on z-indices -1 to 2. `assets/ti
 
 ### Tile-Based Physics
 
-The engine's built-in `CollisionSystem` destroys both colliding entities - not suitable for player-vs-tile interaction. Instead, `PlayState` keeps a `solidGrid_[row][col]` boolean mirror of the map and resolves collisions directly in `ResolvePlayer()`.
+The engine has no kill-on-contact collision system, and `ContactSystem` only reports overlaps - it never acts on them, so neither is a fit for player-vs-tile interaction by itself. Instead, `PlayState` keeps a `solidGrid_[row][col]` boolean mirror of the map and resolves collisions directly in `ResolvePlayer()`.
 
 The algorithm runs two separate passes each frame:
 

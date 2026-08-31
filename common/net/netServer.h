@@ -29,6 +29,12 @@ public:
     NetServer();
     ~NetServer();
 
+    // Owns a socket descriptor and installs callbacks capturing `this`: a copy
+    // would give two objects whose callbacks point at the original, and two
+    // destructors closing one descriptor. KNOWN_ISSUES item 6, fixed in 2.0.0.
+    NetServer(const NetServer &) = delete;
+    NetServer &operator=(const NetServer &) = delete;
+
     bool Start(uint16_t port, int maxClients = 8); // port 0 = ephemeral
     void Stop();
     void Update();
@@ -42,10 +48,55 @@ public:
     void BanIp(uint32_t ipHost, uint32_t seconds);
 
     bool IsRunning() const { return sock_.IsOpen(); }
+
+    // How many clients are connected. This is a count for display — "3/12
+    // players" — and NOT a loop bound.
+    //
+    // Client ids are slot indices into a fixed array, not a dense range.
+    // `for (int i = 0; i < GetClientCount(); i++)` works in a two-player test
+    // and then silently stops sending to a player the moment anyone quits: a
+    // client in slot 3 stays connected while the count reads 3. Nothing
+    // errors; that player just stops receiving the world.
+    //
+    // Iterate with GetConnectedClientIds, or over kMaxClients guarded by
+    // IsClientConnected.
     int GetClientCount() const;
+
+    // Writes the connected client ids into `out` in ascending order and
+    // returns how many were written, never more than `maxOut`. Pass
+    // kMaxClients as `maxOut` to be sure of getting all of them.
+    //
+    //     int ids[NetServer::kMaxClients];
+    //     const int count = server.GetConnectedClientIds(ids, NetServer::kMaxClients);
+    //     for (int i = 0; i < count; ++i) { server.Send(ids[i], ...); }
+    //
+    // Takes an array rather than returning a container because this sits on
+    // the per-tick send path and must not allocate.
+    //
+    // Returns 0 and writes nothing when `out` is null or `maxOut` is below 1.
+    int GetConnectedClientIds(int *out, int maxOut) const;
+
     bool IsClientConnected(int clientId) const;
     NetAddress GetClientAddress(int clientId) const;
     uint16_t GetPort() const { return sock_.GetBoundPort(); }
+
+    // How many clients may connect from one address. Defaults to
+    // kNetMaxClientsPerIp (4), which is an anti-flood cap sized for a LAN.
+    //
+    // Over the internet every player behind one router shares a public
+    // address, so a twelve-player game with two people in one house is
+    // refused at the default. Raise it for internet play; leave it alone for
+    // a LAN, where it is doing real work.
+    //
+    // A limit below 1 is refused and logged; a limit above kMaxClients is
+    // clamped to kMaxClients. Takes effect on the next connection attempt,
+    // and never disconnects a client already admitted.
+    //
+    // The setting is held outside the object: sizeof(NetServer) is ABI,
+    // because games allocate the server themselves and the size is emitted
+    // at their call site.
+    void SetMaxClientsPerIp(int limit);
+    int GetMaxClientsPerIp() const;
 
     void SetOnClientConnect(ConnectCallback cb) { onConnect_ = cb; }
     void SetOnClientDisconnect(DisconnectCallback cb) { onDisconnect_ = cb; }

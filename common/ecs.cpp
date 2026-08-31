@@ -10,7 +10,15 @@ const char *EcsSuppressionNote(unsigned int counter) {
 }
 
 void EcsReportErr(const std::string &message) {
-  static Logger ecsLogger;
+  // Intentionally leaked. Registry::instance (below) is a namespace-scope
+  // std::unique_ptr, so its ~Registry can run during static teardown, after
+  // a function-local static Logger here would already have been destroyed.
+  // Leaking it keeps EcsReportErr safe to call at any point in the program's
+  // life, including from ~Registry at exit. Logger::messages itself is a
+  // namespace-scope static in another translation unit, so its destruction
+  // order relative to Registry::instance is unspecified — a report emitted
+  // during static teardown is best-effort, not guaranteed to be observed.
+  static Logger &ecsLogger = *new Logger();
   ecsLogger.Err(message);
 }
 
@@ -123,6 +131,96 @@ const Signature &System::GetComponentSignature() const {
   return componentSignature;
 }
 
+namespace {
+
+// Per-Registry diagnostic state that cannot live on Registry itself: games
+// embed a Registry by value in their states, so sizeof(Registry) is ABI and
+// 1.x may not add a member to it. Keyed on `this` and erased by ~Registry.
+//
+// Not thread-safe, in keeping with the rest of the ECS.
+struct RegistryDiagnostics {
+  unsigned long updateCalls = 0;
+  unsigned long entitiesCreated = 0;
+};
+
+std::unordered_map<const Registry *, RegistryDiagnostics> &
+DiagnosticsTable() {
+  // Intentionally leaked. ~Registry reaches into this map, and the editor's
+  // Registry::Instance() singleton is destroyed during static teardown —
+  // after a function-local static would already have been destroyed.
+  // Leaking it makes the destructor safe at any point in the program's
+  // life. One map, freed by the OS at exit.
+  static auto &table =
+      *new std::unordered_map<const Registry *, RegistryDiagnostics>();
+  return table;
+}
+
+// The entities a system registered now would have to be told about: live,
+// past admission, matching the signature, not already members.
+//
+// Candidates are bare `Entity(id)` values: `registry` is null on every one of
+// them. That is fine for counting, but anything that dereferences a component
+// off one must stamp `entity.registry` first, as AdmitExistingEntitiesTo does.
+// Skipping that stamp is silent - the null guards return a shared zeroed
+// fallback rather than failing - and it shipped that way once already.
+template <typename TVisitor>
+void ForEachMissedEntity(const Registry &registry, std::size_t numEntities,
+                         const std::vector<Signature> &signatures,
+                         const System &system, TVisitor &&visit) {
+  const Signature &required = system.GetComponentSignature();
+  const std::vector<Entity> &members =
+      const_cast<System &>(system).GetSystemEntities();
+
+  for (std::size_t id = 0; id < numEntities && id < signatures.size(); ++id) {
+    Entity entity(id);
+    if (!registry.IsAlive(entity)) {
+      continue;
+    }
+    if (registry.IsPendingAdmission(entity)) {
+      continue;
+    }
+    if ((signatures[id] & required) != required) {
+      continue;
+    }
+    if (std::find(members.begin(), members.end(), entity) != members.end()) {
+      continue;
+    }
+    visit(entity);
+  }
+}
+
+} // namespace
+
+// Call-site-owned, like every other diagnostic throttle in this file —
+// unlike updateCalls/entitiesCreated above, this counter must outlive any
+// single registry, since ~Registry runs exactly once per registry and could
+// never accumulate past 1 if it lived in the per-registry side table.
+static thread_local unsigned int missingUpdateReports = 0;
+
+Registry::~Registry() {
+  // find, not operator[]: a registry that never called CreateEntity or
+  // Update() has no entry in this table, and operator[] would insert one
+  // just to immediately erase it below. With no entry, entitiesCreated reads
+  // as 0 either way, so the guard's outcome is unchanged.
+  auto found = DiagnosticsTable().find(this);
+  if (found != DiagnosticsTable().end()) {
+    const RegistryDiagnostics &diagnostics = found->second;
+    if (diagnostics.updateCalls == 0 && diagnostics.entitiesCreated > 0 &&
+        EcsShouldReport(missingUpdateReports)) {
+      EcsReportErr(
+          "~Registry: this registry created " +
+          std::to_string(diagnostics.entitiesCreated) +
+          " entities and Registry::Update() was never called on it, so none "
+          "of them ever joined a system — nothing it owned rendered or "
+          "moved. Call registry.Update() once per frame, first, in your "
+          "state's update()." +
+          EcsSuppressionNote(missingUpdateReports));
+    }
+    DiagnosticsTable().erase(found);
+  }
+  logger.Log("Registry destructor called.");
+}
+
 Entity Registry::CreateEntity() {
   std::size_t entityId;
 
@@ -142,6 +240,11 @@ Entity Registry::CreateEntity() {
   entity.registry = this;
   entitiesToBeAdded.insert(entity);
 
+  // Counting only — see ~Registry for the diagnostic. A count-based report
+  // here false-positives on batch-spawn-then-flush (a level loader), so the
+  // actual misuse check happens at the registry's end of life instead.
+  ++DiagnosticsTable()[this].entitiesCreated;
+
   logger.Log("Entity created with id = " + std::to_string(entityId));
 
   return entity;
@@ -159,6 +262,82 @@ bool Registry::IsAlive(Entity entity) const {
 
   return std::find(freeIds.begin(), freeIds.end(),
                    static_cast<int>(entityId)) == freeIds.end();
+}
+
+bool Registry::IsPendingAdmission(Entity entity) const {
+  return entitiesToBeAdded.find(entity) != entitiesToBeAdded.end();
+}
+
+const char *
+Registry::SystemMissedByLateComponent(Entity entity,
+                                      std::size_t componentId) const {
+  const auto entityId = entity.GetId();
+  if (entityId >= entityComponentSignatures.size() ||
+      componentId >= MAX_COMPONENTS) {
+    return nullptr;
+  }
+  if (!IsAlive(entity)) {
+    return nullptr;
+  }
+  // Still queued: Update() has not decided its membership yet, so adding a
+  // component now is exactly the correct thing to do.
+  if (IsPendingAdmission(entity)) {
+    return nullptr;
+  }
+  // On its way out; its membership will never matter again.
+  if (entitiesToBeKilled.find(entity) != entitiesToBeKilled.end()) {
+    return nullptr;
+  }
+
+  const Signature &now = entityComponentSignatures[entityId];
+  Signature asAdmitted = now;
+  asAdmitted.reset(componentId);
+
+  for (const auto &entry : systems) {
+    const Signature &required = entry.second->GetComponentSignature();
+    const bool matchedAtAdmission = (asAdmitted & required) == required;
+    const bool matchesNow = (now & required) == required;
+    if (matchedAtAdmission || !matchesNow) {
+      continue;
+    }
+    // asAdmitted is a replay, not the recorded admission-time signature, so
+    // it reads a bit that was already set before this call (a re-add of a
+    // component the entity already had) as if it had just appeared. Guard
+    // against that false positive with the one fact the system does record:
+    // an entity Update() actually admitted is already in its entities list,
+    // and nothing done after admission removes it from there.
+    const auto &members = entry.second->GetSystemEntities();
+    const bool alreadyMember =
+        std::find(members.begin(), members.end(), entity) != members.end();
+    if (!alreadyMember) {
+      return entry.first.name();
+    }
+  }
+  return nullptr;
+}
+
+std::size_t Registry::CountEntitiesMissedBySystem(const System &system) const {
+  std::size_t missed = 0;
+  ForEachMissedEntity(*this, numEntities, entityComponentSignatures, system,
+                      [&missed](Entity) { ++missed; });
+  return missed;
+}
+
+std::size_t Registry::AdmitExistingEntitiesTo(System &system) {
+  std::vector<Entity> toAdmit;
+  ForEachMissedEntity(*this, numEntities, entityComponentSignatures, system,
+                      [&toAdmit](Entity entity) { toAdmit.push_back(entity); });
+  for (Entity entity : toAdmit) {
+    // ForEachMissedEntity builds each candidate as a bare Entity(id), so
+    // entity.registry is still null here. Stamp it before handing the entity
+    // to the system: everything a system does with an Entity (GetComponent,
+    // Kill, Tag, ...) routes through that pointer, and a null one silently
+    // poisons every access instead of failing loudly. Entity::registry is
+    // public, so this needs no friend declaration.
+    entity.registry = this;
+    system.AddEntityToSystem(entity);
+  }
+  return toAdmit.size();
 }
 
 void Registry::KillEntity(Entity entity) {
@@ -229,6 +408,8 @@ void Registry::RemoveEntityFromSystems(Entity entity) {
 }
 
 void Registry::Update() {
+  ++DiagnosticsTable()[this].updateCalls;
+
   // Add the entities that are waiting to be
   // created to the active systems
   for (auto entity : entitiesToBeAdded) {
@@ -286,6 +467,14 @@ bool Registry::DoesTagExist(const std::string &tag) const {
 // Callers guard with DoesTagExist; see P19 in docs/TECH_DEBT.md.
 Entity Registry::GetEntityByTag(const std::string &tag) const {
   return entityPerTag.at(tag);
+}
+
+const Entity *Registry::TryGetEntityByTag(const std::string &tag) const {
+  auto found = entityPerTag.find(tag);
+  if (found == entityPerTag.end()) {
+    return nullptr;
+  }
+  return &found->second;
 }
 
 void Registry::RemoveEntityTag(Entity entity) {

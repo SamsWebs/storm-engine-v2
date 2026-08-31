@@ -34,6 +34,13 @@ Two notes on the odd ones:
   symbol, the editor parses `.lua` project files by hand, and Debian ships no
   versionless `liblua.so`. The headers are here because sol2 needs them to
   compile, not because Lua is used.
+
+  The editor's Makefile adds `-I$(ROOT_DIR)/vendor/lua` for that same reason.
+  sol2 includes `<lua.h>` unqualified, while the shared `INCLUDE` in `base.mk`
+  only reaches `vendor/`, so `<lua/lua.h>` would be the only spelling that
+  resolves. The flag is editor-only because no example includes sol2, and
+  putting it in the shared `INCLUDE` would add a dependency to every example's
+  compile line that none of them uses.
 - **NFD ships no library.** Exactly one file uses it — the editor's
   `FileDialogWin.cpp` — and `base.mk` keeps `-lnfd` out of the shared `LIB` for
   that reason, so examples do not fail to link on machines without it.

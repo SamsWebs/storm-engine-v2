@@ -2,10 +2,10 @@
 
 #include <new>
 #include <stdexcept>
-#include <thread>
 
 #include "../common/ecs.h"
 #include "../common/logger.h"
+#include "support/freshDiagnosticBudget.h"
 
 using namespace igloo;
 
@@ -26,6 +26,10 @@ class PositionSystem : public System {
 public:
   PositionSystem() { RequireComponent<PositionComponent>(); }
 };
+
+// Forward-declared so EntityLifecycle (below) can use it; defined after
+// RegistrySpec, alongside the other spec-local helpers.
+static std::size_t SpecRegistryErrorCount();
 
 Describe(RegistrySpec) {
 
@@ -334,13 +338,19 @@ Describe(RegistrySpec) {
       Assert::That(b.GetId(), Equals(1u));
     };
 
-    It(should_still_kill_the_new_entity_through_a_recycled_stale_handle) {
-      // KNOWN GAP, pinned deliberately. The three KillEntity guards all pass
-      // for a stale handle whose id has already been recycled, so the kill
-      // lands on the new, live entity. Closing it needs a generation counter
-      // inside Entity, which changes sizeof(Entity) — an ABI break, tracked
-      // as P5 in docs/TECH_DEBT.md. This case fails once P5 is closed; that
-      // is the signal to flip the assertions.
+    It(should_reject_a_kill_through_a_recycled_stale_handle) {
+      // FIXED, was pinned deliberately. The three KillEntity guards used to
+      // all pass for a stale handle whose id had already been recycled, so
+      // the kill landed on the new, live entity. Closing it needed a
+      // generation counter inside Entity, which changed sizeof(Entity) — an
+      // ABI break, tracked as P5 in docs/TECH_DEBT.md. Now IsAlive checks the
+      // generation, so the stale kill below is rejected instead.
+      //
+      // KillEntity's "not alive" diagnostic is throttled by a counter shared
+      // with every other spec that exercises this exact rejection on the
+      // main thread — see OnFreshDiagnosticBudget (specs/support/), which
+      // runs the stale kill below on a fresh thread so it gets its own,
+      // untouched budget.
       Registry registry;
       registry.AddSystem<PositionSystem>();
 
@@ -349,7 +359,7 @@ Describe(RegistrySpec) {
       registry.KillEntity(doomed);
       registry.Update(); // id 0 freed
 
-      Entity recycled = registry.CreateEntity(); // takes id 0 back
+      Entity recycled = registry.CreateEntity(); // takes id 0 back, new generation
       registry.AddComponent<PositionComponent>(recycled, 1.f, 2.f);
       registry.Update();
       Assert::That(recycled.GetId(), Equals(doomed.GetId()));
@@ -357,14 +367,28 @@ Describe(RegistrySpec) {
           registry.GetSystem<PositionSystem>().GetSystemEntities().size(),
           Equals(1u));
 
-      registry.KillEntity(doomed); // stale, but indistinguishable from
-                                   // `recycled`
+      Logger::messages.clear();
+      OnFreshDiagnosticBudget([&] {
+        registry.KillEntity(doomed); // stale, but indistinguishable from
+                                     // `recycled` by id alone
+      });
       registry.Update();
 
+      // The stale kill must not touch the new, live entity.
       Assert::That(
           registry.GetSystem<PositionSystem>().GetSystemEntities().size(),
-          Equals(0u));
-      Assert::That(registry.IsAlive(recycled), Equals(false));
+          Equals(1u));
+      Assert::That(registry.IsAlive(recycled), Equals(true));
+      Assert::That(registry.IsAlive(doomed), Equals(false));
+      // Not just alive — intact. A kill that half-succeeded would still
+      // report alive.
+      PositionComponent &pos =
+          registry.GetComponent<PositionComponent>(recycled);
+      Assert::That(pos.x, Equals(1.f));
+      Assert::That(pos.y, Equals(2.f));
+      Assert::That(SpecRegistryErrorCount(),
+                   Is().GreaterThanOrEqualTo(static_cast<std::size_t>(1)));
+      Logger::messages.clear();
     };
 
     It(should_ignore_a_kill_of_an_entity_that_was_never_created) {
@@ -549,17 +573,16 @@ Describe(LateSystemRegistrationSpec) {
 // Update(); on the main thread that budget of ECS_MAX_DIAGNOSTIC_REPORTS (4)
 // is normally spent well before this Describe runs. The two cases below
 // exist specifically to exercise this diagnostic, so each does its
-// create/destroy on a fresh std::thread: a new thread gets its own,
-// untouched instance of the thread_local counter, independent of whatever
-// the main thread has already reported.
+// create/destroy inside OnFreshDiagnosticBudget (specs/support/) — see that
+// helper for why a fresh thread, not a reset seam, is the right shape here.
 Describe(MissingUpdateSpec) {
   It(should_report_a_registry_destroyed_without_ever_flushing) {
     Logger::messages.clear();
-    std::thread([] {
+    OnFreshDiagnosticBudget([] {
       Registry registry;
       (void)registry.CreateEntity();
       (void)registry.CreateEntity();
-    }).join(); // destroyed here, Update() never called
+    }); // destroyed here, Update() never called
 
     Assert::That(SpecRegistryErrorCount(),
                  Is().GreaterThanOrEqualTo(static_cast<std::size_t>(1)));
@@ -611,16 +634,16 @@ Describe(MissingUpdateSpec) {
     // the first's updateCalls and the diagnostic silently stops working for
     // it. Deleting the erase(this) line MUST fail this case.
     //
-    // Runs on a fresh thread (see the comment above MissingUpdateSpec) so the
-    // shared missingUpdateReports throttle has its own untouched budget,
-    // regardless of what the main thread has already reported elsewhere in
-    // the suite. Assert::That stays on the main thread: an uncaught
-    // assertion failure inside the spawned thread would call std::terminate
-    // instead of failing the case.
+    // Runs via OnFreshDiagnosticBudget (see the comment above
+    // MissingUpdateSpec) so the shared missingUpdateReports throttle has its
+    // own untouched budget, regardless of what the main thread has already
+    // reported elsewhere in the suite. Assert::That stays on the main
+    // thread: an uncaught assertion failure inside the spawned thread would
+    // call std::terminate instead of failing the case.
     alignas(Registry) unsigned char storage[sizeof(Registry)];
     bool addressReused = false;
 
-    std::thread([&] {
+    OnFreshDiagnosticBudget([&] {
       Registry *first = new (storage) Registry();
       (void)first->CreateEntity();
       first->Update(); // marks this address as having flushed
@@ -634,7 +657,7 @@ Describe(MissingUpdateSpec) {
       (void)second->CreateEntity();
       second->~Registry(); // never flushed — must report, despite `first`
                            // having flushed
-    }).join();
+    });
 
     // Assert the address was actually reused, so the case cannot pass by
     // testing nothing.
@@ -709,5 +732,43 @@ Describe(TryGetEntityByTagSpec) {
 
     Assert::That(registry.TryGetEntityByTag("player") == nullptr,
                  Equals(true));
+  };
+};
+
+Describe(StaleHandleContainerSpec) {
+  It(should_not_find_a_live_entity_through_a_stale_handle_in_a_group) {
+    Registry registry;
+    Entity first = registry.CreateEntity();
+    first.Group("enemies");
+    registry.Update();
+
+    first.Kill();
+    registry.Update();                       // id freed, generation bumped
+
+    Entity second = registry.CreateEntity(); // same id, new generation
+    second.Group("enemies");
+    registry.Update();
+
+    // The stale handle must not resolve to the live entity's group entry.
+    Assert::That(registry.EntityBelongsToGroup(second, "enemies"),
+                 Equals(true));
+    Assert::That(registry.EntityBelongsToGroup(first, "enemies"),
+                 Equals(false));
+  };
+};
+
+Describe(TagCleanupSpec) {
+  It(should_not_let_a_recycled_id_inherit_a_tag) {
+    Registry registry;
+    Entity first = registry.CreateEntity();
+    first.Tag("player");
+    registry.Update();
+
+    first.Kill();
+    registry.Update();
+
+    Entity second = registry.CreateEntity(); // same id
+    Assert::That(registry.EntityHasTag(second, "player"), Equals(false));
+    Assert::That(registry.DoesTagExist("player"), Equals(false));
   };
 };

@@ -2,7 +2,7 @@
 
 A lightweight, ECS-based 2D game engine built on SDL2 - made for game jams and personal projects.
 
-> **"v2" is the second-generation engine; the current release is v1.3.0.** The public API is considered stable for the 1.x line. See [CHANGELOG.md](CHANGELOG.md) for release notes.
+> **"v2" is the second-generation engine.** The current release is v1.3.0; `main` is at `2.0.0~dev`. 2.0.0 is where the 1.x API freeze resets, so the tree ahead of that release deliberately breaks source compatibility - see [KNOWN_ISSUES.md](KNOWN_ISSUES.md) for what it fixes and [CHANGELOG.md](CHANGELOG.md) for release notes.
 
 ![Storm Engine v2 platformer example](examples/platformer/screenshot.png)
 
@@ -56,6 +56,7 @@ The engine logs a small, fixed number of occurrences of each of the following mi
 - A sprite's `srcRect` falling outside its texture, which `SDL_RenderCopyEx` draws as nothing and reports nothing
 - `Registry::GetSystem<T>()` about to throw for a system that was never registered
 - `Registry::GetComponent<T>()` missing and falling back to a shared default instance
+- A **stale `Entity` handle** - one kept past its entity's death, whose id has since been recycled - used to kill, tag, group, add to a system, or read or write a component. It no-ops rather than touching the live entity that now holds that id
 
 Each is throttled independently and stays silent afterward, so it will not flood a game that hits the same misuse every frame.
 

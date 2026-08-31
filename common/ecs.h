@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <bitset>
+#include <cstdint>
 #include <deque>
 #include <functional>
 #include <memory>
@@ -34,6 +35,13 @@ constexpr unsigned int ECS_MAX_DIAGNOSTIC_REPORTS = 4;
 // Gate a diagnostic on this *before* building its message — assembling the
 // message is most of the cost. `counter` must be a static owned by a single
 // call site, so that distinct failures throttle independently.
+//
+// Every throttle counter in the engine — every call site in this header and
+// in common/ecs.cpp, and common/systems/render.h's — is `static thread_local`,
+// not plain `static`, so a spec that needs a fresh budget for the diagnostic
+// it is asserting on can get one deterministically by running the triggering
+// call on a fresh thread, regardless of what the main thread has already
+// spent.
 inline bool EcsShouldReport(unsigned int &counter) {
   if (counter >= ECS_MAX_DIAGNOSTIC_REPORTS) {
     return false;
@@ -63,6 +71,12 @@ bool EcsComponentIdIsValid(std::size_t componentId, const char *where,
 // diagnostic can name the reason while the bounds checks live in one place.
 enum class ComponentMiss : unsigned char {
   None = 0,
+  // The handle's id is no longer held by the entity that created it — either
+  // the id was recycled to a different entity after this one was killed, or
+  // the handle was hand-built and never valid to begin with. Checked first:
+  // without it, a stale handle whose id a live entity now holds would pass
+  // every check below and read that entity's component instead of missing.
+  Stale,
   TooManyTypes,
   NoPool,
   OutOfRange,
@@ -106,10 +120,16 @@ public:
 };
 
 // Entity is a value type copied into every system list, set, and sort — keep
-// it lean (an id + registry pointer, nothing else).
+// it lean (an id, a generation, and a registry pointer, nothing else).
 class Entity {
 private:
   std::size_t id;
+  // 0 is reserved and never valid: Registry::generations starts at 1, so an
+  // Entity built from a bare id is stale by construction and cannot be
+  // mistaken for a live entity.
+  std::uint32_t generation = 0;
+
+  friend class Registry;
 
 public:
   // explicit since 2.0.0: without it any function taking an Entity silently
@@ -117,6 +137,7 @@ public:
   explicit Entity(std::size_t id) : id(id){};
   void Kill();
   std::size_t GetId() const;
+  std::uint32_t GetGeneration() const { return generation; }
 
   // Manage entity tags and groups
   void Tag(const std::string &tag);
@@ -125,10 +146,10 @@ public:
   bool BelongsToGroup(const std::string &group) const;
 
   Entity &operator=(const Entity &other) = default;
-  bool operator==(const Entity &other) const { return id == other.id; };
-  bool operator!=(const Entity &other) const { return id != other.id; };
-  bool operator>(const Entity &other) const { return id > other.id; };
-  bool operator<(const Entity &other) const { return id < other.id; };
+  bool operator==(const Entity &other) const {
+    return id == other.id && generation == other.generation;
+  };
+  bool operator!=(const Entity &other) const { return !(*this == other); };
 
   template <typename TComponent, typename... TArgs>
   void AddComponent(TArgs &&... args);
@@ -145,6 +166,18 @@ public:
 
   // Hold a pointer to the entity's owner registry
   class Registry *registry = nullptr; // Be careful for cyclic dependencies
+};
+
+// Ordering for the containers that need one. Named for what it orders: this
+// is not "by id", and calling it that is how the deleted operator< gets
+// quietly reintroduced.
+struct EntityOrder {
+  bool operator()(const Entity &a, const Entity &b) const {
+    if (a.GetId() != b.GetId()) {
+      return a.GetId() < b.GetId();
+    }
+    return a.GetGeneration() < b.GetGeneration();
+  }
 };
 
 /*******************************************/
@@ -236,6 +269,14 @@ public:
 ////////////////////////////////////////////////////
 class Registry {
 private:
+  // Test seam: lets a spec pre-seed or read the private generation table
+  // directly, so a wrap at 0xFFFFFFFF can be exercised without spinning 2^32
+  // real CreateEntity/KillEntity cycles. Same trick as IComponent::nextId
+  // (protected, reached through a derived spec struct) applied via
+  // friendship instead, since `generations` is an instance member, not a
+  // static one a subclass could inherit into scope.
+  friend struct EcsGenerationTestSeam;
+
   std::size_t numEntities = 0;
 
   // Vector of component pools, each pool contains all the
@@ -248,22 +289,23 @@ private:
   // [ Vector index = entity id ]
   std::vector<Signature> entityComponentSignatures;
 
+  // Generation per entity id, parallel to entityComponentSignatures. Starts
+  // at 1 so that generation 0 can mean "never valid" — see Entity.
+  std::vector<std::uint32_t> generations;
+
   std::unordered_map<std::type_index, std::shared_ptr<System>> systems;
 
   // Set of entities that are flagged to be added or removed the
   // next registry Update()
-  std::set<Entity> entitiesToBeAdded;
-  std::set<Entity> entitiesToBeKilled;
+  std::set<Entity, EntityOrder> entitiesToBeAdded;
+  std::set<Entity, EntityOrder> entitiesToBeKilled;
 
   // Entity tags (one tag name per entity)
   std::unordered_map<std::string, Entity> entityPerTag;
-  std::unordered_map<int, std::string>
-      tagPerEntity; // Int is used to go by ID #
 
   // Entiy groups (a set of entities per group name)
-  std::unordered_map<std::string, std::set<Entity>> entitiesPerGroup;
-  std::unordered_map<int, std::string> groupPerEntity;
-  ;
+  std::unordered_map<std::string, std::set<Entity, EntityOrder>>
+      entitiesPerGroup;
 
   // List of free entity ids that were previously removed
   std::deque<int> freeIds;
@@ -275,6 +317,28 @@ private:
   // bounds checks exist once. Sets `miss` to the reason on failure.
   template <typename TComponent>
   TComponent *FindComponent(Entity entity, ComponentMiss &miss) const;
+
+  // Whether `id` is currently held by any entity, independent of generation:
+  // occupied means "in [0, numEntities) and not parked in freeIds". Named so
+  // that "what does occupied mean" has one home. A liveness bitmap has been
+  // floated to replace this scan (P49, tracked in docs/TECH_DEBT.md); an
+  // unnamed, single-use reimplementation of occupancy is exactly what such a
+  // change would miss.
+  bool IsIdInUse(std::size_t id) const;
+
+  // Shared implementation of CountEntitiesMissedBySystem and
+  // AdmitExistingEntitiesTo: entities that are live, past admission, match
+  // `system`'s signature, and are not already one of its members.
+  //
+  // A Registry member (not a free function) so it can stamp each candidate's
+  // real, current generation before `visit` or the members-list comparison
+  // below sees it — id occupancy and generation are both private state.
+  // Handing `visit` a bare Entity(id) (generation 0) would make every == it
+  // takes part in — the members-list scan, and any comparison a caller makes
+  // afterward — read as a mismatch against the real, live entity holding
+  // that id.
+  template <typename TVisitor>
+  void ForEachMissedEntity(const System &system, TVisitor &&visit) const;
 
 public:
   Registry() { logger.Log("Registry constructor called"); }
@@ -289,14 +353,12 @@ public:
   Entity CreateEntity();
   void KillEntity(Entity entity);
 
-  // True while `entity`'s id is in use. NOTE: ids are recycled, so a stale
-  // handle whose id has since been handed to a new entity reports alive —
-  // Entity carries no generation counter to tell the two apart.
-  //
-  // Derived from existing state (id < numEntities, and not parked in freeIds)
-  // rather than a liveness bitmap, so it costs a scan of freeIds. A bitmap
-  // would make this O(1) but adds a data member to Registry, and games embed
-  // `Registry` by value, so sizeof(Registry) is ABI. Tracked as P49.
+  // True while `entity`'s id is in use *and* its generation matches the
+  // entity currently holding that id. A stale handle whose id has since been
+  // recycled to a new entity reports false, not true: Entity carries a
+  // generation stamped at creation and bumped when the id is freed, so the
+  // two are never mistaken for each other. O(1): a generation compare, no
+  // freeIds scan.
   bool IsAlive(Entity entity) const;
 
   // True while `entity` is queued for the next Registry::Update() and has not
@@ -327,9 +389,17 @@ public:
 
   // Returns a pointer to `entity`'s TComponent, or nullptr when there is
   // none: no pool for the type, an id out of range, or the signature bit
-  // unset. Silent — a miss is a legitimate answer here, so this is safe to
-  // call every frame, and it cannot alias. This is the correct accessor
-  // whenever absence is possible.
+  // unset. Silent for those — a miss is a legitimate answer here, so this is
+  // safe to call every frame, and it cannot alias. This is the correct
+  // accessor whenever absence is possible.
+  //
+  // EXCEPTIONS, logged (throttled) even here, because neither is a
+  // legitimate miss: a stale handle (its id has since been recycled to a
+  // different entity) means the caller kept an Entity past its death; a
+  // component id past MAX_COMPONENTS means some system's signature is stuck
+  // empty and therefore matches every entity in the world. Both are worth
+  // surfacing through every accessor, TryGetComponent included — a
+  // deliberate strengthening of this accessor's silence, not a side effect.
   template <typename TComponent>
   TComponent *TryGetComponent(Entity entity) const;
 
@@ -399,9 +469,7 @@ public:
   //
   // The pointer aliases the registry's tag map: it is invalidated by TagEntity,
   // RemoveEntityTag, and by the Update() that reaps a killed entity. Read it
-  // and let it go; do not store it across a frame. Entity ids are recycled and
-  // carry no generation counter (KNOWN_ISSUES.md item 1), so the same is true
-  // of the Entity you copy out of it.
+  // and let it go; do not store it across a frame.
   const Entity *TryGetEntityByTag(const std::string &tag) const;
 
   void RemoveEntityTag(Entity entity);
@@ -412,7 +480,10 @@ public:
   std::vector<Entity> GetEntitiesByGroup(const std::string &group) const;
   bool DoesGroupExist(const std::string &group) const;
   void RemoveEntityGroup(Entity entity);
-  std::set<Entity> GetEntitiesToBeKilled() const { return entitiesToBeKilled; }
+
+  // The entities queued for reaping at the next Update(). Order is
+  // unspecified.
+  std::vector<Entity> GetEntitiesToBeKilled() const;
 
   static Registry &Instance();
 };
@@ -521,6 +592,21 @@ void Registry::AddComponent(Entity entity, Targs &&... args) {
     return;
   }
 
+  // A stale handle's id may since have been recycled to a different, live
+  // entity - checked ahead of the range check below for the same reason
+  // FindComponent checks it first: every other guard here is indexed by id
+  // alone, so without this one a stale handle would pass them all and write
+  // into the live occupant's pool slot.
+  if (!IsAlive(entity)) {
+    static thread_local unsigned int staleReports = 0;
+    if (EcsShouldReport(staleReports)) {
+      logger.Err("AddComponent: entity " + std::to_string(entityId) + " " +
+                 ComponentMissDescription(ComponentMiss::Stale) +
+                 "; ignoring" + EcsSuppressionNote(staleReports));
+    }
+    return;
+  }
+
   if (entityId >= entityComponentSignatures.size()) {
     static thread_local unsigned int rangeReports = 0;
     if (EcsShouldReport(rangeReports)) {
@@ -589,6 +675,19 @@ template <typename TComponent> void Registry::RemoveComponent(Entity entity) {
     return;
   }
 
+  // See the matching guard in AddComponent above: without it, a stale
+  // handle whose id has since been recycled would flip the live occupant's
+  // signature bit off, silently dropping a component it never had removed.
+  if (!IsAlive(entity)) {
+    static thread_local unsigned int staleReports = 0;
+    if (EcsShouldReport(staleReports)) {
+      logger.Err("RemoveComponent: entity " + std::to_string(entityId) + " " +
+                 ComponentMissDescription(ComponentMiss::Stale) +
+                 "; ignoring" + EcsSuppressionNote(staleReports));
+    }
+    return;
+  }
+
   if (entityId >= entityComponentSignatures.size()) {
     static thread_local unsigned int rangeReports = 0;
     if (EcsShouldReport(rangeReports)) {
@@ -606,16 +705,13 @@ template <typename TComponent> void Registry::RemoveComponent(Entity entity) {
 }
 
 template <typename TComponent> bool Registry::HasComponent(Entity entity) {
-  const auto componentId = Component<TComponent>::GetId();
-  const auto entityId = entity.GetId();
-
-  static thread_local unsigned int idReports = 0;
-  if (!EcsComponentIdIsValid(componentId, "HasComponent", idReports)) {
-    return false;
-  }
-
-  return (entityId < entityComponentSignatures.size()) &&
-         entityComponentSignatures[entityId][componentId];
+  // Routed through FindComponent — the same shared implementation
+  // TryGetComponent and GetComponent use — so the staleness check lives in
+  // exactly one place. A separate hand-rolled check here, alongside
+  // FindComponent's, is exactly the kind of pair of related checks that has
+  // already drifted apart twice in this codebase.
+  ComponentMiss miss = ComponentMiss::None;
+  return FindComponent<TComponent>(entity, miss) != nullptr;
 }
 
 template <typename TComponent>
@@ -623,10 +719,42 @@ TComponent *Registry::FindComponent(Entity entity, ComponentMiss &miss) const {
   const auto componentId = Component<TComponent>::GetId();
   const auto entityId = entity.GetId();
 
+  // A stale handle's id may since have been recycled to a different, live
+  // entity — every check below is indexed by id alone, so without this one
+  // a stale handle would pass all of them and read that entity's component.
+  // Unlike the other misses, a stale access is never a routine, expected
+  // outcome, so it is reported here directly rather than left to whichever
+  // accessor called in — that way TryGetComponent and HasComponent name it
+  // too, not just GetComponent's own throttled diagnostic below.
+  if (!IsAlive(entity)) {
+    miss = ComponentMiss::Stale;
+    static thread_local unsigned int staleReports = 0;
+    if (EcsShouldReport(staleReports)) {
+      logger.Err("FindComponent: entity " + std::to_string(entityId) + " " +
+                 ComponentMissDescription(ComponentMiss::Stale) +
+                 " for component type '" + typeid(TComponent).name() + "'" +
+                 EcsSuppressionNote(staleReports));
+    }
+    return nullptr;
+  }
+
   // Checked before any bitset::test below — past MAX_COMPONENTS that call
-  // throws, and this template compiles into the game's TU.
+  // throws, and this template compiles into the game's TU. Reported here,
+  // directly and unconditionally, for the same reason Stale is above: a
+  // process-wide component-type overflow means some system's signature is
+  // stuck empty and therefore matches every entity in the world, which is
+  // worth surfacing through every accessor, not just GetComponent's own
+  // throttled diagnostic below (which HasComponent and TryGetComponent never
+  // reach, since they only look at the returned pointer).
   if (componentId >= MAX_COMPONENTS) {
     miss = ComponentMiss::TooManyTypes;
+    static thread_local unsigned int overflowReports = 0;
+    if (EcsShouldReport(overflowReports)) {
+      logger.Err("FindComponent: entity " + std::to_string(entityId) + " " +
+                 ComponentMissDescription(ComponentMiss::TooManyTypes) +
+                 " for component type '" + typeid(TComponent).name() + "'" +
+                 EcsSuppressionNote(overflowReports));
+    }
     return nullptr;
   }
 
@@ -667,18 +795,23 @@ TComponent &Registry::GetComponent(Entity entity) const {
     return *component;
   }
 
-  // One budget per (component type, reason): the counters are static inside a
-  // template instantiated per TComponent, so a game that misses this lookup
-  // every frame logs a handful of lines and then stays silent.
-  static thread_local unsigned int
-      reports[static_cast<std::size_t>(ComponentMiss::Count)] = {};
-  unsigned int &counter = reports[static_cast<std::size_t>(miss)];
-  if (EcsShouldReport(counter)) {
-    logger.Err("GetComponent: entity " + std::to_string(entity.GetId()) + " " +
-               ComponentMissDescription(miss) + " for component type '" +
-               typeid(TComponent).name() +
-               "'; returning a default component" +
-               EcsSuppressionNote(counter));
+  // Stale and TooManyTypes are both reported directly by FindComponent,
+  // unconditionally — logging either again here would double the report.
+  if (miss != ComponentMiss::Stale && miss != ComponentMiss::TooManyTypes) {
+    // One budget per (component type, reason): the counters are static
+    // inside a template instantiated per TComponent, so a game that misses
+    // this lookup every frame logs a handful of lines and then stays
+    // silent.
+    static thread_local unsigned int
+        reports[static_cast<std::size_t>(ComponentMiss::Count)] = {};
+    unsigned int &counter = reports[static_cast<std::size_t>(miss)];
+    if (EcsShouldReport(counter)) {
+      logger.Err("GetComponent: entity " + std::to_string(entity.GetId()) +
+                 " " + ComponentMissDescription(miss) +
+                 " for component type '" + typeid(TComponent).name() +
+                 "'; returning a default component" +
+                 EcsSuppressionNote(counter));
+    }
   }
 
   return EcsFallbackComponent<TComponent>();

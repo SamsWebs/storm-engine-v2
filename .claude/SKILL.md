@@ -177,14 +177,26 @@ These are the biggest correctness traps — understand them before writing ECS c
    `ECS_MAX_DIAGNOSTIC_REPORTS` (4) occurrences per call site and then go quiet,
    and `Logger::messages` is capped at 1000 entries.
 
-9. **Entity ids are recycled, and `Entity` carries no generation counter** —
-   `Registry::IsAlive(e)` reports whether the id is currently in use (id created
-   and not parked in `freeIds`), and `KillEntity` now ignores a kill for an entity
-   that is not alive or is already pending kill this frame, logging a throttled
-   error instead of queueing a double-kill. A **stale handle whose id has since
-   been recycled still reads as alive** and will kill the new occupant — tracked
-   as P5 in `docs/TECH_DEBT.md`. `IsAlive` scans `freeIds`, so it is O(freed ids),
-   not O(1).
+9. **Entity ids are recycled, and `Entity` carries a generation counter** —
+   `Registry::IsAlive(e)` compares the handle's generation against the id's
+   current one (O(1): a generation compare, no `freeIds` scan), so a **stale
+   handle whose id has since been recycled to a different entity reports
+   false**, not alive. Every path that reads, writes or stores entity identity
+   gates on `IsAlive` ahead of its other checks — `KillEntity`, `AddComponent`,
+   `RemoveComponent`, the component reads
+   (`HasComponent`/`TryGetComponent`/`GetComponent`), and `TagEntity`,
+   `GroupEntity` and `AddEntityToSystems` — so a stale handle logs a throttled
+   error and no-ops instead of touching the live occupant.
+
+   The last three matter more than they look. Before they were gated, tagging
+   through a stale handle silently stripped the *live* entity's tag, and a stale
+   entity injected into a system was never removed, because removal only happens
+   for entities the registry itself reaps.
+
+   Generation 0 is reserved and never valid, so an `Entity` built from a bare id
+   is stale by construction. The counter skips 0 on wrap for the same reason:
+   landing on it would make every fabricated handle compare equal to whatever
+   live entity next took that id.
 
 ### Built-in Components
 
@@ -1712,7 +1724,7 @@ The engine's `netplay-checkers` example demonstrates graphical, authoritative-ne
 | Forget to null-check `AssetStore::GetTexture` | It returns `nullptr` for missing IDs, not an exception |
 | Call `GetComponent<T>` where a miss is possible | Use `TryGetComponent<T>` — `GetComponent` returns a shared per-thread fallback on a miss, and two misses alias each other |
 | Call `GetEntityByTag` unguarded | Guard with `DoesTagExist(tag)` — it still `.at()`s, which terminates under `-fno-exceptions` |
-| Keep an `Entity` past the frame it might die in | Ids are recycled and `Entity` carries no generation, so a stale handle can kill a live entity; `IsAlive` cannot tell them apart. Re-look up by tag or group |
+| Keep an `Entity` past the frame it might die in | Harmless by itself now — `Entity` carries a generation and `IsAlive` tells a stale handle apart from the live entity now holding its id — but a stale handle still no-ops with a throttled log wherever it's used. Re-look up by tag or group instead of relying on that |
 | Hand-build an `Entity(88)` and call methods on it | Every forwarder now null-checks `registry` and no-ops with a throttled log — it is not UB any more, but it still does nothing |
 
 ---
@@ -1800,14 +1812,15 @@ the game's own headers.
 - Ten further defects were **real, understood and deliberately unfixed in
   1.x** because each needed a source or ABI break; they are tracked in
   `KNOWN_ISSUES.md` with a workaround apiece. 2.0.0 closes several of them:
-  `Entity(std::size_t)` is now `explicit`, `NetServer`/`NetClient`/
-  `NetConnection`/`NetSocket` are no longer copyable, and item 10's collision
+  `Entity` now carries a generation counter, so a stale handle whose id has
+  been recycled is rejected instead of aliasing the live entity holding it;
+  `Entity(std::size_t)` is now `explicit`; `NetServer`/`NetClient`/
+  `NetConnection`/`NetSocket` are no longer copyable; and item 10's collision
   half is closed (`CollisionSystem` is deleted — its event-bus half stays
-  open). Highlights of what remains: recycled entity ids with no generation
-  counter, component set frozen at admission, tile animation fields discarded
-  by the loader, and **no namespaces — every engine type (`Entity`,
-  `Registry`, `Logger`, `Tile`…) is a global symbol**, so a game declaring its
-  own collides. (`docs/TECH_DEBT.md` is gitignored and local-only;
-  `KNOWN_ISSUES.md` is the tracked record.)
+  open). Highlights of what remains: component set frozen at admission, tile
+  animation fields discarded by the loader, and **no namespaces — every
+  engine type (`Entity`, `Registry`, `Logger`, `Tile`…) is a global symbol**,
+  so a game declaring its own collides. (`docs/TECH_DEBT.md` is gitignored
+  and local-only; `KNOWN_ISSUES.md` is the tracked record.)
 
 

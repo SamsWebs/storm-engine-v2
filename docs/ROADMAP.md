@@ -20,7 +20,7 @@ That already happened once. 1.3.0 changed `sizeof(AssetStore)` from 112 to 208, 
 because games allocate the store themselves with `std::make_unique<AssetStore>()`,
 the size is emitted at *their* call site. Nothing warned.
 
-### 1. Pin the layout first — before any of the rest
+### 1. Pin the layout first — before any of the rest — **DONE**
 
 Add a spec asserting `sizeof(Registry) == 576`, `sizeof(Entity) == 16`,
 `sizeof(System) == 32`, `sizeof(Signature) == 8`, `sizeof(Tile) == 80` on x86-64.
@@ -30,7 +30,7 @@ changes one of those numbers, and the pin forces each change to be a conscious e
 in a spec file rather than a silent consequence. It converts exactly the failure
 mode the `AssetStore` incident came from.
 
-### 2. `Entity` gains a generation counter — `KNOWN_ISSUES.md` item 1
+### 2. `Entity` gains a generation counter — `KNOWN_ISSUES.md` item 1 — **DONE**
 
 `sizeof(Entity)` 16 → 24. The highest-risk item in the release.
 
@@ -51,6 +51,25 @@ current wrong behaviour and carry comments saying a breaking release must flip t
 Only one that confirms it is *rejected* does. This release shipped four checks that
 passed while the thing they checked was broken, every one of them asserting on a
 proxy — a count, a log line, a build succeeding — instead of the property.
+
+**Landed.** `sizeof(Entity)` 16 → 24, `sizeof(Registry)` 576 → 600 → **488** — it grew by the
+generations vector and then shrank further when the two reverse index maps went away. Generation 0 is
+reserved as never-valid, so a hand-built `Entity(id)` is stale by construction. `operator<` and `operator>`
+were deleted, `IsAlive` became exact and O(1), and stale handles are now rejected at read *and* write.
+
+Two things the whole-branch review caught that six task-scoped reviews could not, both worth remembering
+when items 3-6 are planned:
+
+- **`ContactSystem` kept its own id-keyed frame state.** Its `previous` pairs were raw ids, so a recycled id
+  made `onEnd` fire naming an entity that never began that contact — `KNOWN_ISSUES` item 1's exact shape
+  surviving inside the wave that closes it, behind a comment claiming it was guarded. Fixing `Entity` does
+  not fix everything that stores entity identity; the next layout item should start by asking who else keeps
+  a copy.
+- **Reads were hardened and writes were not.** `AddComponent` through a dead handle silently overwrote the
+  live occupant. Symmetry is not automatic — check every door, not the one the defect was reported through.
+
+The layout pin earned itself immediately: it caught each size change as it happened and forced a measured
+number into every commit message.
 
 ### 3. `System` gains a disabled latch — `KNOWN_ISSUES.md` item 4
 
@@ -150,6 +169,34 @@ Settle two design questions before writing code: what identifies a body (an opaq
 `std::size_t`, or `void*` userdata), and whether the core owns the begin/end state
 or the caller does.
 
+### An example with sustained entity churn
+
+Genre coverage is decent — platformer (plus Switch and Android ports), JRPG,
+Tetris, shooter, hockey, strategy, checkers, and three networking samples.
+Racing, roguelike and tower-defense are unrepresented, but genre is not the gap.
+
+The gap is **churn**. Only four of the eleven examples kill an entity at all
+(`shooter`, `puzzle`, `strategy`, `netplay-checkers`), and none of them creates
+and destroys entities continuously. So nothing in the tree exercises id
+recycling at scale — which is exactly why the generation-counter wrap survived
+every review and every one of 428 specs, and was found only by an adversarial
+probe that drove `Registry::Update()` flat out for an hour.
+
+A wave-survival or bullet-hell example would exercise it as a side effect of
+being what it is: hundreds of entities spawning and dying per second, handles
+held across frames, ids recycling constantly.
+
+Worth being honest about what an example can and cannot show here, though. The
+layout wave's changes are **invisible in correct code** — a stale handle is
+rejected, and a game that never keeps one notices nothing. An example cannot
+demonstrate that without deliberately misusing the engine. What it would do is
+*exercise* the recycling path under real load, which is different and arguably
+more valuable: a soak target rather than a teaching sample.
+
+If the goal is coverage rather than a sample, a long-running stress spec would
+buy more per line than an example does, and would not add a twelfth README to
+sweep the next time something is deleted.
+
 ### A lighting overlay
 
 Generalises a technique proven in a shipping game: two quarter-resolution RGBA
@@ -193,6 +240,20 @@ feature under test.
 confusing compile error. Once `sizeof(Entity)`, `sizeof(System)` and `sizeof(Tile)`
 change, the same mistake is silent memory corruption.
 
+### Comments cite line numbers, and the line numbers rot
+
+Several comments in `common/` point at specific lines — for example `common/systems/contact.h` citing
+`common/ecs.cpp:439` for where a killed id returns to the free list. That line is `AddEntityToSystems`; the
+free-list push is at 457.
+
+This is not a one-off. Line citations drifted **four times in a single day's work**: 404/537 became 410/543,
+then 546, and this one was wrong twice — including once where a fix report claimed it had been corrected
+and it had not. Each edit above a cited line silently invalidates it, and nothing checks.
+
+The fix is not to correct the numbers. Cite function names instead — `grep -n` finds them, and they do not
+drift. This is worth doing as a sweep rather than opportunistically, because a half-swept file is exactly
+the state that makes the remaining citations look trustworthy.
+
 ### `editor/` does not build under GCC 13
 
 Vendored `ImGuiFileDialog.cpp` is missing `<cstdint>`. Pre-existing and unrelated to
@@ -219,3 +280,46 @@ though new.
   `AddSystem`, so a subclass whose constructor had an observable side effect outside
   the `Registry` would fire it and then have the instance discarded. Not live: every
   current system's constructor only calls `RequireComponent`.
+
+### Carried from the layout wave
+
+Reviewed, ruled on, deliberately deferred.
+
+- ~~**`generations[id]` can wrap to 0**~~ — **fixed.** Ruled "unreachable in practice" and that ruling was
+  wrong. An adversarial review measured the rate rather than arguing it: **1.66 hours** on a harness driving
+  `Update()` flat out, ~50 days at 1 kHz, because the constraint is one increment per id per `Update()` call,
+  not per kill. At the boundary a hand-built `Entity(id)` compared equal to a live entity, read its
+  components and killed it — `KNOWN_ISSUES` item 1 verbatim, under a "Resolved in 2.0.0" note. Clamped.
+- **No spec recycles an id more than once.** Every stale-handle case goes generation 1 → 2. A case that
+  recycles three or four times would cover the counter's actual behaviour rather than its first step.
+- **`Entity::GetGeneration()` is asserted on by no spec** — it is a new public accessor with no direct
+  coverage.
+- ~~**`TagEntity`/`GroupEntity` accept stale handles**~~ — **fixed, and it was worse than recorded here.**
+  Filed as a lookup oddity; proved to be a *regression this wave introduced*. Against base `93cb817`, tagging
+  through a stale handle left the live entity's tag intact; on the branch the live entity **silently lost its
+  tag**, zero log lines. The group half was caused by the wave's own change — the old `std::set<Entity>` with
+  id-only `operator<` deduplicated by id, `EntityOrder` does not. `AddEntityToSystems` was a third such path
+  and the worst: a stale member was never removed, so systems iterated it every frame forever. All three now
+  carry the same `IsAlive` gate as `AddComponent`.
+
+  The lesson worth keeping: the write paths were never enumerated. `AddComponent` and `RemoveComponent` were
+  gated because someone noticed them individually. Before the next layout item, list every path that mutates
+  or stores entity identity and check them as a set.
+- **Five mutants survived the suite** when it was mutation-tested. Four remain open: `++generations[id]`
+  → `+= 2` (no spec asserts a generation *value* or a second recycle), `System::RemoveEntityFromSystem`
+  reduced to id-only, `EntityHasTag` reduced to id-only, and `GetEntitiesToBeKilled` stripping the generation
+  off every returned handle — the last is asserted on only by `.size()`, which is exactly the proxy pattern.
+  The fifth, `ContactSystem::PairKeyOrder` reduced to id-only, is closed: it silently dropped contact *begin*
+  events for a recycled entity with the suite green, and now has a spec naming the entity by
+  `(id, generation)`.
+- **Cross-registry aliasing is untouched.** `operator==` and `IsAlive` both ignore `Entity::registry`, and
+  every registry's generations start at 1, so one registry will report another's entity as alive, read its
+  components and kill it. Pre-existing and identical on base — but the engine's own pattern is a `Registry`
+  per `GameState` plus a singleton, the pointer is already in the struct, and `IsAlive` could close it with
+  `&& entity.registry == this`.
+- **`EntityOrder` is a new unqualified global symbol.** A game defining its own collides. Item 6
+  (`namespace storm`) resolves it.
+- **`RemoveEntityGroup` never erases an emptied group**, so `DoesGroupExist` stays true after every member
+  dies. Pre-existing; the new scan now also walks those empty entries.
+- **`Makefile.win` has no `-pthread`/`-mthreads`** while two spec files now use `std::thread`. Untested — no
+  MinGW toolchain available here. `Makefile.debian` has it.

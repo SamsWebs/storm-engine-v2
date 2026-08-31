@@ -281,14 +281,10 @@ private:
 
   // Entity tags (one tag name per entity)
   std::unordered_map<std::string, Entity> entityPerTag;
-  std::unordered_map<int, std::string>
-      tagPerEntity; // Int is used to go by ID #
 
   // Entiy groups (a set of entities per group name)
   std::unordered_map<std::string, std::set<Entity, EntityOrder>>
       entitiesPerGroup;
-  std::unordered_map<int, std::string> groupPerEntity;
-  ;
 
   // List of free entity ids that were previously removed
   std::deque<int> freeIds;

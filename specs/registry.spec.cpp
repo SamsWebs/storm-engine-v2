@@ -733,3 +733,19 @@ Describe(StaleHandleContainerSpec) {
                  Equals(false));
   };
 };
+
+Describe(TagCleanupSpec) {
+  It(should_not_let_a_recycled_id_inherit_a_tag) {
+    Registry registry;
+    Entity first = registry.CreateEntity();
+    first.Tag("player");
+    registry.Update();
+
+    first.Kill();
+    registry.Update();
+
+    Entity second = registry.CreateEntity(); // same id
+    Assert::That(registry.EntityHasTag(second, "player"), Equals(false));
+    Assert::That(registry.DoesTagExist("player"), Equals(false));
+  };
+};

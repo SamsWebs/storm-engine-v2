@@ -453,28 +453,19 @@ void Registry::Update() {
 }
 void Registry::TagEntity(Entity entity, const std::string &tag) {
   // One tag per entity, one entity per tag — last write wins on both sides.
-  // (emplace would silently no-op and leave the two maps inconsistent.)
   RemoveEntityTag(entity); // drop this entity's previous tag, if any
 
-  auto existing = entityPerTag.find(tag);
-  if (existing != entityPerTag.end()) {
-    tagPerEntity.erase(existing->second.GetId()); // untag the previous holder
-  }
-
+  // Assigning entityPerTag[tag] below overwrites whatever entity previously
+  // held it — no separate step needed to untag that previous holder.
   entityPerTag.insert_or_assign(tag, entity);
-  tagPerEntity.insert_or_assign(entity.GetId(), tag);
 }
 
 bool Registry::EntityHasTag(Entity entity, const std::string &tag) const {
-  if (tagPerEntity.find(entity.GetId()) == tagPerEntity.end()) {
-    return false;
-  }
-
   auto it = entityPerTag.find(tag);
   if (it == entityPerTag.end()) {
     return false;
   }
-  return it->second == entity;
+  return it->second == entity; // generation-aware: a stale entity misses
 }
 
 bool Registry::DoesTagExist(const std::string &tag) const {
@@ -498,22 +489,23 @@ const Entity *Registry::TryGetEntityByTag(const std::string &tag) const {
 }
 
 void Registry::RemoveEntityTag(Entity entity) {
-  auto taggedEntity = tagPerEntity.find(entity.GetId());
-  if (taggedEntity != tagPerEntity.end()) {
-    auto tag = taggedEntity->second;
-    entityPerTag.erase(tag);
-    tagPerEntity.erase(taggedEntity);
+  // No reverse index: scan entityPerTag for the entry this entity holds.
+  // Runs once per entity at kill time, alongside work that is already O(n).
+  for (auto it = entityPerTag.begin(); it != entityPerTag.end(); ++it) {
+    if (it->second == entity) {
+      entityPerTag.erase(it);
+      break;
+    }
   }
 }
 
 void Registry::GroupEntity(Entity entity, const std::string &group) {
   // One group per entity — re-grouping moves the entity, so a later kill
-  // can't leave it stranded in a group groupPerEntity no longer records.
+  // doesn't need to find it in more than one group's set.
   RemoveEntityGroup(entity);
 
   entitiesPerGroup.emplace(group, std::set<Entity, EntityOrder>());
   entitiesPerGroup[group].emplace(entity);
-  groupPerEntity.insert_or_assign(entity.GetId(), group);
 }
 
 bool Registry::EntityBelongsToGroup(Entity entity,
@@ -560,17 +552,14 @@ bool Registry::DoesGroupExist(const std::string &group) const {
 }
 
 void Registry::RemoveEntityGroup(Entity entity) {
-  // If in group, remove entity from group management
-  auto groupedEntity = groupPerEntity.find(entity.GetId());
-  if (groupedEntity != groupPerEntity.end()) {
-    auto group = entitiesPerGroup.find(groupedEntity->second);
-    if (group != entitiesPerGroup.end()) {
-      auto entityInGroup = group->second.find(entity);
-      if (entityInGroup != group->second.end()) {
-        group->second.erase(entityInGroup);
-      }
+  // No reverse index: scan entitiesPerGroup for the set holding this entity.
+  // Runs once per entity at kill time, alongside work that is already O(n).
+  for (auto &groupEntry : entitiesPerGroup) {
+    auto entityInGroup = groupEntry.second.find(entity);
+    if (entityInGroup != groupEntry.second.end()) {
+      groupEntry.second.erase(entityInGroup);
+      break;
     }
-    groupPerEntity.erase(groupedEntity);
   }
 }
 

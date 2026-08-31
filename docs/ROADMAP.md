@@ -257,16 +257,38 @@ though new.
 
 Reviewed, ruled on, deliberately deferred.
 
-- **`generations[id]` can wrap to 0**, un-reserving the reserved value after 2³² kills of one id — about 2.3
-  years of killing the same id at 60 Hz. Unreachable in a game, reachable in principle on a long-lived
-  server. One line: `if (++generations[id] == 0) generations[id] = 1;`.
+- ~~**`generations[id]` can wrap to 0**~~ — **fixed.** Ruled "unreachable in practice" and that ruling was
+  wrong. An adversarial review measured the rate rather than arguing it: **1.66 hours** on a harness driving
+  `Update()` flat out, ~50 days at 1 kHz, because the constraint is one increment per id per `Update()` call,
+  not per kill. At the boundary a hand-built `Entity(id)` compared equal to a live entity, read its
+  components and killed it — `KNOWN_ISSUES` item 1 verbatim, under a "Resolved in 2.0.0" note. Clamped.
 - **No spec recycles an id more than once.** Every stale-handle case goes generation 1 → 2. A case that
   recycles three or four times would cover the counter's actual behaviour rather than its first step.
 - **`Entity::GetGeneration()` is asserted on by no spec** — it is a new public accessor with no direct
   coverage.
-- **`TagEntity`/`GroupEntity` accept stale handles**, so a group set can hold two entries with the same id
-  and different generations, and `GetEntitiesByGroup` can hand a game a dead `Entity`. The same `IsAlive`
-  gate that fixed the component write paths would fix both.
+- ~~**`TagEntity`/`GroupEntity` accept stale handles**~~ — **fixed, and it was worse than recorded here.**
+  Filed as a lookup oddity; proved to be a *regression this wave introduced*. Against base `93cb817`, tagging
+  through a stale handle left the live entity's tag intact; on the branch the live entity **silently lost its
+  tag**, zero log lines. The group half was caused by the wave's own change — the old `std::set<Entity>` with
+  id-only `operator<` deduplicated by id, `EntityOrder` does not. `AddEntityToSystems` was a third such path
+  and the worst: a stale member was never removed, so systems iterated it every frame forever. All three now
+  carry the same `IsAlive` gate as `AddComponent`.
+
+  The lesson worth keeping: the write paths were never enumerated. `AddComponent` and `RemoveComponent` were
+  gated because someone noticed them individually. Before the next layout item, list every path that mutates
+  or stores entity identity and check them as a set.
+- **Five mutants survived the suite** when it was mutation-tested. Four remain open: `++generations[id]`
+  → `+= 2` (no spec asserts a generation *value* or a second recycle), `System::RemoveEntityFromSystem`
+  reduced to id-only, `EntityHasTag` reduced to id-only, and `GetEntitiesToBeKilled` stripping the generation
+  off every returned handle — the last is asserted on only by `.size()`, which is exactly the proxy pattern.
+  The fifth, `ContactSystem::PairKeyOrder` reduced to id-only, is closed: it silently dropped contact *begin*
+  events for a recycled entity with the suite green, and now has a spec naming the entity by
+  `(id, generation)`.
+- **Cross-registry aliasing is untouched.** `operator==` and `IsAlive` both ignore `Entity::registry`, and
+  every registry's generations start at 1, so one registry will report another's entity as alive, read its
+  components and kill it. Pre-existing and identical on base — but the engine's own pattern is a `Registry`
+  per `GameState` plus a singleton, the pointer is already in the struct, and `IsAlive` could close it with
+  `&& entity.registry == this`.
 - **`EntityOrder` is a new unqualified global symbol.** A game defining its own collides. Item 6
   (`namespace storm`) resolves it.
 - **`RemoveEntityGroup` never erases an emptied group**, so `DoesGroupExist` stays true after every member

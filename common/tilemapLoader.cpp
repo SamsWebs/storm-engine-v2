@@ -1,5 +1,7 @@
 #include "tilemapLoader.h"
 
+namespace storm {
+
 TileMapLoader::TileMapLoader(const std::string &fileMap,
                              const std::string &filePng, int tileSize)
     : tileSize{tileSize}, mapSurface{nullptr} {
@@ -98,6 +100,10 @@ void TileMapLoader::loadFilemapCSV(const std::string &fileMap) {
 //   collider [colW colH offX offY] animated [numFrames speed vert loop
 //   frameOff]
 //
+// Every field on that line now reaches Tile. Before 2.0.0 the collider offset
+// and all five animation fields were parsed purely to advance the stream and
+// then dropped, because Tile had nowhere to put them.
+//
 void TileMapLoader::loadFilemapEditor(const std::string &fileMap) {
   std::ifstream fmap{fileMap};
   if (!fmap.is_open()) {
@@ -121,10 +127,9 @@ void TileMapLoader::loadFilemapEditor(const std::string &fileMap) {
     if (!(fmap >> animatedFlag))
       animatedFlag = 0;
 
-    // Consume optional animation fields if present
+    int numFrames = 1, frameSpeed = 1, frameOffset = 0;
+    bool vertical = true, looped = true;
     if (animatedFlag) {
-      int numFrames, frameSpeed, frameOffset;
-      bool vertical, looped;
       fmap >> numFrames >> frameSpeed >> vertical >> looped >> frameOffset;
     }
 
@@ -142,6 +147,13 @@ void TileMapLoader::loadFilemapEditor(const std::string &fileMap) {
     tile.hasCollider = (colliderFlag != 0);
     tile.colliderW = colW;
     tile.colliderH = colH;
+    tile.colliderOffset = glm::vec2(offX, offY);
+    tile.isAnimated = (animatedFlag != 0);
+    tile.numFrames = numFrames;
+    tile.frameSpeedRate = frameSpeed;
+    tile.vertical = vertical;
+    tile.isLooped = looped;
+    tile.frameOffset = frameOffset;
 
     map.push_back(tile);
   }
@@ -182,3 +194,5 @@ const Map &TileMapLoader::getMap() const { return map; }
 const glm::ivec2 TileMapLoader::getMapResolution() const {
   return mapResolution;
 }
+
+} // namespace storm

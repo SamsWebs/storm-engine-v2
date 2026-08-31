@@ -2,6 +2,8 @@
 
 #include <cstdint>
 
+namespace storm {
+
 // ── Networking core types (SDL-free) ────────────────────────────────────────
 // IPv4 UDP transport for hosting and joining games, built on the patterns from
 // Teeworlds 0.7.5 (zlib license): reliability on demand, chunk batching, a
@@ -52,3 +54,5 @@ struct NetChunk {
     int size = 0;
     bool vital = false;
 };
+
+} // namespace storm

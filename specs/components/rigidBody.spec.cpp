@@ -4,6 +4,7 @@
 #include "../../common/components/rigidBody.h"
 
 using namespace igloo;
+using namespace storm;
 
 Describe(RigidBodyComponentSpec){
     It(should_initialize_with_default_values){// Arrange & Act

@@ -3,6 +3,8 @@
 #include "netSnapshot.h"
 #include "netVarInt.h"
 
+namespace storm {
+
 static uint32_t MakeKey(uint16_t type, uint16_t id) {
   return ((uint32_t)type << 16) | id;
 }
@@ -363,3 +365,5 @@ void NetSnapshotCache::Reset() {
   nextSlot_ = 0;
   latestTick_ = -1;
 }
+
+} // namespace storm

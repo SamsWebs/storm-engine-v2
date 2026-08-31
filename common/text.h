@@ -5,6 +5,8 @@
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_ttf.h>
 
+namespace storm {
+
 // Drawing one line of text with SDL_ttf is a five-call dance - render to a
 // surface, make a texture from it, query its size, copy it, free both - and
 // every step has a failure path. Four examples wrote their own copy of it and
@@ -73,3 +75,5 @@ struct Text {
     return Draw(renderer, font, text, centreX - size.x / 2, y, color);
   }
 };
+
+} // namespace storm

@@ -11,13 +11,23 @@
 #include "../MouseControl.h"
 #include "ICommand.h"
 
+#include <optional>
+
+using namespace storm;
+
 class RemoveTileCommand : public ICommand {
 private:
   std::shared_ptr<class MouseControl> mMouseControl;
 
-  // Entity ids start at 0, so 0 cannot double as "unset".
-  static constexpr std::size_t kNoTile = (std::size_t)-1;
-  std::size_t mTileId;
+// Stores the Entity rather than its id. Entity ids are recycled, so an id in
+// an undo stack is not an identity: delete a tile, undo, delete it again, place
+// a new tile that takes the recycled id, then redo -- and the redo matches the
+// NEW tile and kills it. Entity::operator== compares id and generation, so a
+// recycled id no longer matches a stale handle.
+  // std::nullopt is the "unset" state -- an id sentinel could not express it
+  // safely, since entity ids start at 0 and (size_t)-1 is a valid id in
+  // principle.
+  std::optional<Entity> mTile;
   bool mCollider, mAnimated;
 
   BoxColliderComponent mBoxColliderComponent;

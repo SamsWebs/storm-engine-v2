@@ -21,6 +21,8 @@
 
 #include "../components/playerComponent.h"
 
+using namespace storm;
+
 #ifdef __SWITCH__
 #include <switch.h>
 #endif

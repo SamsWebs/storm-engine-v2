@@ -12,10 +12,15 @@ date_added: "2026-08-03"
 
 # Storm! Engine v2
 
-> **Current release: v2.0.0~dev** (`Makefile.debian`) - the compatibility
-> promise that kept the 1.x line's public API stable no longer governs this
-> tree. 2.0.0 is the breaking release `KNOWN_ISSUES.md` describes; several of
-> its items are resolved here, and the rest stay open for a later release.
+> **Current release: v2.0.0** (`Makefile.debian`) - the compatibility promise
+> that kept the 1.x line's public API stable no longer governs this tree. 2.0.0
+> is the breaking release `KNOWN_ISSUES.md` describes: ten breaking changes
+> shipped together, seven of its ten items are resolved outright and an eighth
+> in part. Items 5 (component changes never move system membership) and 8
+> (`gameState.h` compiles the whole engine) stay open for a later release.
+> **2.0.0 requires a rebuild, not a relink** - `Registry` 576→488, `Entity`
+> 16→24, `System` 32→40, `Tile` 80→104, and `MAX_COMPONENTS` 32→64 with no size
+> change at all. See `docs/UPGRADING.md`.
 > Repo: `github.com/WillSams/storm-engine-v2` · License: WTFPL
 >
 > Since v1.2.1: v1.2.2 added the safe accessors (`TryGetComponent`, `IsAlive`,
@@ -138,13 +143,15 @@ These are the biggest correctness traps — understand them before writing ECS c
    entities. A system registered after entities were already flushed starts empty
    and stays empty. Always register systems before creating entities.
 
-3. **`MAX_COMPONENTS = 32` is a process-wide cap** — `IComponent::nextId` is a single
-   static. A 33rd component type does **not** throw any more: `EcsComponentIdIsValid`
+3. **`MAX_COMPONENTS = 64` is a process-wide cap** (32 before 2.0.0) — `IComponent::nextId`
+   is a single static. A 65th component type does **not** throw: `EcsComponentIdIsValid`
    range-checks the id, logs a throttled error, and the type is then ignored
-   everywhere — `RequireComponent` drops the requirement, `AddComponent` /
-   `RemoveComponent` no-op, `HasComponent` returns `false`, and `GetComponent`
-   returns the fallback. Signature bits are set with `operator[]`, never
-   `bitset::set()`, so no throw is emitted into a `-fno-exceptions` game TU.
+   everywhere — `AddComponent` / `RemoveComponent` no-op, `HasComponent` returns
+   `false`, and `GetComponent` returns the fallback. Signature bits are set with
+   `operator[]`, never `bitset::set()`, so no throw is emitted into a
+   `-fno-exceptions` game TU. Since 2.0.0 a `RequireComponent` that overflows
+   **latches the system off** (`System::IsDisabled()`) rather than dropping the
+   requirement, so it matches nothing instead of everything.
 
 4. **Component storage is dense, not sparse** — one `std::vector<T>` per type, indexed
    directly by entity id. Memory per component type is O(highest entity id). Every
@@ -1783,23 +1790,29 @@ the game's own headers.
   2.0.0, so `ContactSystem` is now the only collision system. There is still no event
   bus and no event queue (`KNOWN_ISSUES.md` #10), and the broadphase sweeps one
   axis.
-- **Thirty-two component types, process-wide.** `MAX_COMPONENTS` is 32 and
-  `Signature` is `std::bitset<32>`; ids come from one global counter, so the cap
-  is per binary, not per `Registry`. Overflow no longer throws — the id is
-  range-checked, logged and ignored — but a system whose `RequireComponent<T>`
-  was dropped keeps an empty signature, and an empty signature matches **every**
-  entity. Prefer widening a component with a `kind` enum over declaring a new one.
+- **Sixty-four component types, process-wide.** `MAX_COMPONENTS` is 64 since
+  2.0.0 (32 before) and `Signature` is `std::bitset<64>`; ids come from one
+  global counter, so the cap is per binary, not per `Registry`. Overflow does
+  not throw — the id is range-checked, logged and ignored — and a system whose
+  `RequireComponent<T>` overflowed is now latched off, so it matches **nothing**
+  rather than every entity. Prefer widening a component with a `kind` enum over
+  declaring a new one. 64 is the last free step: at 65 the bitset doubles to 16
+  bytes and moves `sizeof(Registry)` and `sizeof(System)` with it.
 - No built-in scene editor beyond the tile map editor. Entity placement is
   code-driven or XML-driven.
 - The engine ships no main loop, no Game class, no window management.
-- No keyboard abstraction - games read SDL (or libnx `PadState` on Switch)
-  themselves. `common/input/` ships SDL-free touch primitives
-  (`touchControls.h`), the on-screen virtual gamepad (`virtualGamepad.h`:
-  `MakeVPadLayout(w, h, VPadStyle = VPadStyle::Xbox)` / `EvalVPad`, lettered
-  Xbox-style by default with Y top, X left, B right and A bottom, or
-  `VPadStyle::Snes` on request), and since 1.3.0 a real controller wrapper
-  (`gamepad.h`: `Gamepad`), which covers one pad at a time and still no
-  keyboard.
+- `common/input/` ships four sources and, since 2.0.0, a way to bind them
+  together. SDL-free touch primitives (`touchControls.h`); the on-screen virtual
+  gamepad (`virtualGamepad.h`: `MakeVPadLayout(w, h, VPadStyle = VPadStyle::Xbox)`
+  / `EvalVPad`, lettered Xbox-style by default with Y top, X left, B right and A
+  bottom, or `VPadStyle::Snes` on request); a real controller wrapper since 1.3.0
+  (`gamepad.h`: `Gamepad`), one pad at a time; and since 2.0.0 an edge-triggered
+  keyboard (`keyboard.h`: `Keyboard`, fed events rather than polling, because the
+  engine owns no main loop and two `SDL_PollEvent` sites drain one shared queue).
+  `actionMap.h` binds one game action across all four (`ActionMap::Bind` /
+  `Update` / `WasPressed`); every source is optional, so a desktop build and a
+  phone build share one binding table. On Switch, games still read libnx
+  `PadState` themselves.
 - `common/net/` is absent from the **Switch** build only:
   `examples/nx-platformer/Makefile` globs `$(wildcard $(dir)/*.cpp)` over
   `include/stormengine2` (a symlink to `common/`), which is non-recursive and

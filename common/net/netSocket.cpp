@@ -41,6 +41,8 @@ using SocketHandle = int;
 #define NET_GETPID getpid
 #endif
 
+namespace storm {
+
 // ws2_32 refuses every entry point with WSANOTINITIALISED until WSAStartup has
 // succeeded once in the process — name resolution included, not just socket().
 // So every function here that touches winsock calls this first, and it has to
@@ -293,3 +295,5 @@ uint32_t NetRandom32() {
   seed ^= seed << 17;
   return (uint32_t)seed;
 }
+
+} // namespace storm

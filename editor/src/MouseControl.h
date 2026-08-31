@@ -2,6 +2,8 @@
 
 #include <SDL2/SDL.h>
 
+#include <optional>
+
 #include <glm/glm.hpp>
 
 #include <stormengine2/components/animation.h>
@@ -13,6 +15,8 @@
 
 #include "AssetManager.h"
 #include "utilities/Utilities.h"
+
+using namespace storm;
 
 class MouseControl {
 private:
@@ -35,7 +39,10 @@ private:
   bool mTileAdded;
   bool mTileRemoved;
 
-  int mMostRecentTileId;
+  // The Entity, not its id. An id alone is not an identity: ids are recycled,
+  // so an undo stack holding one can name a different tile later. See the
+  // note on RemoveTileCommand::Redo.
+  std::optional<Entity> mMostRecentTile;
 
   // Components
   SpriteComponent mSpriteComponent, mRemovedSpriteComponent;
@@ -186,7 +193,9 @@ public:
    */
   inline const bool &TileAdded() const { return mTileAdded; }
   inline void SetTileAdded(bool tile) { mTileAdded = tile; }
-  inline const int &GetRecentTileId() const { return mMostRecentTileId; }
+  inline const std::optional<Entity> &GetRecentTile() const {
+    return mMostRecentTile;
+  }
 
   inline const bool &TileRemoved() const { return mTileRemoved; }
   inline void SetTileRemoved(bool tile) { mTileRemoved = tile; }

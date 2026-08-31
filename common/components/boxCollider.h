@@ -2,6 +2,8 @@
 
 #include <glm/glm.hpp>
 
+namespace storm {
+
 struct BoxColliderComponent {
   int width;
   int height;
@@ -11,3 +13,4 @@ struct BoxColliderComponent {
                        glm::vec2 offset = glm::vec2(0))
       : width{width}, height{height}, offset{offset} {}
 };
+} // namespace storm

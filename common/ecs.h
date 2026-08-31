@@ -15,7 +15,19 @@
 #include <unordered_map>
 #include <vector>
 
-constexpr unsigned int MAX_COMPONENTS = 32;
+namespace storm {
+
+// Raised 32 -> 64 in 2.0.0. This needed a major release despite changing no
+// struct size, and that is exactly why: sizeof(std::bitset<N>) is 8 bytes for
+// every N from 1 to 64, so Signature is 8 bytes either way and no size check
+// can catch a translation unit still compiled against 32. Two TUs disagreeing
+// about MAX_COMPONENTS disagree about what type Signature *is* -- an ODR
+// violation that links cleanly and misbehaves at runtime. Rebuild the library,
+// the editor and every game against one value, in one go.
+//
+// 64 is the ceiling that stays free: at 65 the bitset becomes 16 bytes, which
+// changes sizeof(Registry) and sizeof(System) and is a second ABI break.
+constexpr unsigned int MAX_COMPONENTS = 64;
 
 //////////////////////////////////////////
 // Signature
@@ -190,6 +202,12 @@ private:
   Signature componentSignature;
   using EntitiesContainer = std::vector<Entity>;
   EntitiesContainer entities;
+  // Latched on when RequireComponent<T>() is handed a type past
+  // MAX_COMPONENTS. One-way on purpose: a system that lost a requirement can
+  // never be made correct again at runtime, because the id it wanted does not
+  // exist. See RequireComponent below for why the latch is the fix rather than
+  // simply dropping the requirement.
+  bool disabled = false;
 
 protected:
   void
@@ -204,6 +222,10 @@ public:
   std::vector<Entity> &GetSystemEntities();
   const Signature &GetComponentSignature() const;
 
+  // True once a RequireComponent<T>() call overflowed MAX_COMPONENTS. A
+  // disabled system is never offered an entity, so it matches nothing.
+  bool IsDisabled() const;
+
   // Define the component type T that entities must have to be
   // considered by the system
   template <typename TComponent> void RequireComponent();
@@ -215,8 +237,23 @@ template <typename TComponent> void System::RequireComponent() {
   static thread_local unsigned int reports = 0;
   if (!EcsComponentIdIsValid(componentId, "System::RequireComponent",
                              reports)) {
-    return; // the requirement is dropped rather than throwing out of a
-            // -fno-exceptions translation unit
+    // The requirement is dropped rather than throwing out of a
+    // -fno-exceptions translation unit -- but dropping it alone fails in the
+    // wrong direction. Membership is
+    // (entitySignature & systemSignature) == systemSignature, so a system
+    // that lost every requirement holds an empty signature, and an empty
+    // signature matches EVERY entity: a system that should have seen nothing
+    // would run on the whole world. Latching it off makes the failure
+    // "matches nothing", which is the direction a game can survive.
+    //
+    // Note what this does NOT do: it leaves componentSignature alone. A system
+    // whose FIRST requirement resolved and whose second overflowed keeps the
+    // first bit, so a latched signature is not necessarily empty. Every path
+    // that decides membership must therefore test IsDisabled() rather than
+    // infer it from the signature -- GetComponentSignature().none() is not a
+    // proxy for "latched" in either direction.
+    disabled = true;
+    return;
   }
 
   // operator[] rather than set(pos): set/test carry an out_of_range throw
@@ -274,7 +311,10 @@ private:
   // real CreateEntity/KillEntity cycles. Same trick as IComponent::nextId
   // (protected, reached through a derived spec struct) applied via
   // friendship instead, since `generations` is an instance member, not a
-  // static one a subclass could inherit into scope.
+  // static one a subclass could inherit into scope. The spec must declare it
+  // inside namespace storm -- this names storm::EcsGenerationTestSeam, and a
+  // same-named struct in the global namespace is a different type with no
+  // access.
   friend struct EcsGenerationTestSeam;
 
   std::size_t numEntities = 0;
@@ -872,3 +912,5 @@ template <typename TComponent> TComponent &Entity::GetComponent() const {
   }
   return registry->GetComponent<TComponent>(*this);
 }
+
+} // namespace storm

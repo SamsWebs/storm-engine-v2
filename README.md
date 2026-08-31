@@ -2,7 +2,7 @@
 
 A lightweight, ECS-based 2D game engine built on SDL2 - made for game jams and personal projects.
 
-> **"v2" is the second-generation engine.** The current release is v1.3.0; `main` is at `2.0.0~dev`. 2.0.0 is where the 1.x API freeze resets, so the tree ahead of that release deliberately breaks source compatibility - see [KNOWN_ISSUES.md](KNOWN_ISSUES.md) for what it fixes and [CHANGELOG.md](CHANGELOG.md) for release notes.
+> **"v2" is the second-generation engine.** The current release is **v2.0.0**, which resets the 1.x API freeze: ten breaking changes land together so the traps they fix are gone for good rather than arriving one per release. **It requires a rebuild, not a relink** - four structs changed size and `MAX_COMPONENTS` changed meaning without changing any size at all. See [docs/UPGRADING.md](docs/UPGRADING.md) to migrate, [CHANGELOG.md](CHANGELOG.md) for what changed, and [KNOWN_ISSUES.md](KNOWN_ISSUES.md) for what remains.
 
 ![Storm Engine v2 platformer example](examples/platformer/screenshot.png)
 
@@ -20,31 +20,56 @@ A lightweight, ECS-based 2D game engine built on SDL2 - made for game jams and p
 - **Keyboard** input - edge-triggered `IsDown`/`WasPressed`/`WasReleased` over the full `SDL_Scancode` range, header-only and does not poll (`<stormengine2/input/keyboard.h>`)
 - **Gamepad** support - an `SDL_GameController` wrapper with edge-detected `Pressed`/`Released` and a configurable stick deadzone (`<stormengine2/input/gamepad.h>`), used by the shooter, strategy and sports examples
 - **Virtual gamepad** for touch devices - d-pad + action-button layout, pure and spec'd (`<stormengine2/input/virtualGamepad.h>`), driven by `examples/android-platformer`
+- **Action mapping** - bind one game action across the keyboard, gamepad, virtual gamepad and touch at once, with one edge per action rather than four (`<stormengine2/input/actionMap.h>`, new in 2.0.0)
 - **UDP networking** - host/join LAN play: reliable + unreliable chunks, kick/ban/timeout, snapshot replication with per-client deltas and a prediction cache (`<stormengine2/net/net.h>`, see [docs/networking.md](docs/networking.md))
 - Built-in **tile map editor** with drag-to-paint, drag-to-erase, and layer support
 - Example games: platformer, shooter (*1945*, a vertical shoot-'em-up with menu, HUD and controller support), strategy (*Realms*, a *Dragon Force*-style campaign map with pushed side-on battles - artwork downloaded separately, see below), puzzle, JRPG, sports, Android platformer, Switch platformer, and networking demos (netchat, netrepl, netplay-checkers)
 - Platforms: Linux, Nintendo Switch (source builds), Android (source builds, verified on hardware); iOS possible via the same SDL layer
 
-## Component type limit
+## Namespace
 
-An entity's component set is tracked as a bitmask, so the engine supports **32 distinct component types**:
+Every engine type lives in `namespace storm` as of 2.0.0. Before that they were all global, so a game declaring its own `Entity` or `Logger` collided with the engine's.
+
+New code qualifies or opens the namespace:
 
 ```cpp
-constexpr unsigned int MAX_COMPONENTS = 32;   // common/ecs.h
+#include <stormengine2/ecs.h>
+
+using namespace storm;   // what the examples, the editor and the starter template do
+```
+
+An existing 1.x game needs no editing **for the namespace change**. `<stormengine2/compat/global.h>` emits a `using` declaration for every public engine name, so the cheapest migration is one line in the build:
+
+```make
+CXXFLAGS += -include stormengine2/compat/global.h
+```
+
+The bridge covers the namespace and nothing else. 2.0.0 makes eight other breaking changes, and no `using` declaration can bridge a deleted type: `CollisionSystem` is gone, `Entity::operator<` is deleted, `Entity(std::size_t)` is `explicit`, and the networking types are non-copyable. See [docs/UPGRADING.md](docs/UPGRADING.md) for those.
+
+That header is a bridge, not an API. It pulls every engine name back into the global namespace - the exact collision the namespace exists to prevent - so a game that keeps it forever gains nothing from the change. Use it to get green, then drop it and fix the names. A future major removes it.
+
+## Component type limit
+
+An entity's component set is tracked as a bitmask, so the engine supports **64 distinct component types** (32 before 2.0.0):
+
+```cpp
+constexpr unsigned int MAX_COMPONENTS = 64;   // common/ecs.h
 using Signature = std::bitset<MAX_COMPONENTS>;
 ```
 
 Two things about that number are easy to get wrong:
 
-**It is per binary, not per `Registry`.** Type ids come from a single process-wide counter, handed out on first use of each distinct `Component<T>`. Every `Registry` you create draws from the same pool of 32, so splitting your world across several registries - one per game state, as the examples do - does not buy you more types. The five components the engine ships (`TransformComponent`, `RigidBodyComponent`, `SpriteComponent`, `BoxColliderComponent`, `AnimationComponent`) count against your budget as soon as you use them, leaving 27 for the game.
+**It is per binary, not per `Registry`.** Type ids come from a single process-wide counter, handed out on first use of each distinct `Component<T>`. Every `Registry` you create draws from the same pool of 64, so splitting your world across several registries - one per game state, as the examples do - does not buy you more types. The five components the engine ships (`TransformComponent`, `RigidBodyComponent`, `SpriteComponent`, `BoxColliderComponent`, `AnimationComponent`) count against your budget as soon as you use them, leaving 59 for the game.
 
-**It counts types, not instances.** Ten thousand entities carrying `TransformComponent` use one id. Component types are cheap to instance and expensive to *declare*, so prefer widening an existing component over adding a new one - a `kind` enum inside one component costs nothing, a new struct costs a permanent 1/32.
+**It counts types, not instances.** Ten thousand entities carrying `TransformComponent` use one id. Component types are cheap to instance and expensive to *declare*, so prefer widening an existing component over adding a new one - a `kind` enum inside one component costs nothing, a new struct costs a permanent 1/64.
 
-Declaring a 33rd type is reported on the error log and the type is ignored; it does not throw, so it will not abort the Switch build. But a system whose requirement was dropped this way ends up matching **every** entity rather than none, so treat overflow as a bug to fix, not a degraded mode to ship. Count your types before you get close.
+Declaring a 65th type is reported on the error log and the type is ignored; it does not throw, so it will not abort the Switch build. Since 2.0.0 a system whose requirement was dropped this way is **latched off** and matches nothing, rather than matching every entity as it did before - `System::IsDisabled()` reports it. That is still a bug to fix rather than a degraded mode to ship, but it now fails in the direction a game can survive.
 
-Raising the cap means editing `MAX_COMPONENTS` and rebuilding **everything** that includes `ecs.h`. Anything less is undefined behaviour: `Signature` is `std::bitset<MAX_COMPONENTS>`, so two translation units compiled with different values disagree about what type `Signature` *is*.
+Raising the cap further means editing `MAX_COMPONENTS` and rebuilding **everything** that includes `ecs.h`. Anything less is undefined behaviour: `Signature` is `std::bitset<MAX_COMPONENTS>`, so two translation units compiled with different values disagree about what type `Signature` *is*.
 
-Note that this mismatch is silent up to 64. `sizeof(std::bitset<N>)` is 8 bytes for every `N` from 1 to 64 and 16 bytes from 65, so bumping 32 → 64 changes no struct layout and no size check will catch a stale object file - a game built against a 32-component header linked to a 64-component `.so` will simply misbehave. If you raise it, rebuild the library, the editor, and every game against the same header in one go.
+That mismatch is silent up to 64, which is why the 32 → 64 bump needed a major release rather than a point one. `sizeof(std::bitset<N>)` is 8 bytes for every `N` from 1 to 64 and 16 bytes from 65, so the change moved no struct and no size check could catch a stale object file - a game built against a 32-component header and linked to a 64-component `.so` simply misbehaves. `specs/layout.spec.cpp` therefore pins the *value* alongside the sizes, since the sizes cannot see it.
+
+64 is also the last free step. At 65 the bitset doubles to 16 bytes, moving `sizeof(Registry)` and `sizeof(System)` with it - a second ABI break, not a recompile.
 
 ## Diagnostics
 
@@ -232,6 +257,41 @@ make run    # launch without rebuilding
 - **Right-click / drag** - erase tiles
 - **C** - toggle collider debug overlay
 - The editor saves `.map` files that `TileMapLoader` can load directly in your game
+
+The editor is the only target that links [NFD](https://github.com/mlabbe/nativefiledialog), which Debian and Ubuntu do not package. Build and install it from source once, or the link fails with `cannot find -lnfd`. Nothing else needs it - the library, the spec suite and every example build without it, which is why CI compiles the editor to objects and stops short of the link.
+
+## Action mapping
+
+Four input sources ship in `<stormengine2/input/>`, and until 2.0.0 nothing tied them together, so a game that supported a keyboard, a controller and a phone wrote this in every state, for every action:
+
+```cpp
+if (keyboard.WasPressed(SDL_SCANCODE_SPACE) ||
+    gamepad.Pressed(GamepadButton::A) || vpad.a || touch.jump) Jump();
+```
+
+`ActionMap` resolves one action across all four:
+
+```cpp
+enum class Action { Jump, Left, Right };
+
+ActionBinding jump;
+jump.key   = SDL_SCANCODE_SPACE;
+jump.pad   = GamepadButton::A;
+jump.vpad  = VPadControl::A;
+jump.touch = TouchControl::Jump;
+actions.Bind(static_cast<int>(Action::Jump), jump);
+
+// once per frame, after feeding the keyboard its events and calling gamepad.Update()
+actions.Update(&keyboard, &gamepad, &vpad, &touch);
+
+if (actions.WasPressed(static_cast<int>(Action::Jump))) Jump();
+```
+
+Every source is optional - pass `nullptr` and it contributes nothing, so a desktop build and a phone build share one binding table and differ only in what they hand to `Update`.
+
+With more than one source bound to an action, the action goes down when the **first** source takes it and comes up when the **last** one lets go: pressing a second source mid-hold reports no new press, and releasing one of two held sources reports no release.
+
+Keyboard and gamepad edges are taken from those classes rather than recomputed, so a key pressed and released inside a single frame is still seen as a press. Deriving edges from the held state alone would drop fast taps silently - which is why `Keyboard` tracks presses separately in the first place.
 
 ## Windows / WSL
 

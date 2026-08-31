@@ -2,6 +2,7 @@
 #include <igloo/igloo_alt.h>
 
 using namespace igloo;
+using namespace storm;
 
 Describe(AnimationSystemSpec){
     It(should_step_through_looped_frames){// A large elapsed time that stays

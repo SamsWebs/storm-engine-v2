@@ -12,7 +12,7 @@ This file previously called that release "Storm! Engine v3", which implied a who
 
 **One deliberate exception has been taken.** 1.3.0 added font and sound caches to `AssetStore`, moving `sizeof(AssetStore)` from 112 to 208. Games allocate the store themselves via `std::make_unique<AssetStore>()`, so the size is emitted in game code and a 1.2.x binary relinked against a 1.3.0 `.so` overflows its allocation. It was taken knowingly: the `.deb` ships headers and library together, so the supported upgrade path - install the package, rebuild the game - is always consistent. It is recorded here so the next layout change is argued rather than assumed.
 
-Measured on the current tree (x86-64, g++ 9, `-std=c++17`): `sizeof(Entity)` 24, `sizeof(Signature)` 8, `sizeof(System)` 32, `sizeof(Registry)` 488, `sizeof(Tile)` 80.
+Measured on the current tree (x86-64, g++ 13, `-std=c++17`): `sizeof(Entity)` 24, `sizeof(Signature)` 8, `sizeof(System)` 40, `sizeof(Registry)` 488, `sizeof(Tile)` 104, `MAX_COMPONENTS` 64. These are pinned in `specs/layout.spec.cpp`; if this line and that file ever disagree, the file is right.
 
 ## 1. A stale `Entity` handle can kill a different, live entity
 
@@ -52,11 +52,15 @@ Every `Entity` member now null-checks its registry pointer, so this no-ops and l
 
 ## 3. Thirty-two component types, process-wide
 
-`MAX_COMPONENTS` is 32 and `Signature` is `std::bitset<32>`. Type ids come from one process-wide counter, so the cap is per binary, not per `Registry`. See the README's *Component type limit* section for the full explanation and how to budget against it.
+`MAX_COMPONENTS` was 32 and `Signature` was `std::bitset<32>`. Type ids come from one process-wide counter, so the cap is per binary, not per `Registry`. See the README's *Component type limit* section for the full explanation and how to budget against it.
 
-**Why it stays.** `Signature` is `std::bitset<MAX_COMPONENTS>`; two translation units compiled with different values disagree about what type `Signature` *is*, which is an ODR violation. Worse, `sizeof(std::bitset<N>)` is 8 bytes for every N from 1 to 64, so raising 32 → 64 changes no layout and no size check catches a stale object file — the mismatch is silent. Shipping that as a 1.x point release would corrupt games that did not rebuild.
+**Why it stayed.** `Signature` is `std::bitset<MAX_COMPONENTS>`; two translation units compiled with different values disagree about what type `Signature` *is*, which is an ODR violation. Worse, `sizeof(std::bitset<N>)` is 8 bytes for every N from 1 to 64, so raising 32 → 64 changes no layout and no size check catches a stale object file — the mismatch is silent. Shipping that as a 1.x point release would corrupt games that did not rebuild.
 
-**Meanwhile.** Prefer widening a component (a `kind` enum) over declaring a new one. Overflow is reported on the error log and the type is ignored rather than throwing, so it will not abort under `-fno-exceptions`.
+**Resolved in 2.0.0.** `MAX_COMPONENTS` is 64. No struct moved, which is precisely why it took a major: nothing about the build can detect a translation unit still compiled against 32, so the only safe upgrade is to rebuild the library, the editor and every game against one header in one go. `specs/layout.spec.cpp` pins the value itself alongside the sizes, because the size pins cannot see it.
+
+64 is the last free step. At 65 `std::bitset` becomes 16 bytes and `sizeof(Registry)` and `sizeof(System)` move with it — a second ABI break rather than a recompile.
+
+**Still true.** The cap remains per binary, not per `Registry`, and the five engine components count against it. Prefer widening a component (a `kind` enum) over declaring a new one. Overflow is reported on the error log and the type is ignored rather than throwing, so it will not abort under `-fno-exceptions` — and since 2.0.0 the system that lost the requirement is latched off rather than left matching everything (item 4).
 
 ## 4. A system that overflows the component cap matches *every* entity
 
@@ -64,7 +68,9 @@ Following from the above: when `RequireComponent<T>()` is called for a type past
 
 It is memory-safe and loudly logged, and only reachable once you are already past 32 types — but the failure direction is wrong.
 
-**Why it stays.** The clean fix is a `disabled_` latch on `System`, changing `sizeof(System)` from 32. Games subclass `System` and the `Registry` holds them by `shared_ptr`, so the layout is part of the ABI.
+**Why it stayed.** The clean fix is a latch on `System`, changing `sizeof(System)` from 32. Games subclass `System` and the `Registry` holds them by `shared_ptr`, so the layout is part of the ABI.
+
+**Resolved in 2.0.0.** A `RequireComponent<T>()` call that overflows the cap now latches the system off rather than merely dropping the requirement, and `System::IsDisabled()` reports it. A latched system is skipped by entity admission and by the retrofit path (`AdmitExistingEntitiesTo`, `CountEntitiesMissedBySystem`), so it matches **nothing** instead of everything. The latch is one-way: the component id it wanted does not exist, so there is no runtime state that could make the system correct again. `sizeof(System)` is 32 → 40.
 
 ## 5. Adding or removing a component never changes system membership
 
@@ -109,9 +115,22 @@ struct Tile {
 
 Animated tiles therefore render as static ones, and the editor's animation UI has no effect at runtime.
 
-**Why it stays.** The fix adds fields to `Tile`, changing `sizeof(Tile)` from 80. `Map` is `std::vector<Tile>` and games iterate it directly, so a game built against the old header walking a vector produced by a new library reads misaligned garbage. It is an ABI break with no compile-time warning — the most dangerous kind.
+**Why it stayed.** The fix adds fields to `Tile`, changing `sizeof(Tile)` from 80. `Map` is `std::vector<Tile>` and games iterate it directly, so a game built against the old header walking a vector produced by a new library reads misaligned garbage. It is an ABI break with no compile-time warning — the most dangerous kind.
 
-**Meanwhile.** Drive tile animation from game code with `AnimationComponent`, not from the editor's fields.
+**Resolved in 2.0.0.** `Tile` carries `isAnimated`, `numFrames`, `frameSpeedRate`, `vertical`, `isLooped` and `frameOffset`, named to match `AnimationComponent` so building one is a direct copy:
+
+```cpp
+if (tile.isAnimated)
+  e.AddComponent<AnimationComponent>(tile.numFrames, tile.frameSpeedRate,
+                                     tile.vertical, tile.isLooped,
+                                     tile.frameOffset);
+```
+
+The same pass found a second field being discarded: `colliderOffset`. The editor has written collider offsets since colliders were added, and the loader read them off the line purely to advance the stream — so a tile whose collider the editor had nudged collided from its unnudged position. `Tile` now carries it.
+
+The engine still does not build the component for you. `TileMapLoader` hands back a `Map` and nothing else; spawning entities stays the game's job.
+
+`sizeof(Tile)` is 80 → 104. The new fields are appended rather than grouped beside the fields they belong with, which costs 8 bytes of padding — deliberately, so that a game constructing a `Tile` positionally still assigns the same eight fields. Reordering would have shifted a `bool` onto `colliderW`, which converts without a diagnostic.
 
 ## 8. Including a state header compiles the entire engine
 
@@ -139,9 +158,23 @@ No public type in `common/` sits in a named namespace. `Entity`, `Registry`, `Sy
 
 A game that declares its own `Entity` or `Logger` collides.
 
-**Why it stays.** Introducing `namespace storm { }` breaks every single line of every consuming game.
+**Why it stayed.** Introducing `namespace storm { }` breaks every single line of every consuming game.
 
-**Meanwhile.** Prefix your own types, or wrap yours in a namespace of your own.
+**Resolved in 2.0.0.** Every engine type is in `namespace storm`. A game has three ways forward, cheapest first:
+
+1. **Force-include the bridge from your build** — one line, no source edits:
+
+   ```make
+   CXXFLAGS += -include stormengine2/compat/global.h
+   ```
+
+2. **Include the bridge** in the files that need it: `#include <stormengine2/compat/global.h>`.
+
+3. **Add `using namespace storm;`** after your engine includes, or qualify with `storm::`. This is what the examples, the editor and the starter template do.
+
+`<stormengine2/compat/global.h>` emits a `using` declaration for every public engine name — including the enumerators of the unscoped enums (`LOG_INFO`, `kNetChunkVital` and the rest), which a `using` on the enum type alone does not bring across.
+
+**The bridge exists to be deleted.** It pulls every engine name back into the global namespace, which is exactly the collision the namespace was added to prevent, so a game that keeps it forever has taken none of the benefit. Use it to get green, then remove it and fix the names. A future major will drop the header.
 
 ## 10. Collision only kills; there is no event bus
 
@@ -162,7 +195,7 @@ Not defects exactly — design decisions worth revisiting when compatibility is 
 - **Component storage is a dense `std::vector<T>` per type, indexed by entity id.** Memory per registered type is O(highest id ever used), not O(live entities), and every component type must be default-constructible. A sparse set would fix both.
 - **No system scheduler.** Each system declares its own non-virtual `Update` with a bespoke signature, and the game calls each by name in an order it chooses. Ordering bugs are invisible until they bite.
 - **Two registry idioms coexist** — the editor uses the `Registry::Instance()` singleton, games own a `Registry` per state. Pick one.
-- **`GameStateMachine` owns raw pointers** with implicitly generated copy operations, so copying one double-frees every state.
+- ~~**`GameStateMachine` owns raw pointers** with implicitly generated copy operations, so copying one double-frees every state.~~ **Fixed in 2.0.0** — the copy constructor and copy assignment are `= delete`d, the same treatment the networking types got under item 6. It still owns raw pointers; what is gone is the way to duplicate them silently.
 - **Frame pacing lives in game code**, not the engine — every state re-implements the same `SDL_Delay` budget against `MILLISECS_PER_FRAME`.
 - **Three member-naming schemes** across the engine (bare, `m_`, trailing underscore) and two method casings (PascalCase in the ECS, camelCase in the state machine).
 - **The collider offset is not scaled by the transform.** `ContactSystem::BoundsOf` and `RenderColliderSystem::Update` (`common/systems/renderCollider.h:22-26`) both compute `position + offset` while scaling the extents by `transform.scale`. So a collider with `offset = {4, 0}` on an entity at `scale = {2, 2}` starts 4 px from the origin, not 8. The two agree, so nothing is visibly broken today; scaling the offset would be more consistent but silently moves every collider a game has ever authored with a non-unit scale.

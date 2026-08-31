@@ -3,6 +3,7 @@
 #include "../../common/input/gamepad.h"
 
 using namespace igloo;
+using namespace storm;
 
 namespace {
 

@@ -9,6 +9,8 @@
 #include "assetStore.h"
 #include "logger.h"
 
+namespace storm {
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Data structures returned by XmlLoader — no ECS, no AssetStore, no SDL.
 // The caller decides what to do with the results.
@@ -80,3 +82,5 @@ private:
     tinyxml2::XMLElement *FindElement(const std::string &stateId,
                                      const std::string &child) const;
 };
+
+} // namespace storm

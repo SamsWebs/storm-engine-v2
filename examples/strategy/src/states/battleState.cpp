@@ -11,6 +11,8 @@
 
 #include "../ui.h"
 
+using namespace storm;
+
 const std::string BattleState::s_battleID = "BATTLE";
 
 namespace {

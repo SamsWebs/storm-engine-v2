@@ -6,6 +6,8 @@
 #include "netPacket.h"
 #include "netTypes.h"
 
+namespace storm {
+
 // ── Reliable connection over UDP (SDL-free) ─────────────────────────────────
 // One connection talks to one peer. Chunks are batched into 1400-byte
 // datagrams; vital chunks carry 10-bit sequence numbers, are retransmitted
@@ -116,3 +118,5 @@ private:
   char error_[64] = {};
   SendFunc send_;
 };
+
+} // namespace storm

@@ -5,6 +5,7 @@
 #include "../common/logger.h"
 
 using namespace igloo;
+using namespace storm;
 
 // Logger::messages is a process-global buffer, so every case clears it first
 // and the callback vectors are local to each case.

@@ -11,8 +11,13 @@ were already argued and settled.
 
 ## 2.0.0, second wave
 
+**Status: complete.** All eight items done, plus an adversarial review of the
+whole branch and the fixes it produced. Ten breaking changes shipped, not the
+nine planned — `GameStateMachine`'s copy operations were taken late, because the
+alternative was spending a whole major on a one-line fix.
+
 2.0.0 resets the 1.x compatibility promise. The first wave (PR #40) took the four
-breaks that fail at compile time. This wave takes the five that need a **layout**
+breaks that fail at compile time. This wave takes the ones that need a **layout**
 change, which is a different and more dangerous class: a game that relinks without
 rebuilding does not get an error, it gets misaligned memory.
 
@@ -71,61 +76,284 @@ when items 3-6 are planned:
 The layout pin earned itself immediately: it caught each size change as it happened and forced a measured
 number into every commit message.
 
-### 3. `System` gains a disabled latch — `KNOWN_ISSUES.md` item 4
+### 3. `System` gains a disabled latch — `KNOWN_ISSUES.md` item 4 — **DONE**
 
-`sizeof(System)` 32 → 40. Also fixes the wrong failure *direction* in the component
-cap: a system whose `RequireComponent` overflowed ends up with an empty signature,
-and an empty signature matches **every** entity — so a system that should have
-matched nothing runs on the whole world.
+`sizeof(System)` 32 → 40, pinned in `specs/layout.spec.cpp`. An overflowing
+`RequireComponent` now latches the system off, so it matches nothing rather than
+everything, and `System::IsDisabled()` reports it.
 
-### 4. `Tile` carries the editor's animation fields — `KNOWN_ISSUES.md` item 7
+Three paths compare signatures and all three had to be guarded, not just
+admission: `AddEntityToSystems`, and `ForEachMissedEntity`, which backs both
+`CountEntitiesMissedBySystem` and `AdmitExistingEntitiesTo`. The retrofit path
+was the dangerous one — unguarded, `AdmitExistingEntitiesTo` would hand the
+entire world to the one system the latch exists to keep empty.
 
-`sizeof(Tile)` 80 → larger. The tile editor writes animation data into `.map` files
-and `TileMapLoader` parses and discards it, because `Tile` has nowhere to put it.
-Animated tiles render as static ones and the editor's animation UI does nothing at
-runtime.
+A fourth site, `SystemMissedByLateComponent`, was left **without** a guard on
+the reasoning that `matchedAtAdmission` is `(asAdmitted & required) == required`,
+which an empty signature satisfies for every entity. **That reasoning was wrong
+and an adversarial review caught it.** `RequireComponent` latches and returns
+*without clearing `componentSignature`*, so a system whose first requirement
+resolved and whose second overflowed keeps the first bit: its signature is not
+empty, `matchedAtAdmission` is not trivially true, and the `alreadyMember`
+escape is guaranteed to fail — the latch is what emptied the member list. Every
+system in this engine has two or more requirements, so that is the ordinary
+shape, not an exotic one. The guard is restored.
 
-### 5. `MAX_COMPONENTS` 32 → 64 — `KNOWN_ISSUES.md` item 3
+**The methodology failure is the part worth keeping.** The guard was removed
+because a mutant survived. The mutant survived because `SpecOverflowSystem` has
+exactly one requirement and nothing covered partial overflow — "no test
+distinguishes this" meant *untested*, and it was read as *unreachable*. That
+conclusion was then written into a code comment, this roadmap and a commit
+message, where it looked like a considered decision. A surviving mutant is a
+question about the tests first and the code second.
+
+### 4. `Tile` carries the editor's animation fields — `KNOWN_ISSUES.md` item 7 — **DONE**
+
+`sizeof(Tile)` 80 → 104, pinned in `specs/layout.spec.cpp`. All five animation
+fields now reach `Tile`, named to match `AnimationComponent` so a game builds one
+by copying across.
+
+The pass found a **second** discarded field nobody had listed: `colliderOffset`.
+The editor has written collider offsets since colliders existed and the loader
+read them only to advance the stream, so a tile whose collider the editor had
+nudged collided from its unnudged position. It is fixed here because 2.0.0 is
+the one chance — carrying it later would cost a second ABI break.
+
+The new fields are appended rather than grouped beside the collider fields, at a
+cost of 8 bytes of padding. Reordering would have silently shifted a `bool` onto
+`colliderW` for any game constructing a `Tile` positionally, and `bool` converts
+to `int` without a diagnostic.
+
+One test was written vacuous and caught before commit: "animation must not leak
+between tiles" asserted on tiles that *preceded* the only animated tile in the
+fixture, so it would have passed against any implementation. The fixture gained
+a plain tile *after* the animated one, which is the only position where the leak
+is observable. Mutation testing then killed all five mutants, the hoisted-variable
+leak included.
+
+**Not done here:** no example consumes the new fields yet, so the feature is
+proven by specs rather than end to end. Wiring one would need the engine
+installed over `/usr/local` to verify locally, since examples build against the
+install prefix rather than the checkout.
+
+### 5. `MAX_COMPONENTS` 32 → 64 — `KNOWN_ISSUES.md` item 3 — **DONE**
 
 No size change: `sizeof(std::bitset<N>)` is 8 bytes for every N up to 64. That is
-precisely why it needs a major — no size check catches a stale object file, so a
+precisely why it needed a major — no size check catches a stale object file, so a
 mismatch between translation units is silent.
 
-### 6. The engine moves into `namespace storm` — `KNOWN_ISSUES.md` item 9
+Because the size pins in `specs/layout.spec.cpp` read identically at 32 and 64,
+they cannot see this change at all. The spec now pins `MAX_COMPONENTS` itself
+next to the sizes, with a comment saying why a value is being pinned in a file
+that otherwise pins only layout.
 
-Do this **last**. It rewrites nearly every line it touches, and doing it earlier
-makes every other diff in the wave unreadable.
+64 is the last free step. At 65 `std::bitset` becomes 16 bytes and carries
+`sizeof(Registry)` and `sizeof(System)` with it — a second ABI break rather than
+a recompile. That is recorded at the constant, in the README and in
+`KNOWN_ISSUES.md`, since the next person to want more types will not otherwise
+know the ceiling has a cliff behind it.
 
-Ships with an opt-in `<stormengine2/compat/global.h>` emitting `using` declarations,
-so an existing game keeps compiling by adding one include. That header exists to be
-deleted in a future major — a bridge, not an API.
+### 6. The engine moves into `namespace storm` — `KNOWN_ISSUES.md` item 9 — **DONE**
 
-For a game whose engine includes are spread across many headers, the cheapest
-migration is a force-include from the build rather than editing every file:
+Done last, as planned: it touches 46 engine files and would have made every other
+diff in the wave unreadable.
 
-```make
-CXXFLAGS += -include stormengine2/compat/global.h
-```
+Ships with `<stormengine2/compat/global.h>`, which emits a `using` declaration
+for every public engine name. The cheapest migration for an existing game is a
+force-include from the build (`CXXFLAGS += -include stormengine2/compat/global.h`)
+rather than editing every file. The header exists to be deleted — it undoes the
+namespace's entire benefit — and a future major drops it.
 
-### 7. Input action mapping
+Four things this turned up that were not obvious from the plan:
 
-Belongs in this wave because it touches the input headers that namespacing is
-already rewriting.
+- **The unscoped enums.** `using storm::LogType;` does not bring `LOG_INFO`
+  across: the enumerators of an unscoped enum are names in `namespace storm` in
+  their own right. The bridge needs a `using` per enumerator, and `LogType`,
+  `NetChunkFlag`, `NetPacketFlag` and `NetControlMessage` all have them.
+- **The `friend` declaration in `Registry`.** `friend struct EcsGenerationTestSeam;`
+  now names `storm::EcsGenerationTestSeam`, so the spec's seam had to move into
+  the namespace — a same-named struct in the global namespace is a different type
+  and gets no access. The compiler said so plainly, but only for that one file.
+- **`specs/main.cpp` includes no engine header**, so `using namespace storm;`
+  there is an error rather than a no-op. A blanket edit across `specs/` has to
+  account for it.
+- **`INCLUDE +=` in `editor/Makefile` is discarded** the moment anyone passes
+  `INCLUDE` on the command line, which is how the editor gets built against a
+  staging prefix. It is `override INCLUDE +=` now.
 
-Four input sources now ship — `keyboard.h`, `gamepad.h`, `virtualGamepad.h`,
-`touchControls.h` — with no way to bind them to a single action, so every game
-writes `if (key || pad || touch)` by hand. An `ActionMap` resolving one action
-across all four is what makes those four headers a system rather than four headers.
+`specs/compat/global.spec.cpp` is the one spec in the suite deliberately written
+**without** `using namespace storm;`, since the directive would make it pass
+whether the bridge exported anything or not.
 
-### 8. Documentation, written once at the end
+Its original claim — "it names every type unqualified through the bridge alone,
+so it fails if the bridge misses a name" — **was false**, and an adversarial
+review caught it. The file named 33 of 133 exports, chosen from the same mental
+list that produced the bridge, so a name forgotten in one was forgotten in the
+other. Two were: `EcsSuppressionNote` and `ComponentMissDescription`, both
+public since 1.x, both used by any game with its own throttled diagnostic.
+
+The fix is that the list no longer comes from memory.
+`scripts/generate-compat-probes.py` parses the engine headers and emits
+`specs/compat/bridgedNames.h`, one `using ::Name;` per public name — a form
+legal for every entity kind that fails to compile when the name is absent. CI
+re-runs the generator with `--check` and fails if the committed file is stale,
+because a generated file nobody regenerates is the same hole wearing a
+different hat.
+
+Verified against a staging install (`make install DESTDIR=…`) rather than by
+overwriting `/usr/local`: all nine desktop examples build and link, the editor
+compiles all 17 objects, and the starter template in `template/` builds through
+pkg-config.
+
+`examples/nx-platformer` was edited the same way and then actually **built**
+with devkitPro, which turned up two bugs that had nothing to do with
+namespacing and everything to do with the tree never being built:
+
+- The Makefile passed `-I$(TOPDIR)/../../vendor` intending to supply glm, but
+  glm is at `vendor/android/glm`, so `<glm/glm.hpp>` resolved to
+  `vendor/glm/glm.hpp`, which does not exist — and devkitPro ships no glm
+  portlib. The build failed on the first engine header it reached. The desktop
+  build hid it completely: there glm comes from the system `/usr/include`,
+  which a cross build must not use.
+- `VPATH` searches for **targets** as well as prerequisites, and
+  `include/stormengine2` is a symlink to `common/`, where the desktop build
+  leaves its x86-64 `.o` files. Make found `common/ecs.o` while looking for the
+  aarch64 `ecs.o`, decided the target was satisfied, never compiled it, and
+  passed a bare name to the linker. Six engine translation units silently went
+  unbuilt and the error blamed `ld`. Narrowed to per-pattern `vpath`, and
+  verified by rebuilding with the desktop objects deliberately present.
+
+The namespace edits made blind in that tree turned out to be correct — but that
+was luck rather than verification, and the two bugs above are what "edited but
+never built" actually costs.
+
+`examples/android-platformer` was **confirmed working by the maintainer on a
+machine with the NDK**, along with the Switch build. Neither toolchain is on the
+machine this branch was developed on, so that confirmation is the only evidence
+for the Android tree — it is not covered by CI and nothing here can re-check it.
+
+Android was structurally immune to both bugs the Switch tree had, which is worth
+knowing before assuming the two platforms fail alike:
+
+- `app/jni/CMakeLists.txt` names `vendor/android/glm` on the include path
+  directly, so the glm path bug could not occur.
+- It uses `file(GLOB_RECURSE ENGINE_SRC "${REPO_ROOT}/common/*.cpp")` and CMake's
+  own object layout, so there is no `VPATH` target lookup for a stale desktop
+  `.o` to satisfy. It also picks up every engine translation unit, where the
+  Switch Makefile's non-recursive glob picks up six.
+
+**The standing gap is unchanged:** CI builds neither. Both trees can break on a
+future engine change and nothing in the repo will say so.
+
+### 7. Input action mapping — **DONE**
+
+`common/input/actionMap.h`, header-only and additive — nothing existing changed,
+so this is the one item in the wave that breaks nothing.
+
+`ActionMap::Bind(actionId, ActionBinding{key, pad, vpad, touch})`, then
+`Update(sources)`, then `IsDown` / `WasPressed` / `WasReleased`. Every source is
+optional, so a desktop build and a phone build share one binding table and differ
+only in what they pass.
+
+The design decision worth keeping: **keyboard and gamepad edges are taken from
+those classes rather than recomputed from the held state.** Deriving all edges
+centrally is simpler and was the first design, but a key pressed and released
+inside a single frame never appears in the held state at all, so fast taps would
+vanish — which is the exact reason `Keyboard` tracks presses separately. The
+virtual gamepad and touch are stateless snapshots with no edges of their own, so
+only those are derived against the previous frame.
+
+Multi-source rule: down when the first source takes it, up when the last lets go.
+A second source joining mid-hold is not a new press.
+
+`Update` takes `ActionSources` holding two `GamepadState` snapshots rather than a
+`Gamepad`, because `GamepadState` is a plain struct — that is what lets the whole
+header be spec'd with no controller attached, the same seam `gamepad.h` uses.
+
+**A claimed coverage gap that was not one.** The four-argument convenience
+overload was documented three times — header, spec and here — as untestable,
+because `Gamepad::Update()` samples a real device and with nothing attached
+`Current()` and `Previous()` hold identical values. That reasoning only
+considered their *contents*. They are distinct objects at distinct addresses
+whether or not a device is attached, so asserting on pointer identity settles it
+with no hardware at all. The forwarding is a public `SourcesFrom()` seam now,
+and the swap mutant is killed.
+
+The adversarial review also found four real defects in this header, all fixed:
+a release edge that fired for an action that was never down; `Bind()` leaving
+stale edge state that fabricated a release or swallowed a press; `binding.pad`
+indexing a fixed array with no range check; and source-pointer stability being
+an unstated precondition that failed in opposite directions for the stateful and
+stateless sources. Both "map every control" specs were vacuous — they set every
+flag, then one flag, which left every other control free to swap — and now sweep
+each control held alone.
+
+Mutation testing also removed one term and added one case. On the press side
+`stateless && !statelessPrev` could never differ from `stateless`, because the
+`!entry.down` gate already covers it, so it is gone rather than left as
+unreachable-effect code. The same flag is load-bearing on the release side —
+without it an idle action reports a release on every frame — so there is now a
+case pinning exactly that.
+
+### 8. Documentation, written once at the end — **DONE**
 
 `docs/UPGRADING.md` and the `CHANGELOG.md` 2.0.0 entry, written against what
-actually shipped rather than what was planned. Then `VERSION` moves from
-`2.0.0~dev` to `2.0.0`.
+actually shipped. `VERSION` moved from `2.0.0~dev` to `2.0.0`, and the README's
+banner with it.
 
-The tilde matters and should not be "tidied" to a hyphen: pkg-config sorts
-`2.0.0-dev` *above* `2.0.0`, so a game gating on `--atleast-version=2.0.0` would
-pass against a build missing most of the release. `2.0.0~dev` sorts below.
+The tilde mattered and was not tidied to a hyphen: pkg-config sorts `2.0.0-dev`
+*above* `2.0.0`, so a game gating on `--atleast-version=2.0.0` would have passed
+against a development build missing most of the release. `2.0.0~dev` sorts below.
+
+Every code snippet in `UPGRADING.md` was compiled against a staging install
+before the file was committed, which caught a wrong `ContactSystem` API in the
+migration example — `SetOnBegin(Entity, Entity)` does not exist; it is
+`SetOnBeginContact(const Contact &)`, and the `Contact` carries a normal and a
+penetration depth, which is the whole reason `ContactSystem` can do what
+`CollisionSystem` could not. A migration guide is exactly the document whose
+examples nobody compiles.
+
+One claim was walked back before commit: the changelog said eight of the ten
+`KNOWN_ISSUES.md` entries were resolved. Seven are resolved outright; item 10 is
+half resolved (`CollisionSystem` is gone, the event bus is still missing), and
+counting it whole would have overstated the release.
+
+### The adversarial review
+
+Run against the whole branch before tagging, aimed at five claims rather than
+at the diff. It found real defects in four of them and confirmed the fifth.
+
+What it overturned, and what each cost:
+
+- **The guard removed from `SystemMissedByLateComponent`.** Justified on the
+  claim that a latched system's signature is empty; `RequireComponent` latches
+  *without clearing the signature*, so a system whose second requirement
+  overflowed keeps the first bit. Restored, with the two specs whose absence let
+  the mutant survive.
+- **"The `ActionMap` overload cannot be tested."** Asserted three times. Only
+  ever considered the two `GamepadState`s' *contents*; they are distinct objects
+  at distinct addresses, so pointer identity settles it with no hardware.
+- **"The compat spec fails if the bridge misses a name."** It named 33 of 133,
+  from the same list that produced the bridge. Two public names really were
+  missing. The list is generated from the engine headers now.
+- **Four `ActionMap` defects** and **two vacuous mapping specs** that passed
+  against swapped controls.
+- **The editor's undo stack** identified tiles by raw id — the exact failure
+  class wave one closed everywhere else, in a first-party consumer nobody swept.
+
+What it confirmed: the `Registry` size arithmetic reconciles to the byte
+(576 − 56 − 56 + 24 = 488), the namespace wrap of `common/` is semantically
+sound across every hazard class checked, and one redundancy removal in
+`ActionMap` was *proved* correct rather than merely accepted.
+
+**The lesson worth carrying.** Three of the overturned claims share a shape: a
+check passed, and the passing was read as evidence about the code when it was
+evidence about the check. A surviving mutant meant "untested", not
+"unreachable". A green spec meant "the names I remembered are exported". A green
+build meant "it parses". Each conclusion was then written somewhere durable —
+a comment, this file, a commit message — where it read as a considered ruling.
+Prefer checks whose input is generated from the thing under test, not from the
+author's memory of it.
 
 ---
 
@@ -236,9 +464,22 @@ This has already produced two wrong conclusions during development: examples wer
 declared clean after being exercised against an engine that did not contain the
 feature under test.
 
-**Fix this before the layout wave, not after.** Today a stale-header build is a
-confusing compile error. Once `sizeof(Entity)`, `sizeof(System)` and `sizeof(Tile)`
-change, the same mistake is silent memory corruption.
+**Status: documented, not enforced.** An automated tree-vs-install mismatch
+check was written and reverted — it broke CI, because CI builds the engine from
+a separate tree at `/opt/library`, so tree-and-install equality is false there
+by construction. Any future attempt has to account for that.
+
+What landed instead is a comment in `base.mk` explaining the behaviour and what
+it costs. That is weaker than a check: the layout wave has since shipped, so
+`sizeof(Entity)`, `sizeof(System)` and `sizeof(Tile)` have already changed, and
+a stale install is now silent memory corruption rather than a compile error.
+`specs/layout.spec.cpp` pins the sizes but only inside the engine's own build —
+it cannot see a game's stale headers.
+
+Worth noting how nearly this was lost: the PR meant to land that comment
+(#46) merged a **net-empty diff**. One commit added the reverted check, the
+next removed it and never wrote the documentation its own message promised.
+The comment reached `main` only when the omission was spotted afterwards.
 
 ### Comments cite line numbers, and the line numbers rot
 
@@ -254,11 +495,37 @@ The fix is not to correct the numbers. Cite function names instead — `grep -n`
 drift. This is worth doing as a sweep rather than opportunistically, because a half-swept file is exactly
 the state that makes the remaining citations look trustworthy.
 
-### `editor/` does not build under GCC 13
+### `editor/` does not build under GCC 13 — **DONE**
 
-Vendored `ImGuiFileDialog.cpp` is missing `<cstdint>`. Pre-existing and unrelated to
-any current work, but `pr-validate.yml` compiles the editor, so it will surface in
-CI eventually.
+There were two breakages, not one, the second only visible once the first was
+fixed:
+
+1. Vendored `ImGuiFileDialog.cpp` used `intptr_t` with no header declaring it.
+   Older toolchains supplied it transitively; GCC 13 stopped. Fixed by
+   including `<cstdint>`.
+2. `sol.hpp` includes `<lua.h>` unqualified, while `base.mk`'s `INCLUDE` only
+   reaches `vendor/`, so only `<lua/lua.h>` resolved. The editor's Makefile now
+   adds `-I$(ROOT_DIR)/vendor/lua`, editor-only because no example includes
+   sol2.
+
+All 25 editor translation units compile. The **link** still requires `libnfd`,
+which Debian and Ubuntu do not package — that is why CI compiles the editor to
+objects and stops short of linking. README now states the prerequisite, which
+nothing did before: `cd editor && make` was the only instruction and it cannot
+succeed without building libnfd from source.
+
+Two lessons worth keeping:
+
+- The `<cstdint>` patch would have shipped as a 4827-line diff. An editor pass
+  had rewritten the whole CRLF file to LF, burying a three-line change. Caught
+  at `git diff --stat`. Check line endings before committing to `vendor/`.
+- Patching vendored source with no record of it creates a delta the next vendor
+  update silently reverts, so `vendor/MANIFEST.md` landed *with* the patch
+  rather than after it. It also surfaced that Dear ImGui is pinned at 1.79 WIP
+  from around 2020 — now a decision someone can make on evidence.
+
+Editor warnings that remain (narrowing, sign-compare, a duplicate `clean`
+recipe between `editor/Makefile` and `base.mk`) are pre-existing and untouched.
 
 ---
 
@@ -267,9 +534,13 @@ CI eventually.
 Reviewed, ruled on, and deliberately left. Listed so they are not rediscovered as
 though new.
 
-- **`ForEachMissedEntity` does not exclude entities queued for death**, where
-  `SystemMissedByLateComponent` does. The only false-positive path found in the six
-  diagnostics; it needs kills queued *and* a system registered before the flush.
+- ~~**`ForEachMissedEntity` does not exclude entities queued for death**, where
+  `SystemMissedByLateComponent` does.~~ **Fixed.** Ruled "needs kills queued *and*
+  a system registered before the flush", which was true and turned out not to be
+  the point: this wave added `AdmitExistingEntitiesTo` on top of it, so the
+  false positive stopped being a miscount and started handing a system an entity
+  that the next `Update()` reaps. A carried item can be made live by a later
+  change without anyone re-reading it.
 - **Signed overflow in `render.h`'s bounds arithmetic** on absurd sprite values.
   `srcRect.x > textureW - srcRect.w` avoids it at no cost.
 - **Undocumented `const_cast`** in `common/ecs.cpp`'s missed-entity scan.

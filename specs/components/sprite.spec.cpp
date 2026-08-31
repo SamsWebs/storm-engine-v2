@@ -5,6 +5,7 @@
 #include "../../common/components/sprite.h"
 
 using namespace igloo;
+using namespace storm;
 
 Describe(SpriteComponentSpec){
     It(should_initialize_with_default_values){// Arrange & Act

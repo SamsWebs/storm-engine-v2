@@ -12,6 +12,8 @@
 #include <string>
 #include <vector>
 
+using namespace storm;
+
 // The side-on mass battle. Pushed on top of OverworldState, which stays alive
 // underneath; this state pops itself and writes its outcome into
 // Campaign::result for the overworld's resume() to apply.

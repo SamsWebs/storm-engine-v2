@@ -7,6 +7,7 @@
 #include <vector>
 
 using namespace igloo;
+using namespace storm;
 
 // Component ids come off one process-global counter with a hard ceiling of
 // MAX_COMPONENTS (KNOWN_ISSUES.md §3), so every new type declared in the suite

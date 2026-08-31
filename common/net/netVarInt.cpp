@@ -1,5 +1,7 @@
 #include "netVarInt.h"
 
+namespace storm {
+
 int NetVarIntPack(uint8_t *dst, int dstSize, int32_t value) {
   if (dstSize <= 0)
     return 0;
@@ -61,3 +63,5 @@ bool NetVarIntUnpack(const uint8_t *src, int srcSize, int32_t &value,
   consumed = n + 1;
   return true;
 }
+
+} // namespace storm

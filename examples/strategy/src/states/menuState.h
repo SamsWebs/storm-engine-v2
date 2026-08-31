@@ -10,6 +10,8 @@
 
 #include <string>
 
+using namespace storm;
+
 class MenuState : public GameState {
 public:
   MenuState(SDL_Renderer *renderer, int windowWidth, int windowHeight,

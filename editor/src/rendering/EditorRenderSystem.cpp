@@ -1,11 +1,15 @@
-#include "RenderSystem.h"
+#include "EditorRenderSystem.h"
 
-RenderSystem::RenderSystem() {
+// Safe here and not in the header: a using-directive in a .cpp is scoped to
+// this translation unit.
+using namespace storm;
+
+EditorRenderSystem::EditorRenderSystem() {
   RequireComponent<TransformComponent>();
   RequireComponent<SpriteComponent>();
 }
 
-void RenderSystem::Update(SDL_Renderer *renderer,
+void EditorRenderSystem::Update(SDL_Renderer *renderer,
                           std::unique_ptr<class AssetManager> &assetManager,
                           SDL_Rect &camera, const float &zoom) {
   // Create a struct for sorting entities

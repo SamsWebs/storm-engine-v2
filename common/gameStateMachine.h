@@ -9,10 +9,21 @@
 // would still get all 146,775 preprocessed lines back.
 #include "states/gameStateBase.h"
 
+namespace storm {
+
 class GameStateMachine {
 public:
   GameStateMachine() {}
   ~GameStateMachine() {}
+
+  // Owns raw GameState pointers in two vectors and frees them in clean(). A
+  // copy gives two machines holding the same pointers, and the second clean()
+  // deletes what the first already freed. The destructor is empty, so this is
+  // not a double free at scope exit -- it is a double free the moment both
+  // machines tick. Same defect as the networking types (KNOWN_ISSUES item 6);
+  // taken in 2.0.0 because it is a one-line fix that otherwise costs a major.
+  GameStateMachine(const GameStateMachine &) = delete;
+  GameStateMachine &operator=(const GameStateMachine &) = delete;
 
   void processInput();
   void update();
@@ -36,3 +47,4 @@ private:
   std::vector<GameState *> m_gameStates;
   std::vector<GameState *> m_defunctStates;
 };
+} // namespace storm

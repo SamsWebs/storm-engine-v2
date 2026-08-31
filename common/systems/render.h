@@ -8,6 +8,8 @@
 #include <algorithm>
 #include <string>
 
+namespace storm {
+
 class RenderSystem : public System {
 public:
   RenderSystem() {
@@ -81,3 +83,4 @@ public:
     }
   }
 };
+} // namespace storm

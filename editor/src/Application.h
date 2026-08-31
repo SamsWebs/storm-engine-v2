@@ -19,11 +19,13 @@
 
 #include "./utilities/Utilities.h"
 #include "AssetManager.h"
-#include "rendering/AnimationSystem.h"
+#include "rendering/EditorAnimationSystem.h"
 #include "rendering/IconsFontAwesome.h"
 #include "rendering/RenderCollisionSystem.h"
 #include "rendering/RenderImGui.h"
-#include "rendering/RenderSystem.h"
+#include "rendering/EditorRenderSystem.h"
+
+using namespace storm;
 
 class Application {
 

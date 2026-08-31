@@ -4,6 +4,7 @@
 #include "../../common/components/boxCollider.h"
 
 using namespace igloo;
+using namespace storm;
 
 Describe(BoxColliderComponentSpec){
     It(should_initialize_with_default_values){// Arrange & Act

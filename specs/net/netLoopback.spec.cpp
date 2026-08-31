@@ -15,6 +15,7 @@
 #include "../../common/net/netServer.h"
 
 using namespace igloo;
+using namespace storm;
 
 // End-to-end specs: a real NetServer and NetClient on loopback UDP sockets.
 // The handshake, message routing, and disconnect flows are exercised through

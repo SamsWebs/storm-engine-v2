@@ -76,7 +76,8 @@ MouseControl::MouseControl()
       mPrevMousePos(glm::vec2(mMousePosX, mMousePosY)),
       mPrevMousePosErase(glm::vec2(-1, -1)),
       mMousePosScreen(glm::vec2(0)), mZoom(0), mGridSize(16), mPanX(0),
-      mPanY(0), mMostRecentTileId(-1), mIsCollider(false), mIsAnimated(false),
+      mPanY(0), mMostRecentTile(std::nullopt), mIsCollider(false),
+      mIsAnimated(false),
       mGridSnap(true), mOverImGuiWindow(false), mLeftPressed(false),
       mRightPressed(false), mTileAdded(false), mTileRemoved(false),
       mSpriteComponent(), mTransformComponent(), mRemovedTransformComponent(),
@@ -187,7 +188,7 @@ void MouseControl::CreateTile(const AssetManager_Ptr &assetManager,
       }
 
       // Get Most Recent Tile Id
-      mMostRecentTileId = tile.GetId();
+      mMostRecentTile = tile;
 
       mLeftPressed = true;
       mTileAdded = true;

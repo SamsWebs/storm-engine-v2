@@ -2,7 +2,7 @@
 
 RemoveTileCommand::RemoveTileCommand(
     std::shared_ptr<MouseControl> &mouseControl)
-    : mMouseControl(mouseControl), mTileId(kNoTile), mCollider(false),
+    : mMouseControl(mouseControl), mTile(std::nullopt), mCollider(false),
       mAnimated(false), mBoxColliderComponent(), mTransformComponent(),
       mSpriteComponent(), mAnimationComponent() {}
 
@@ -40,25 +40,23 @@ void RemoveTileCommand::Undo() {
     newEntity.AddComponent<AnimationComponent>(mAnimationComponent);
 
   // The Tile id is need for the redo so we can remove the tile
-  mTileId = newEntity.GetId();
+  mTile = newEntity;
 }
 
 // Redo removes the tile again
 void RemoveTileCommand::Redo() {
-  // Undo never ran, so there is no tile to remove again. This compared
-  // against 0 while the unset value was (size_t)-1, so it both failed to
-  // catch the unset case and skipped the tile that really did have id 0.
-  if (mTileId == kNoTile)
+  // Undo never ran, so there is no tile to remove again.
+  if (!mTile)
     return;
 
   auto entities = Registry::Instance().GetEntitiesByGroup("tiles");
 
   for (auto &entity : entities) {
-    if (entity.GetId() == mTileId) {
+    if (entity == *mTile) {
       entity.Kill();
-      logger.Log("REMOVE: Tile " + std::to_string(mTileId) +
+      logger.Log("REMOVE: Tile " + std::to_string(mTile->GetId()) +
                  " has been removed!");
-      mTileId = kNoTile;
+      mTile = std::nullopt;
     }
   }
 }

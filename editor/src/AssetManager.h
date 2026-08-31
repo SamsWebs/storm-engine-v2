@@ -12,6 +12,8 @@
 
 #include "./utilities/Utilities.h"
 
+using namespace storm;
+
 /*
  *	AssetManager Class. In the asset manager only has to take care of
  *textures in this editor.

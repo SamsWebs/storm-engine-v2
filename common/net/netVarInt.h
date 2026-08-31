@@ -2,6 +2,8 @@
 
 #include <cstdint>
 
+namespace storm {
+
 // ── Variable-length integers ────────────────────────────────────────────────
 // Same wire format as Teeworlds: "ESDDDDDD EDDDDDDD EDD..." — the first byte
 // carries a sign bit, 6 data bits, and an extend bit; every extend bit adds 7
@@ -20,3 +22,5 @@ int NetVarIntPack(uint8_t *dst, int dstSize, int32_t value);
 // On success, consumed receives the byte count.
 bool NetVarIntUnpack(const uint8_t *src, int srcSize, int32_t &value,
                      int &consumed);
+
+} // namespace storm

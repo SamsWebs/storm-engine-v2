@@ -9,10 +9,19 @@
 #include "../MouseControl.h"
 #include "ICommand.h"
 
+#include <optional>
+
+using namespace storm;
+
 class AddTileCommand : public ICommand {
 private:
   std::shared_ptr<class MouseControl> mMouseControl;
-  int mTileId;
+// Stores the Entity rather than its id. Entity ids are recycled, so an id in
+// an undo stack is not an identity: delete a tile, undo, delete it again, place
+// a new tile that takes the recycled id, then redo -- and the redo matches the
+// NEW tile and kills it. Entity::operator== compares id and generation, so a
+// recycled id no longer matches a stale handle.
+  std::optional<Entity> mTile;
   bool mCollider, mAnimated;
   BoxColliderComponent mBoxColliderComponent;
   TransformComponent mTransformComponent;

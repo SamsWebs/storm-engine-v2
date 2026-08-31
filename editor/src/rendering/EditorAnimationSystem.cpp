@@ -1,12 +1,16 @@
-#include "AnimationSystem.h"
+#include "EditorAnimationSystem.h"
 
-AnimationSystem::AnimationSystem() {
+// Safe here and not in the header: a using-directive in a .cpp is scoped to
+// this translation unit.
+using namespace storm;
+
+EditorAnimationSystem::EditorAnimationSystem() {
   RequireComponent<AnimationComponent>();
   RequireComponent<SpriteComponent>();
   RequireComponent<TransformComponent>();
 }
 
-void AnimationSystem::Update() {
+void EditorAnimationSystem::Update() {
   for (const auto &entity : GetSystemEntities()) {
     const auto &transform = entity.GetComponent<TransformComponent>();
 

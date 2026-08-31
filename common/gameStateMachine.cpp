@@ -1,6 +1,8 @@
 #include "gameStateMachine.h"
 #include <iostream>
 
+namespace storm {
+
 // States discarded by changeState/popState land in m_defunctStates instead of
 // being deleted inline: those calls usually come from inside the discarded
 // state's own processInput/update, and deleting there would free the caller's
@@ -87,3 +89,5 @@ void GameStateMachine::changeState(GameState *pState) {
   // push back our new state
   m_gameStates.push_back(pState);
 }
+
+} // namespace storm

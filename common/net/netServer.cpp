@@ -4,6 +4,8 @@
 #include "netPacket.h"
 #include "netServer.h"
 
+namespace storm {
+
 namespace {
 
 // Per-NetServer settings that cannot live on NetServer itself: games allocate
@@ -423,3 +425,5 @@ void NetServer::ProcessData(Slot *slot, const uint8_t *data, int size) {
     }
   }
 }
+
+} // namespace storm

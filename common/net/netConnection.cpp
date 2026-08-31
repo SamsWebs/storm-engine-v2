@@ -2,6 +2,8 @@
 
 #include "netConnection.h"
 
+namespace storm {
+
 void NetConnection::Start(uint32_t nowMs, uint32_t token, uint32_t peerToken) {
   state_ = kOnline;
   token_ = token;
@@ -287,3 +289,5 @@ void NetConnection::Update(uint32_t nowMs) {
   if (nowMs - lastSendMs_ > kNetKeepaliveMs)
     Flush(true); // idle keepalive
 }
+
+} // namespace storm

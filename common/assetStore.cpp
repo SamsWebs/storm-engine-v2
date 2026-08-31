@@ -1,5 +1,7 @@
 #include "assetStore.h"
 
+namespace storm {
+
 AssetStore::AssetStore() { logger.Log("AssetStore constructor called!"); }
 
 AssetStore::~AssetStore() {
@@ -112,3 +114,5 @@ Mix_Chunk *AssetStore::GetSound(const std::string &assetId) const {
   auto it = sounds.find(assetId);
   return (it != sounds.end()) ? it->second : nullptr;
 }
+
+} // namespace storm

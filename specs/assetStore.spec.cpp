@@ -3,6 +3,7 @@
 #include "../common/assetStore.h"
 
 using namespace igloo;
+using namespace storm;
 
 // Headless specs — no window/renderer needed. They pin the store's error
 // contract: lookups and failed loads yield nullptr, never a throw or a

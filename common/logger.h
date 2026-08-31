@@ -9,6 +9,8 @@
 #include <string>
 #include <vector>
 
+namespace storm {
+
 enum LogType { LOG_INFO, LOG_WARNING, LOG_ERROR };
 
 struct LogEntry {
@@ -36,3 +38,4 @@ private:
 };
 
 typedef std::unique_ptr<Logger> Logger_Ptr;
+} // namespace storm

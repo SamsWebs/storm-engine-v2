@@ -4,6 +4,7 @@
 #include "../../common/components/animation.h"
 
 using namespace igloo;
+using namespace storm;
 
 Describe(AnimationComponentSpec){It(should_initialize_with_default_values){
 

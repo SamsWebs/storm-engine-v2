@@ -11,6 +11,8 @@
 
 #include "logger.h"
 
+namespace storm {
+
 // Caches the three asset kinds the engine already links against. Every getter
 // returns nullptr for a missing id rather than throwing, so callers null-check
 // and nothing aborts under the Switch build's -fno-exceptions.
@@ -58,3 +60,5 @@ public:
 };
 
 typedef std::unique_ptr<AssetStore> AssetStore_Ptr;
+
+} // namespace storm

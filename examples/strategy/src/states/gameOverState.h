@@ -10,6 +10,8 @@
 
 #include <string>
 
+using namespace storm;
+
 class GameOverState : public GameState {
 public:
   GameOverState(SDL_Renderer *renderer, int windowWidth, int windowHeight,

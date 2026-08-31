@@ -3,6 +3,7 @@
 #include "../../common/states/gameState.h"
 
 using namespace igloo;
+using namespace storm;
 
 namespace {
 

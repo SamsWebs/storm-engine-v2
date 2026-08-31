@@ -32,6 +32,10 @@ bullet.Kill();                              // destroys `pickup`
 
 **Resolved in 2.0.0.** `Entity` now carries a generation, stamped at creation and bumped when its id is freed. `operator==` compares id and generation together, so `bullet == pickup` above is `false`; `operator<` is deleted outright rather than left comparing id alone, and callers order explicitly via `EntityOrder` where an ordering is needed. `IsAlive` checks the generation, so `bullet.Kill()` above now rejects the stale handle and logs a throttled error instead of destroying `pickup`. `sizeof(Entity)` moved from 16 to 24, as anticipated above. The two specs that used to pin this behaviour deliberately (`specs/ecs.spec.cpp`, `specs/registry.spec.cpp`) are flipped to assert the fix instead.
 
+The gate covers every path that reads, writes or stores entity identity, not only the kill: `AddComponent`, `RemoveComponent`, the component reads, and `TagEntity`, `GroupEntity` and `AddEntityToSystems`. The last three were added after an adversarial review proved the gap was a live-state corruption rather than a lookup oddity — tagging through a stale handle silently stripped the live entity's tag, and a stale entity injected into a system was never removed, since removal only runs for entities the registry reaps.
+
+The generation also skips 0 on wrap. Landing on the reserved value would make every hand-built `Entity(id)` compare equal to whatever live entity next held that id — this defect, in full, under this resolution note. The wrap was first dismissed as unreachable; measured, it is about 1.66 hours on a loop driving `Registry::Update()` flat out, and roughly 50 days for a 1 kHz headless server, because the counter advances once per id per `Update()` call rather than per kill.
+
 ## 2. A bare integer implicitly converts to an `Entity`
 
 `Entity(std::size_t)` is not `explicit`, so any function taking an `Entity` silently accepts a number:

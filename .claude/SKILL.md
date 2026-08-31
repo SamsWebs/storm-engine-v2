@@ -181,10 +181,22 @@ These are the biggest correctness traps — understand them before writing ECS c
    `Registry::IsAlive(e)` compares the handle's generation against the id's
    current one (O(1): a generation compare, no `freeIds` scan), so a **stale
    handle whose id has since been recycled to a different entity reports
-   false**, not alive. `KillEntity`, `AddComponent`, and `RemoveComponent` all
-   gate on `IsAlive` ahead of their other checks, as does every component read
-   (`HasComponent`/`TryGetComponent`/`GetComponent`), so a stale handle logs a
-   throttled error and no-ops instead of touching the live occupant.
+   false**, not alive. Every path that reads, writes or stores entity identity
+   gates on `IsAlive` ahead of its other checks — `KillEntity`, `AddComponent`,
+   `RemoveComponent`, the component reads
+   (`HasComponent`/`TryGetComponent`/`GetComponent`), and `TagEntity`,
+   `GroupEntity` and `AddEntityToSystems` — so a stale handle logs a throttled
+   error and no-ops instead of touching the live occupant.
+
+   The last three matter more than they look. Before they were gated, tagging
+   through a stale handle silently stripped the *live* entity's tag, and a stale
+   entity injected into a system was never removed, because removal only happens
+   for entities the registry itself reaps.
+
+   Generation 0 is reserved and never valid, so an `Entity` built from a bare id
+   is stale by construction. The counter skips 0 on wrap for the same reason:
+   landing on it would make every fabricated handle compare equal to whatever
+   live entity next took that id.
 
 ### Built-in Components
 

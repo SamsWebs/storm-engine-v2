@@ -11,8 +11,13 @@ were already argued and settled.
 
 ## 2.0.0, second wave
 
+**Status: complete.** All eight items done, plus an adversarial review of the
+whole branch and the fixes it produced. Ten breaking changes shipped, not the
+nine planned — `GameStateMachine`'s copy operations were taken late, because the
+alternative was spending a whole major on a one-line fix.
+
 2.0.0 resets the 1.x compatibility promise. The first wave (PR #40) took the four
-breaks that fail at compile time. This wave takes the five that need a **layout**
+breaks that fail at compile time. This wave takes the ones that need a **layout**
 change, which is a different and more dangerous class: a game that relinks without
 rebuilding does not get an error, it gets misaligned memory.
 
@@ -275,6 +280,43 @@ One claim was walked back before commit: the changelog said eight of the ten
 half resolved (`CollisionSystem` is gone, the event bus is still missing), and
 counting it whole would have overstated the release.
 
+### The adversarial review
+
+Run against the whole branch before tagging, aimed at five claims rather than
+at the diff. It found real defects in four of them and confirmed the fifth.
+
+What it overturned, and what each cost:
+
+- **The guard removed from `SystemMissedByLateComponent`.** Justified on the
+  claim that a latched system's signature is empty; `RequireComponent` latches
+  *without clearing the signature*, so a system whose second requirement
+  overflowed keeps the first bit. Restored, with the two specs whose absence let
+  the mutant survive.
+- **"The `ActionMap` overload cannot be tested."** Asserted three times. Only
+  ever considered the two `GamepadState`s' *contents*; they are distinct objects
+  at distinct addresses, so pointer identity settles it with no hardware.
+- **"The compat spec fails if the bridge misses a name."** It named 33 of 133,
+  from the same list that produced the bridge. Two public names really were
+  missing. The list is generated from the engine headers now.
+- **Four `ActionMap` defects** and **two vacuous mapping specs** that passed
+  against swapped controls.
+- **The editor's undo stack** identified tiles by raw id — the exact failure
+  class wave one closed everywhere else, in a first-party consumer nobody swept.
+
+What it confirmed: the `Registry` size arithmetic reconciles to the byte
+(576 − 56 − 56 + 24 = 488), the namespace wrap of `common/` is semantically
+sound across every hazard class checked, and one redundancy removal in
+`ActionMap` was *proved* correct rather than merely accepted.
+
+**The lesson worth carrying.** Three of the overturned claims share a shape: a
+check passed, and the passing was read as evidence about the code when it was
+evidence about the check. A surviving mutant meant "untested", not
+"unreachable". A green spec meant "the names I remembered are exported". A green
+build meant "it parses". Each conclusion was then written somewhere durable —
+a comment, this file, a commit message — where it read as a considered ruling.
+Prefer checks whose input is generated from the thing under test, not from the
+author's memory of it.
+
 ---
 
 ## After 2.0.0 ships
@@ -454,9 +496,13 @@ recipe between `editor/Makefile` and `base.mk`) are pre-existing and untouched.
 Reviewed, ruled on, and deliberately left. Listed so they are not rediscovered as
 though new.
 
-- **`ForEachMissedEntity` does not exclude entities queued for death**, where
-  `SystemMissedByLateComponent` does. The only false-positive path found in the six
-  diagnostics; it needs kills queued *and* a system registered before the flush.
+- ~~**`ForEachMissedEntity` does not exclude entities queued for death**, where
+  `SystemMissedByLateComponent` does.~~ **Fixed.** Ruled "needs kills queued *and*
+  a system registered before the flush", which was true and turned out not to be
+  the point: this wave added `AdmitExistingEntitiesTo` on top of it, so the
+  false positive stopped being a miscount and started handing a system an entity
+  that the next `Update()` reaps. A carried item can be made live by a later
+  change without anyone re-reading it.
 - **Signed overflow in `render.h`'s bounds arithmetic** on absurd sprite values.
   `srcRect.x > textureW - srcRect.w` avoids it at no cost.
 - **Undocumented `const_cast`** in `common/ecs.cpp`'s missed-entity scan.

@@ -4,6 +4,8 @@
 #include "netPacket.h"
 #include "netSocket.h"
 
+namespace storm {
+
 bool NetChunkHeader::Pack(uint8_t *dst) const {
   if (size < 0 || size > 0x0FFF)
     return false;
@@ -248,3 +250,5 @@ bool NetMessageReader::ReadRaw(void *out, int size) {
   pos_ += size;
   return true;
 }
+
+} // namespace storm

@@ -26,6 +26,26 @@ A lightweight, ECS-based 2D game engine built on SDL2 - made for game jams and p
 - Example games: platformer, shooter (*1945*, a vertical shoot-'em-up with menu, HUD and controller support), strategy (*Realms*, a *Dragon Force*-style campaign map with pushed side-on battles - artwork downloaded separately, see below), puzzle, JRPG, sports, Android platformer, Switch platformer, and networking demos (netchat, netrepl, netplay-checkers)
 - Platforms: Linux, Nintendo Switch (source builds), Android (source builds, verified on hardware); iOS possible via the same SDL layer
 
+## Namespace
+
+Every engine type lives in `namespace storm` as of 2.0.0. Before that they were all global, so a game declaring its own `Entity` or `Logger` collided with the engine's.
+
+New code qualifies or opens the namespace:
+
+```cpp
+#include <stormengine2/ecs.h>
+
+using namespace storm;   // what the examples, the editor and the starter template do
+```
+
+An existing 1.x game does not need editing. `<stormengine2/compat/global.h>` emits a `using` declaration for every public engine name, so the cheapest migration is one line in the build:
+
+```make
+CXXFLAGS += -include stormengine2/compat/global.h
+```
+
+That header is a bridge, not an API. It pulls every engine name back into the global namespace - the exact collision the namespace exists to prevent - so a game that keeps it forever gains nothing from the change. Use it to get green, then drop it and fix the names. A future major removes it.
+
 ## Component type limit
 
 An entity's component set is tracked as a bitmask, so the engine supports **64 distinct component types** (32 before 2.0.0):

@@ -3,6 +3,7 @@
 #include "../../common/systems/movement.h"
 
 using namespace igloo;
+using namespace storm;
 
 namespace {
 

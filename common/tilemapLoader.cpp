@@ -1,5 +1,7 @@
 #include "tilemapLoader.h"
 
+namespace storm {
+
 TileMapLoader::TileMapLoader(const std::string &fileMap,
                              const std::string &filePng, int tileSize)
     : tileSize{tileSize}, mapSurface{nullptr} {
@@ -192,3 +194,5 @@ const Map &TileMapLoader::getMap() const { return map; }
 const glm::ivec2 TileMapLoader::getMapResolution() const {
   return mapResolution;
 }
+
+} // namespace storm

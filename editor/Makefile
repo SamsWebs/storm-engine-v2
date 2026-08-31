@@ -24,7 +24,11 @@ include ../base.mk
 # Editor-only on purpose: no example includes sol, and adding this to the
 # shared INCLUDE would put a dependency on every example's compile line that
 # none of them uses.
-INCLUDE += -I$(ROOT_DIR)/vendor/lua
+# `override`, because a plain `+=` is discarded the moment anyone passes
+# INCLUDE on the command line -- which is how the examples are built in CI and
+# how the editor is built against a staging prefix. The editor cannot compile
+# without this path, so it is not the caller's to drop.
+override INCLUDE += -I$(ROOT_DIR)/vendor/lua
 
 # editor/include used to shadow the installed engine headers here. It held one
 # byte-identical copy of common/components/sprite.h and was deleted (P45): the

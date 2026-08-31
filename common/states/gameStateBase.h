@@ -21,6 +21,8 @@
 #include <string>
 #include <vector>
 
+namespace storm {
+
 constexpr int FPS = 60;
 constexpr int MILLISECS_PER_FRAME = 1000 / FPS;
 
@@ -83,3 +85,4 @@ protected:
 
   std::vector<std::string> m_textureIDList;
 };
+} // namespace storm

@@ -11,6 +11,8 @@
 
 #include "states/playState.h"
 
+using namespace storm;
+
 class Game {
 public:
   Game(bool host, const std::string &joinAddr, uint16_t port);

@@ -8,6 +8,8 @@
 #include "netSnapshot.h"
 #include "netSocket.h"
 
+namespace storm {
+
 // ── Game client / joiner ────────────────────────────────────────────────────
 // Connects to a NetServer over UDP: resolves the host, runs the cookie
 // handshake (CONNECT -> CONNECT_ACCEPT -> CONNECT_READY -> ACCEPT, each step
@@ -78,3 +80,5 @@ private:
     ChunkCallback onChunk_;
     Logger logger_;
 };
+
+} // namespace storm

@@ -3,6 +3,7 @@
 #include "../../common/net/netVarInt.h"
 
 using namespace igloo;
+using namespace storm;
 
 Describe(NetVarIntSpec) {
 

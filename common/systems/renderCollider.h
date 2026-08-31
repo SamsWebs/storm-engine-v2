@@ -6,6 +6,8 @@
 
 #include <SDL2/SDL.h>
 
+namespace storm {
+
 class RenderColliderSystem : public System {
 public:
   RenderColliderSystem() {
@@ -29,3 +31,4 @@ public:
     }
   }
 };
+} // namespace storm

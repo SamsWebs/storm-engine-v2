@@ -1,5 +1,7 @@
 #include "logger.h"
 
+namespace storm {
+
 std::vector<LogEntry> Logger::messages;
 
 const std::string Logger::GREEN = "\033[32m";
@@ -89,3 +91,4 @@ void Logger::logHelper(const std::string &message, LogType logType) {
     err_callback_(logEntry);
   }
 }
+} // namespace storm

@@ -2,6 +2,7 @@
 #include <igloo/igloo_alt.h>
 
 using namespace igloo;
+using namespace storm;
 
 Describe(TileMapLoaderSpec) {
   const std::string fileMap = "./specs/assets/tilemaps/jungle.map";

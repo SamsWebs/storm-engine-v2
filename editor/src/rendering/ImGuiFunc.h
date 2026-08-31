@@ -26,6 +26,8 @@
 #include "../utilities/Utilities.h"
 #include "IconsFontAwesome.h"
 
+using namespace storm;
+
 /*
  *  This is a collection of functions that are for use with the ImGui
  * buttons/windows/combobox etc

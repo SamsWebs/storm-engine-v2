@@ -7,6 +7,8 @@
 #include <stormengine2/systems/contact.h>
 #include <stormengine2/text.h>
 
+using namespace storm;
+
 class PlayState : public GameState {
 public:
   PlayState(SDL_Renderer *renderer, int windowWidth, int windowHeight,

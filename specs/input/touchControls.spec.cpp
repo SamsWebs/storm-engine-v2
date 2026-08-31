@@ -3,6 +3,7 @@
 #include "../../common/input/touchControls.h"
 
 using namespace igloo;
+using namespace storm;
 
 // 800x480 window: pads are 105.6 square; left at x=19.2, right at x=144,
 // jump at x=675.2, all at y=355.2.

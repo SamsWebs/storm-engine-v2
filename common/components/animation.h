@@ -2,6 +2,8 @@
 
 #include <SDL2/SDL.h>
 
+namespace storm {
+
 struct AnimationComponent {
   int numFrames;
   int currentFrame;
@@ -22,3 +24,4 @@ struct AnimationComponent {
     lastFrame = 0;
   }
 };
+} // namespace storm

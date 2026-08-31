@@ -1,5 +1,7 @@
 #include "xmlLoader.h"
 
+namespace storm {
+
 void LoadTexturesFromXml(const std::string &filePath,
                          const std::string &stateId,
                          const std::string &basePath,
@@ -84,3 +86,5 @@ tinyxml2::XMLElement *XmlLoader::FindElement(const std::string &stateId,
     return const_cast<tinyxml2::XMLElement *>(
         state->FirstChildElement(child.c_str()));
 }
+
+} // namespace storm

@@ -3,6 +3,7 @@
 #include "../../common/input/virtualGamepad.h"
 
 using namespace igloo;
+using namespace storm;
 
 // 640x480 logical window: d-pad centre ~(115, 365) radius 96, diamond right.
 Describe(VirtualGamepadSpec) {

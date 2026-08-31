@@ -3,6 +3,7 @@
 #include <igloo/igloo_alt.h>
 
 using namespace igloo;
+using namespace storm;
 
 // These sizes are ABI. Games allocate Registry and AssetStore themselves and
 // iterate std::vector<Tile> directly, so a size change is emitted at *their*

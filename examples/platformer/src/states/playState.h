@@ -21,6 +21,8 @@
 
 #include "../components/playerComponent.h"
 
+using namespace storm;
+
 // Tile constants — must match the tile size used in the editor
 constexpr int TILE_SIZE = 16;
 constexpr float TILE_SCALE = 2.5f;

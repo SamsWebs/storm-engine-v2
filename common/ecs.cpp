@@ -1,5 +1,7 @@
 #include "ecs.h"
 
+namespace storm {
+
 std::size_t IComponent::nextId = 0;
 std::unique_ptr<Registry> Registry::instance = nullptr;
 
@@ -669,3 +671,4 @@ Registry &Registry::Instance() {
   }
   return *instance;
 }
+} // namespace storm

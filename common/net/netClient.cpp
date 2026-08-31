@@ -2,6 +2,8 @@
 
 #include "netClient.h"
 
+namespace storm {
+
 NetClient::NetClient() {
   conn_.SetSendFunc([this](const uint8_t *data, int size) {
     return sock_.Send(serverAddr_, data, size);
@@ -186,3 +188,5 @@ void NetClient::ProcessData(const uint8_t *data, int size) {
     }
   }
 }
+
+} // namespace storm

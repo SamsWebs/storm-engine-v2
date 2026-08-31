@@ -4,6 +4,8 @@
 
 #include "netTypes.h"
 
+namespace storm {
+
 // ── Game state snapshots (SDL-free) ─────────────────────────────────────────
 // A snapshot is a flat set of typed items: each has a type, an id, and an
 // int32 payload. The host builds one per game tick (per client), sends deltas
@@ -82,3 +84,5 @@ private:
   int nextSlot_ = 0;
   int latestTick_ = -1;
 };
+
+} // namespace storm

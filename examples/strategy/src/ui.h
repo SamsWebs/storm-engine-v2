@@ -6,6 +6,8 @@
 #include <cstdio>
 #include <string>
 
+using namespace storm;
+
 // HUD, menu and banner drawing.
 //
 // Deliberately not ECS work, for the same reason as examples/shooter: component

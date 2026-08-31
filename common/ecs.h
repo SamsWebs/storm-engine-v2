@@ -15,6 +15,8 @@
 #include <unordered_map>
 #include <vector>
 
+namespace storm {
+
 // Raised 32 -> 64 in 2.0.0. This needed a major release despite changing no
 // struct size, and that is exactly why: sizeof(std::bitset<N>) is 8 bytes for
 // every N from 1 to 64, so Signature is 8 bytes either way and no size check
@@ -302,7 +304,10 @@ private:
   // real CreateEntity/KillEntity cycles. Same trick as IComponent::nextId
   // (protected, reached through a derived spec struct) applied via
   // friendship instead, since `generations` is an instance member, not a
-  // static one a subclass could inherit into scope.
+  // static one a subclass could inherit into scope. The spec must declare it
+  // inside namespace storm -- this names storm::EcsGenerationTestSeam, and a
+  // same-named struct in the global namespace is a different type with no
+  // access.
   friend struct EcsGenerationTestSeam;
 
   std::size_t numEntities = 0;
@@ -900,3 +905,5 @@ template <typename TComponent> TComponent &Entity::GetComponent() const {
   }
   return registry->GetComponent<TComponent>(*this);
 }
+
+} // namespace storm

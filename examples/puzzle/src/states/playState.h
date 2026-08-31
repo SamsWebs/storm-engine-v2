@@ -18,6 +18,8 @@
 #include "../components/tetrisCell.h"
 #include "../systems/tetrisSystem.h"
 
+using namespace storm;
+
 constexpr int BOARD_W = 10;
 constexpr int BOARD_H = 20;
 constexpr int CELL = 32;

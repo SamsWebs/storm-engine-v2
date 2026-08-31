@@ -24,6 +24,7 @@ struct Registry {
 #include <igloo/igloo_alt.h>
 
 using namespace igloo;
+using namespace storm;
 
 namespace {
 

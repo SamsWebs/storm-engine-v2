@@ -9,6 +9,8 @@
 #include "../MouseControl.h"
 #include "ICommand.h"
 
+using namespace storm;
+
 class AddTileCommand : public ICommand {
 private:
   std::shared_ptr<class MouseControl> mMouseControl;

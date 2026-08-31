@@ -14,6 +14,8 @@
 #include <string>
 #include <vector>
 
+using namespace storm;
+
 // The campaign map. Pushes BattleState on top of itself when two armies meet
 // and stays alive underneath it, which is the whole reason this example exists.
 class OverworldState : public GameState {

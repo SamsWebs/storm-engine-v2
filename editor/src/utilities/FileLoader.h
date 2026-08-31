@@ -23,6 +23,8 @@
 #include "LuaWriter.h"
 #include "Utilities.h"
 
+using namespace storm;
+
 class FileLoader {
 private:
   void LoadMap(const AssetManager_Ptr &assetManager,

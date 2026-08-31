@@ -8,6 +8,8 @@
 
 #include <stormengine2/net/net.h>
 
+using namespace storm;
+
 // ── netchat: host or join a LAN chat over UDP ───────────────────────────────
 //   ./bin/netchat host [port]
 //   ./bin/netchat join <ip> <port> [name]

@@ -1,5 +1,7 @@
 #pragma once
 
+namespace storm {
+
 // ── Touch input primitives (SDL-free) ───────────────────────────────────────
 // Shared building blocks for on-screen controls: a rectangular hit zone and a
 // finger position, both in the game's logical (letterboxed) coordinate space.
@@ -54,3 +56,5 @@ inline TouchInput EvalTouches(const TouchZones &zones,
     }
     return in;
 }
+
+} // namespace storm

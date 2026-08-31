@@ -4,6 +4,8 @@
 #include <SDL2/SDL.h>
 #include <glm/glm.hpp>
 
+namespace storm {
+
 struct SpriteComponent {
   std::string assetId;
   int width;
@@ -24,3 +26,4 @@ struct SpriteComponent {
     flip = SDL_FLIP_NONE;
   }
 };
+} // namespace storm

@@ -3,6 +3,7 @@
 #include "../common/xmlLoader.h"
 
 using namespace igloo;
+using namespace storm;
 
 static const std::string filePath = "./specs/assets/xml/states.xml";
 

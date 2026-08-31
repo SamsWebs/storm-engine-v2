@@ -4,6 +4,8 @@
 #include <stormengine2/components/transform.h>
 #include <stormengine2/ecs.h>
 
+using namespace storm;
+
 // Keeps the TransformComponent of every board cell in sync with its
 // TetrisCellComponent board position. Run this after any move/lock/shift so
 // the existing RenderSystem sees up-to-date screen positions.

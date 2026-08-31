@@ -8,6 +8,8 @@
 
 #include <stormengine2/input/gamepad.h>
 
+using namespace storm;
+
 // The engine ships no Game class, no main loop and no window management --
 // only GameStateMachine. Every game writes this file.
 //

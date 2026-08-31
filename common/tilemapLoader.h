@@ -10,6 +10,8 @@
 #include <string>
 #include <vector>
 
+namespace storm {
+
 struct Tile {
   glm::ivec2 relativePosition; // (col, row) in tile units
   glm::ivec2 pixelSrcPosition; // (srcX, srcY) in the tileset PNG
@@ -86,3 +88,5 @@ private:
   SDL_Surface *mapSurface;
   Logger logger;
 };
+
+} // namespace storm

@@ -5,6 +5,7 @@
 #include "../../common/net/netSnapshot.h"
 
 using namespace igloo;
+using namespace storm;
 
 namespace {
 void AddSkater(NetSnapshot &snap, int id, int x, int y, int energy) {

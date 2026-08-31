@@ -158,9 +158,23 @@ No public type in `common/` sits in a named namespace. `Entity`, `Registry`, `Sy
 
 A game that declares its own `Entity` or `Logger` collides.
 
-**Why it stays.** Introducing `namespace storm { }` breaks every single line of every consuming game.
+**Why it stayed.** Introducing `namespace storm { }` breaks every single line of every consuming game.
 
-**Meanwhile.** Prefix your own types, or wrap yours in a namespace of your own.
+**Resolved in 2.0.0.** Every engine type is in `namespace storm`. A game has three ways forward, cheapest first:
+
+1. **Force-include the bridge from your build** — one line, no source edits:
+
+   ```make
+   CXXFLAGS += -include stormengine2/compat/global.h
+   ```
+
+2. **Include the bridge** in the files that need it: `#include <stormengine2/compat/global.h>`.
+
+3. **Add `using namespace storm;`** after your engine includes, or qualify with `storm::`. This is what the examples, the editor and the starter template do.
+
+`<stormengine2/compat/global.h>` emits a `using` declaration for every public engine name — including the enumerators of the unscoped enums (`LOG_INFO`, `kNetChunkVital` and the rest), which a `using` on the enum type alone does not bring across.
+
+**The bridge exists to be deleted.** It pulls every engine name back into the global namespace, which is exactly the collision the namespace was added to prevent, so a game that keeps it forever has taken none of the benefit. Use it to get green, then remove it and fix the names. A future major will drop the header.
 
 ## 10. Collision only kills; there is no event bus
 

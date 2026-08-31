@@ -7,6 +7,7 @@
 #include "../../common/net/netPacket.h"
 
 using namespace igloo;
+using namespace storm;
 
 Describe(NetPacketSpec) {
 

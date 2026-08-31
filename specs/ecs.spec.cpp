@@ -6,6 +6,7 @@
 #include "support/freshDiagnosticBudget.h"
 
 using namespace igloo;
+using namespace storm;
 
 struct SpecHealth {
   SpecHealth(int v = 0) : value(v) {}
@@ -54,6 +55,11 @@ public:
 // generation table so the next CreateEntity for that id is stamped right up
 // against the wrap, the same way SpecComponentIdCounter above borrows
 // IComponent::nextId.
+// Declared inside namespace storm because that is where Registry's `friend
+// struct EcsGenerationTestSeam` names it. A copy in the global namespace is a
+// different type and gets no access -- which is exactly what the compiler said
+// when the engine moved into the namespace and this did not.
+namespace storm {
 struct EcsGenerationTestSeam {
   static void SeedGeneration(Registry &registry, std::size_t id,
                              std::uint32_t generation) {
@@ -63,6 +69,7 @@ struct EcsGenerationTestSeam {
     registry.generations[id] = generation;
   }
 };
+} // namespace storm
 
 static std::size_t SpecErrorCount() {
   std::size_t errors = 0;

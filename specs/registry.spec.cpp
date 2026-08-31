@@ -8,6 +8,7 @@
 #include "support/freshDiagnosticBudget.h"
 
 using namespace igloo;
+using namespace storm;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Test fixtures: minimal components and a system that requires one of them.

@@ -23,6 +23,8 @@
 
 #ifdef __SWITCH__
 #include <switch.h>
+
+using namespace storm;
 #endif
 
 // Switch screen is 1280x720; scale tiles up to fill it nicely

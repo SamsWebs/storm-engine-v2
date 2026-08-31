@@ -22,6 +22,8 @@
 #include "IconsFontAwesome.h"
 #include "ImGuiFunc.h"
 
+using namespace storm;
+
 class RenderGuiSystem : public System {
 private:
   std::unique_ptr<class ImGuiFuncs> mImFuncs;

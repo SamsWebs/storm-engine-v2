@@ -5,6 +5,8 @@
 #include "netTypes.h"
 #include "netVarInt.h"
 
+namespace storm {
+
 // ── Packet framing and message packing (SDL-free) ───────────────────────────
 // Connected packet layout (7-byte header, then chunk data):
 //   byte0: flags(6 bits, NetPacketFlag) << 2 | ackHigh(2 bits)
@@ -128,3 +130,5 @@ private:
   int size_;
   int pos_ = 0;
 };
+
+} // namespace storm

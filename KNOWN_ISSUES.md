@@ -64,7 +64,9 @@ Following from the above: when `RequireComponent<T>()` is called for a type past
 
 It is memory-safe and loudly logged, and only reachable once you are already past 32 types — but the failure direction is wrong.
 
-**Why it stays.** The clean fix is a `disabled_` latch on `System`, changing `sizeof(System)` from 32. Games subclass `System` and the `Registry` holds them by `shared_ptr`, so the layout is part of the ABI.
+**Why it stayed.** The clean fix is a latch on `System`, changing `sizeof(System)` from 32. Games subclass `System` and the `Registry` holds them by `shared_ptr`, so the layout is part of the ABI.
+
+**Resolved in 2.0.0.** A `RequireComponent<T>()` call that overflows the cap now latches the system off rather than merely dropping the requirement, and `System::IsDisabled()` reports it. A latched system is skipped by entity admission and by the retrofit path (`AdmitExistingEntitiesTo`, `CountEntitiesMissedBySystem`), so it matches **nothing** instead of everything. The latch is one-way: the component id it wanted does not exist, so there is no runtime state that could make the system correct again. `sizeof(System)` is 32 → 40.
 
 ## 5. Adding or removing a component never changes system membership
 

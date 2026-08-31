@@ -130,6 +130,8 @@ void System::sortEntities(
   std::sort(entities.begin(), entities.end(), lambda);
 }
 
+bool System::IsDisabled() const { return disabled; }
+
 const Signature &System::GetComponentSignature() const {
   return componentSignature;
 }
@@ -189,6 +191,15 @@ bool Registry::IsIdInUse(std::size_t id) const {
 template <typename TVisitor>
 void Registry::ForEachMissedEntity(const System &system,
                                    TVisitor &&visit) const {
+  // A latched system's signature is empty, so every live entity would look
+  // like one it missed. That is wrong for both callers and dangerous for one:
+  // CountEntitiesMissedBySystem would report the whole world, and
+  // AdmitExistingEntitiesTo would then hand the whole world to a system the
+  // latch exists to keep empty. See System::RequireComponent in ecs.h.
+  if (system.IsDisabled()) {
+    return;
+  }
+
   const Signature &required = system.GetComponentSignature();
   const std::vector<Entity> &members =
       const_cast<System &>(system).GetSystemEntities();
@@ -317,6 +328,13 @@ Registry::SystemMissedByLateComponent(Entity entity,
   asAdmitted.reset(componentId);
 
   for (const auto &entry : systems) {
+    // No IsDisabled() guard here, unlike AddEntityToSystems and
+    // ForEachMissedEntity. A latched system's signature is empty, so
+    // matchedAtAdmission below is (asAdmitted & 0) == 0 -- true for every
+    // entity -- and the loop already skips it. A guard would be unreachable
+    // code that no test can distinguish from its absence. If the condition
+    // below is ever rewritten, re-check that a latched system still cannot
+    // be named here.
     const Signature &required = entry.second->GetComponentSignature();
     const bool matchedAtAdmission = (asAdmitted & required) == required;
     const bool matchesNow = (now & required) == required;
@@ -431,6 +449,13 @@ void Registry::AddEntityToSystems(Entity entity) {
 
   // loop all the systems
   for (auto &system : systems) {
+    // A latched system holds an empty signature, which would match every
+    // entity here. Skip it: the whole point of the latch is that it matches
+    // nothing. See System::RequireComponent in ecs.h.
+    if (system.second->IsDisabled()) {
+      continue;
+    }
+
     const auto &systemComponentSignature =
         system.second->GetComponentSignature();
 

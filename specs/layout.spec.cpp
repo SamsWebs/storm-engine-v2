@@ -18,7 +18,7 @@ Describe(LayoutSpec) {
   It(pins_the_sizes_that_are_abi) {
     Assert::That(sizeof(Registry), Equals(static_cast<std::size_t>(488)));
     Assert::That(sizeof(Entity), Equals(static_cast<std::size_t>(24)));
-    Assert::That(sizeof(System), Equals(static_cast<std::size_t>(32)));
+    Assert::That(sizeof(System), Equals(static_cast<std::size_t>(40)));
     Assert::That(sizeof(Signature), Equals(static_cast<std::size_t>(8)));
     Assert::That(sizeof(Tile), Equals(static_cast<std::size_t>(80)));
   };

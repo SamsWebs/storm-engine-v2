@@ -71,12 +71,25 @@ when items 3-6 are planned:
 The layout pin earned itself immediately: it caught each size change as it happened and forced a measured
 number into every commit message.
 
-### 3. `System` gains a disabled latch — `KNOWN_ISSUES.md` item 4
+### 3. `System` gains a disabled latch — `KNOWN_ISSUES.md` item 4 — **DONE**
 
-`sizeof(System)` 32 → 40. Also fixes the wrong failure *direction* in the component
-cap: a system whose `RequireComponent` overflowed ends up with an empty signature,
-and an empty signature matches **every** entity — so a system that should have
-matched nothing runs on the whole world.
+`sizeof(System)` 32 → 40, pinned in `specs/layout.spec.cpp`. An overflowing
+`RequireComponent` now latches the system off, so it matches nothing rather than
+everything, and `System::IsDisabled()` reports it.
+
+Three paths compare signatures and all three had to be guarded, not just
+admission: `AddEntityToSystems`, and `ForEachMissedEntity`, which backs both
+`CountEntitiesMissedBySystem` and `AdmitExistingEntitiesTo`. The retrofit path
+was the dangerous one — unguarded, `AdmitExistingEntitiesTo` would hand the
+entire world to the one system the latch exists to keep empty.
+
+A fourth site, `SystemMissedByLateComponent`, deliberately has **no** guard.
+Its `matchedAtAdmission` test is `(asAdmitted & required) == required`, which an
+empty signature satisfies for every entity, so the loop already skips a latched
+system. A guard there was written, then removed: mutation testing showed it
+survived, and it survived because no test could distinguish its presence from
+its absence. The reasoning is recorded in a comment at the site so it is not
+re-added.
 
 ### 4. `Tile` carries the editor's animation fields — `KNOWN_ISSUES.md` item 7
 

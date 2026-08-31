@@ -190,6 +190,12 @@ private:
   Signature componentSignature;
   using EntitiesContainer = std::vector<Entity>;
   EntitiesContainer entities;
+  // Latched on when RequireComponent<T>() is handed a type past
+  // MAX_COMPONENTS. One-way on purpose: a system that lost a requirement can
+  // never be made correct again at runtime, because the id it wanted does not
+  // exist. See RequireComponent below for why the latch is the fix rather than
+  // simply dropping the requirement.
+  bool disabled = false;
 
 protected:
   void
@@ -204,6 +210,10 @@ public:
   std::vector<Entity> &GetSystemEntities();
   const Signature &GetComponentSignature() const;
 
+  // True once a RequireComponent<T>() call overflowed MAX_COMPONENTS. A
+  // disabled system is never offered an entity, so it matches nothing.
+  bool IsDisabled() const;
+
   // Define the component type T that entities must have to be
   // considered by the system
   template <typename TComponent> void RequireComponent();
@@ -215,8 +225,16 @@ template <typename TComponent> void System::RequireComponent() {
   static thread_local unsigned int reports = 0;
   if (!EcsComponentIdIsValid(componentId, "System::RequireComponent",
                              reports)) {
-    return; // the requirement is dropped rather than throwing out of a
-            // -fno-exceptions translation unit
+    // The requirement is dropped rather than throwing out of a
+    // -fno-exceptions translation unit -- but dropping it alone fails in the
+    // wrong direction. Membership is
+    // (entitySignature & systemSignature) == systemSignature, so a system
+    // that lost every requirement holds an empty signature, and an empty
+    // signature matches EVERY entity: a system that should have seen nothing
+    // would run on the whole world. Latching it off makes the failure
+    // "matches nothing", which is the direction a game can survive.
+    disabled = true;
+    return;
   }
 
   // operator[] rather than set(pos): set/test carry an out_of_range throw

@@ -525,14 +525,14 @@ Describe(EcsSpec) {
     };
 
     // KNOWN_ISSUES.md §4 — PINS A KNOWN LIMITATION, NOT DESIRED BEHAVIOUR.
-    // When RequireComponent<T>() overflows the cap the requirement is dropped
-    // and the system's signature stays empty; membership is
-    // (entitySignature & systemSignature) == systemSignature, which every
-    // entity satisfies against an empty signature. So a system that should
-    // have matched nothing runs on the whole world instead. The clean fix is
-    // a disabled_ latch on System, which changes sizeof(System) — an ABI
-    // break, frozen out of 1.x. A 2.0.0 that fixes it must update this case.
-    It(should_match_every_entity_when_a_systems_requirement_overflowed) {
+    // Was: "should match every entity when a system's requirement overflowed".
+    // When RequireComponent<T>() overflows the cap the requirement cannot be
+    // recorded, and membership is
+    // (entitySignature & systemSignature) == systemSignature -- so a system
+    // left holding an empty signature matched EVERY entity, and one that
+    // should have seen nothing ran on the whole world. 2.0.0 latches such a
+    // system off instead, so the failure direction is "matches nothing".
+    It(should_match_no_entity_when_a_systems_requirement_overflowed) {
       // Order-independent: force SpecOverflowComponent's cached id to
       // MAX_COMPONENTS whether or not the case above has run yet.
       const std::size_t saved = SpecComponentIdCounter::Get();
@@ -544,9 +544,25 @@ Describe(EcsSpec) {
       Registry registry;
       registry.AddSystem<SpecOverflowSystem>();
 
-      // Carries no component at all, and still matches.
+      Assert::That(registry.GetSystem<SpecOverflowSystem>().IsDisabled(),
+                   Equals(true));
+
+      // A second, healthy system is the control. Without it, "the latched
+      // system holds nothing" would also pass on a world that admitted
+      // nothing at all -- the assertion has to distinguish "skipped" from
+      // "there was never anything to skip".
+      registry.AddSystem<SpecHealthSystem>();
+
+      // Carries no component at all. Under the old behaviour it matched.
       Entity unrelated = registry.CreateEntity();
+
+      // And one carrying a component the latched system never asked for.
+      Entity carrier = registry.CreateEntity();
+      registry.AddComponent<SpecHealth>(carrier, SpecHealth{7});
+
       registry.Update();
+
+      Assert::That(registry.IsAlive(unrelated), Equals(true));
 
       Assert::That(registry.GetSystem<SpecOverflowSystem>()
                        .GetComponentSignature()
@@ -554,11 +570,65 @@ Describe(EcsSpec) {
                    Equals(true));
       Assert::That(
           registry.GetSystem<SpecOverflowSystem>().GetSystemEntities().size(),
+          Equals(0u));
+
+      // The control admitted normally, so admission ran and the latched
+      // system was passed over specifically.
+      Assert::That(
+          registry.GetSystem<SpecHealthSystem>().GetSystemEntities().size(),
           Equals(1u));
-      Assert::That(registry.GetSystem<SpecOverflowSystem>()
+      Assert::That(registry.GetSystem<SpecHealthSystem>()
                        .GetSystemEntities()[0]
                        .GetId(),
-                   Equals(unrelated.GetId()));
+                   Equals(carrier.GetId()));
+    };
+
+    // The latch has to hold on the retrofit path too. AdmitExistingEntitiesTo
+    // walks every live entity and admits the ones the system's signature
+    // matches -- against an empty signature that is the entire world, handed
+    // to the one system that must stay empty.
+    It(should_not_admit_existing_entities_to_a_latched_system) {
+      const std::size_t saved = SpecComponentIdCounter::Get();
+      SpecComponentIdCounter::Set(MAX_COMPONENTS);
+      Assert::That(Component<SpecOverflowComponent>::GetId(),
+                   Equals(static_cast<std::size_t>(MAX_COMPONENTS)));
+      SpecComponentIdCounter::Set(saved);
+
+      Registry registry;
+      Entity first = registry.CreateEntity();
+      registry.AddComponent<SpecHealth>(first, SpecHealth{1});
+      Entity second = registry.CreateEntity();
+      registry.Update();
+
+      // Both are live and already admitted, so the world genuinely holds
+      // entities for the retrofit to find.
+      Assert::That(registry.IsAlive(first), Equals(true));
+      Assert::That(registry.IsAlive(second), Equals(true));
+
+      registry.AddSystem<SpecOverflowSystem>();
+      SpecOverflowSystem &system = registry.GetSystem<SpecOverflowSystem>();
+
+      // A healthy system added just as late does find its entity, so the
+      // retrofit path is working and the latched one is being skipped.
+      registry.AddSystem<SpecHealthSystem>();
+      SpecHealthSystem &control = registry.GetSystem<SpecHealthSystem>();
+      Assert::That(registry.CountEntitiesMissedBySystem(control), Equals(1u));
+
+      Assert::That(registry.CountEntitiesMissedBySystem(system), Equals(0u));
+
+      registry.AdmitExistingEntitiesTo(system);
+
+      Assert::That(system.GetSystemEntities().size(), Equals(0u));
+    };
+
+    // A system whose requirements all resolved is not latched -- the latch
+    // must be reachable only through overflow.
+    It(should_not_latch_a_system_whose_requirements_resolved) {
+      Registry registry;
+      registry.AddSystem<SpecHealthSystem>();
+
+      Assert::That(registry.GetSystem<SpecHealthSystem>().IsDisabled(),
+                   Equals(false));
     };
   };
 

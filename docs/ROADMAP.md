@@ -169,6 +169,34 @@ Settle two design questions before writing code: what identifies a body (an opaq
 `std::size_t`, or `void*` userdata), and whether the core owns the begin/end state
 or the caller does.
 
+### An example with sustained entity churn
+
+Genre coverage is decent — platformer (plus Switch and Android ports), JRPG,
+Tetris, shooter, hockey, strategy, checkers, and three networking samples.
+Racing, roguelike and tower-defense are unrepresented, but genre is not the gap.
+
+The gap is **churn**. Only four of the eleven examples kill an entity at all
+(`shooter`, `puzzle`, `strategy`, `netplay-checkers`), and none of them creates
+and destroys entities continuously. So nothing in the tree exercises id
+recycling at scale — which is exactly why the generation-counter wrap survived
+every review and every one of 428 specs, and was found only by an adversarial
+probe that drove `Registry::Update()` flat out for an hour.
+
+A wave-survival or bullet-hell example would exercise it as a side effect of
+being what it is: hundreds of entities spawning and dying per second, handles
+held across frames, ids recycling constantly.
+
+Worth being honest about what an example can and cannot show here, though. The
+layout wave's changes are **invisible in correct code** — a stale handle is
+rejected, and a game that never keeps one notices nothing. An example cannot
+demonstrate that without deliberately misusing the engine. What it would do is
+*exercise* the recycling path under real load, which is different and arguably
+more valuable: a soak target rather than a teaching sample.
+
+If the goal is coverage rather than a sample, a long-running stress spec would
+buy more per line than an example does, and would not add a twelfth README to
+sweep the next time something is deleted.
+
 ### A lighting overlay
 
 Generalises a technique proven in a shipping game: two quarter-resolution RGBA

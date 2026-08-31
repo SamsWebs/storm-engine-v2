@@ -157,6 +157,12 @@ DiagnosticsTable() {
 
 // The entities a system registered now would have to be told about: live,
 // past admission, matching the signature, not already members.
+//
+// Candidates are bare `Entity(id)` values: `registry` is null on every one of
+// them. That is fine for counting, but anything that dereferences a component
+// off one must stamp `entity.registry` first, as AdmitExistingEntitiesTo does.
+// Skipping that stamp is silent - the null guards return a shared zeroed
+// fallback rather than failing - and it shipped that way once already.
 template <typename TVisitor>
 void ForEachMissedEntity(const Registry &registry, std::size_t numEntities,
                          const std::vector<Signature> &signatures,

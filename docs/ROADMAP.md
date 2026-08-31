@@ -153,15 +153,43 @@ migration is a force-include from the build rather than editing every file:
 CXXFLAGS += -include stormengine2/compat/global.h
 ```
 
-### 7. Input action mapping
+### 7. Input action mapping — **DONE**
 
-Belongs in this wave because it touches the input headers that namespacing is
-already rewriting.
+`common/input/actionMap.h`, header-only and additive — nothing existing changed,
+so this is the one item in the wave that breaks nothing.
 
-Four input sources now ship — `keyboard.h`, `gamepad.h`, `virtualGamepad.h`,
-`touchControls.h` — with no way to bind them to a single action, so every game
-writes `if (key || pad || touch)` by hand. An `ActionMap` resolving one action
-across all four is what makes those four headers a system rather than four headers.
+`ActionMap::Bind(actionId, ActionBinding{key, pad, vpad, touch})`, then
+`Update(sources)`, then `IsDown` / `WasPressed` / `WasReleased`. Every source is
+optional, so a desktop build and a phone build share one binding table and differ
+only in what they pass.
+
+The design decision worth keeping: **keyboard and gamepad edges are taken from
+those classes rather than recomputed from the held state.** Deriving all edges
+centrally is simpler and was the first design, but a key pressed and released
+inside a single frame never appears in the held state at all, so fast taps would
+vanish — which is the exact reason `Keyboard` tracks presses separately. The
+virtual gamepad and touch are stateless snapshots with no edges of their own, so
+only those are derived against the previous frame.
+
+Multi-source rule: down when the first source takes it, up when the last lets go.
+A second source joining mid-hold is not a new press.
+
+`Update` takes `ActionSources` holding two `GamepadState` snapshots rather than a
+`Gamepad`, because `GamepadState` is a plain struct — that is what lets the whole
+header be spec'd with no controller attached, the same seam `gamepad.h` uses.
+
+**One known coverage gap.** The four-argument convenience overload cannot be
+tested: `Gamepad::Update()` samples a real device, so with nothing attached
+`Current()` and `Previous()` are both zeroed and identical, and no spec can tell
+correct forwarding from swapped forwarding — the mutant that swaps them survives.
+It is recorded at the overload. Test it on hardware if it changes.
+
+Mutation testing also removed one term and added one case. On the press side
+`stateless && !statelessPrev` could never differ from `stateless`, because the
+`!entry.down` gate already covers it, so it is gone rather than left as
+unreachable-effect code. The same flag is load-bearing on the release side —
+without it an idle action reports a release on every frame — so there is now a
+case pinning exactly that.
 
 ### 8. Documentation, written once at the end
 

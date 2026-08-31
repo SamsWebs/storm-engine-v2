@@ -2,10 +2,20 @@ name: Build And Release Multiplatform
 
 on:
   push:
-    branches:
-      - main
+    # Releases come from a deliberately pushed tag, never from a merge.
+    #
+    # This used to also trigger on pushes to main, where the version job bumped
+    # the patch from the newest tag and pushed it. That made every merge a
+    # release, and it derived the number from tag history rather than from what
+    # the tree says it is - so merging a set of BREAKING changes published them
+    # as a patch, telling consumers it was safe to relink when relinking would
+    # hand them misaligned memory. It happened: v1.3.2 was auto-created over the
+    # 2.0.0 wave-one merge and had to be deleted before anyone fetched it.
+    #
+    # PR validation already builds and tests every change (pr-validate.yml), so
+    # main did not need this to stay honest.
     tags:
-      - 'v*.*.*'   # manually pushed major/minor tags build + release themselves
+      - 'v*.*.*'
   workflow_dispatch:  # manual button for rebuilding a release
 
 # Serialize runs so two quick merges (or a branch+tag push) can't race the
@@ -16,8 +26,9 @@ concurrency:
 
 jobs:
   # ── Determine version ────────────────────────────────────────────────────────
-  # If the merge commit already carries a tag (major/minor bump you pushed
-  # manually), use it.  Otherwise find the latest vX.Y.Z tag and bump patch.
+  # The tag being built is the version. The patch-bump fallback is kept only for
+  # workflow_dispatch, which can run without a tag; a tag push always takes the
+  # first branch.
   version:
     runs-on: ubuntu-latest
     permissions:
@@ -30,6 +41,22 @@ jobs:
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
+
+      # Belt and braces against the trigger change above. Makefile.debian's
+      # VERSION is what the headers and the .pc file are built with, and a
+      # tilde marks a pre-release: 2.0.0~dev sorts below 2.0.0 to both dpkg and
+      # pkg-config, which is the whole point of the character. If the tree says
+      # it is not finished, a pushed tag does not make it finished.
+      - name: Refuse to release a pre-release version
+        run: |
+          TREE_VERSION=$(sed -n 's/^VERSION *?*= *//p' Makefile.debian | head -1)
+          echo "Makefile.debian declares VERSION=${TREE_VERSION}"
+          case "$TREE_VERSION" in
+            *"~"*)
+              echo "::error::Refusing to release: Makefile.debian's VERSION is '${TREE_VERSION}', a pre-release. Set a final version before tagging."
+              exit 1
+              ;;
+          esac
 
       - name: Calculate version
         id: calc

@@ -11,6 +11,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
+      # ONLY tinyxml2. base.mk compiles it into the library, so Dockerfile.debian
+      # cannot build without it -- but `submodules: true` would also fetch the
+      # Android SDL trees (SDL2, SDL_image2, SDL_mixer2, SDL_ttf2) and glm, ~585 MB
+      # that nothing in this image builds and .dockerignore excludes anyway.
+      - name: Fetch the vendored tinyxml2
+        run: git submodule update --init --depth 1 vendor/android/tinyxml2
+
       # The generated probe is what makes specs/compat/global.spec.cpp able to
       # fail. It is committed so the spec suite needs no Python, which means it
       # can go stale -- a public name added to the engine and not regenerated

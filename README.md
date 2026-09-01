@@ -42,13 +42,18 @@ float depth;
 if (Manifold(puck, post, normal, depth)) {
   // normal runs from the puck INTO the post; depth is how far they overlap.
   // Applying MinimumTranslation(normal, depth) to the POST separates them -
-  // or negate it and apply it to the puck.
+  // or negate it and apply it to the puck. Applying it to the puck unchanged
+  // drives them together, which is the easy mistake.
 }
 ```
 
+One caveat on `MinimumTranslation`: it is a true minimum separation for circles, but **not for box vs box when one box is contained within the other** along the chosen axis. `Manifold` computes the overlap as `min(maxes) - max(mins)`, which for containment is the inner box's own extent rather than the distance to a face, so the vector it gives you will not separate the pair in one step. Resolve deep box overlaps iteratively, or keep bodies from reaching containment in the first place.
+
 Boxes and circles are both supported, in every combination: `Overlaps` and `Manifold` are overloaded for AABB/AABB, circle/circle and circle/AABB (either order). Circles matter for anything round - a puck kept off the boards by its edge, characters pushed apart by a separation radius, a shot glancing off a post. A circle against a box corner produces a diagonal normal; approximating it with a box would snap that to an axis and change how the game feels.
 
-Overlap is **strict** throughout: a shared edge or a tangent touch is not a contact, because a zero-area overlap has no meaningful normal. A circle centred exactly *on* an edge is a contact, though - half its area is inside.
+Overlap is **strict** throughout, by one rule: a contact exists when the shapes share a point interior to at least one of them. So a shared edge and a tangent touch are not contacts - the only shared points are on both boundaries - while a circle centred exactly *on* a box edge is one, because the half-disk inside the box is interior to it. A zero-radius point resting on a boundary is not a contact; strictly inside, it is.
+
+`Overlaps` and `Manifold` are guaranteed never to disagree about whether a contact exists. That is structural, not incidental: each shape pair has a single solver and both call it. They were separate expressions once and drifted apart four different ways.
 
 `ContactSystem` (`<stormengine2/systems/contact.h>`) is the ECS-facing layer on top: it builds bounds from components, sweeps for pairs, and reports begin/end contacts through callbacks. Using it means adopting the ECS - but that is a choice about the broadphase, not a precondition for using the math.
 

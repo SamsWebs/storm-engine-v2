@@ -265,6 +265,46 @@ jobs:
               ;;
           esac
 
+          # ── The one derived value we override, and why it is safe ──────────
+          #
+          # dpkg-shlibdeps derives `libsdl2-2.0-0 (>= 2.0.12)`. That is NOT a
+          # real API requirement. The library imports exactly four symbols from
+          # SDL2 proper -- SDL_GetError, SDL_FreeSurface, SDL_DestroyTexture and
+          # SDL_CreateTextureFromSurface -- and all four have existed since SDL
+          # 2.0.0. Everything else it uses comes from SDL2_image/ttf/mixer, or is
+          # header code the GAME compiles rather than this .so.
+          #
+          # The 2.0.12 comes from Debian's libsdl2-2.0-0 symbols file, which
+          # stamps a blanket floor instead of per-symbol introduction versions:
+          # even SDL_GetError, an SDL 2.0.0 symbol, is listed as 2.0.12 there.
+          # shlibdeps reports it honestly and the result is a package that
+          # refuses to install on Ubuntu 20.04 / Mint 20, which ship SDL 2.0.10:
+          #
+          #   Depends: libsdl2-2.0-0 (>= 2.0.12)
+          #            but 2.0.10+dfsg1-3 is to be installed
+          #
+          # OVERRIDING A DERIVED FIELD IS EXACTLY WHAT CAUSED THE v1.2.1 BUG,
+          # where a hand-maintained Depends: omitted tinyxml2 and the package
+          # installed cleanly and then failed to load. So this rewrites ONE named
+          # package, and only when the derived value is EXACTLY the 2.0.12 we
+          # know to be an artifact. If shlibdeps ever derives something higher,
+          # that is a genuine requirement -- the engine started calling a newer
+          # SDL2 function -- and lowering it would ship a package that installs
+          # and then cannot resolve at run time. So that case fails the build
+          # instead, loudly, rather than being quietly rewritten.
+          case "${DEPENDS}" in
+            *"libsdl2-2.0-0 (>= 2.0.12)"*)
+              DEPENDS=$(printf '%s' "${DEPENDS}" \
+                | sed 's/libsdl2-2.0-0 (>= 2.0.12)/libsdl2-2.0-0 (>= 2.0.10)/')
+              echo "Lowered the SDL2 floor to 2.0.10 (see comment): ${DEPENDS}"
+              ;;
+            *"libsdl2-2.0-0 (>= 2.0.1"*|*"libsdl2-2.0-0 (>= 2.0.2"*|*"libsdl2-2.0-0 (>= 2."*)
+              echo "::error::dpkg-shlibdeps derived an SDL2 floor this workflow does not recognise: ${DEPENDS}"
+              echo "::error::Only '>= 2.0.12' is known to be a symbols-file artifact and safe to lower. Anything else is a real requirement -- check which SDL2 symbol the library now imports before touching this."
+              exit 1
+              ;;
+          esac
+
           echo "depends=${DEPENDS}" >> "$GITHUB_OUTPUT"
 
       - name: Build the .deb
@@ -338,19 +378,48 @@ jobs:
           VERSION: ${{ needs.version.outputs.version }}
         run: |
           set -e
-          for image in debian:bullseye debian:bookworm ubuntu:22.04 ubuntu:24.04; do
+          # ubuntu:20.04 is the FLOOR and the reason the SDL2 override above
+          # exists -- it ships SDL 2.0.10 and is the only image here that the
+          # underived `>= 2.0.12` would reject. Without it in this list, that
+          # override is a claim nobody checks.
+          #
+          # It will eventually break for a reason that is not our bug: 20.04
+          # left standard support in April 2025, and when its archive moves to
+          # old-releases.ubuntu.com the apt-get update below stops working. When
+          # that happens the fix is to drop this image AND raise the SDL2 floor
+          # back to what shlibdeps derives -- not to paper over the update.
+          for image in ubuntu:20.04 debian:bullseye debian:bookworm ubuntu:22.04 ubuntu:24.04; do
             echo "::group::${image}"
             docker run --rm -v "$PWD:/w" -w /w "${image}" sh -c '
               set -e
               apt-get update -qq
+
+              # THE COMMAND THE DOCS TELL PEOPLE TO RUN, on an image that has no
+              # SDL2 runtime -- which is the whole point. This step used to run
+              # `apt-get install` while README, the release notes and the
+              # website all said `dpkg -i`, so it verified a path no user was
+              # told to take: apt resolves dependencies and dpkg does not, and
+              # the documented command failed for anyone without SDL2 already
+              # installed while this check stayed green. Reported from a clean
+              # machine as
+              #   Error: Dependency is not satisfiable: libsdl2-2.0-0
+              # The docs now say apt; this runs what they say.
               apt-get install -y -qq ./libstormenginev2_'"${VERSION}"'_amd64.deb
+
+              # And prove the dependencies really were pulled in, rather than
+              # having happened to be in the base image.
+              dpkg -s libsdl2-2.0-0 >/dev/null 2>&1 || {
+                echo "libsdl2-2.0-0 absent after install -- Depends: is not doing its job"
+                exit 1
+              }
+
               missing=$(ldd /usr/local/lib/libstormenginev2.so | grep "not found" || true)
               if [ -n "${missing}" ]; then
                 echo "unresolved after install:"
                 echo "${missing}"
                 exit 1
               fi
-              echo "OK: installed and fully resolved"
+              echo "OK: installed, dependencies pulled, fully resolved"
             ' || { echo "::error::the .deb does not install cleanly on ${image}"; exit 1; }
             echo "::endgroup::"
           done
@@ -550,13 +619,18 @@ jobs:
 
             **Debian / Ubuntu / Linux Mint (amd64)**
             ```bash
-            sudo dpkg -i libstormenginev2_${{ needs.version.outputs.version }}_amd64.deb
+            sudo apt install ./libstormenginev2_${{ needs.version.outputs.version }}_amd64.deb
             ```
 
             **Raspberry Pi 4/5 with 64-bit OS (arm64)**
             ```bash
-            sudo dpkg -i libstormenginev2_${{ needs.version.outputs.version }}_arm64.deb
+            sudo apt install ./libstormenginev2_${{ needs.version.outputs.version }}_arm64.deb
             ```
+
+            `apt`, not `dpkg -i`: **dpkg does not install dependencies**, so on a
+            machine without the SDL2 runtime it stops with a dependency error.
+            The leading `./` is required. If `dpkg -i` already left it
+            half-installed, `sudo apt-get install -f` finishes it.
 
             After installing, link with `-lstormenginev2`.
 

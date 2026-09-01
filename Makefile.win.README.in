@@ -9,7 +9,12 @@ Contents
 
   bin/                 libstormenginev2.dll and every DLL it imports —
                        SDL2 and satellites, plus the MinGW C++ runtime.
-  lib/                 libstormenginev2.dll.a, the import library.
+  lib/                 import libraries: libstormenginev2.dll.a, and SDL2's
+                       (libSDL2.dll.a, libSDL2main.a, libSDL2_image.dll.a,
+                       libSDL2_ttf.dll.a, libSDL2_mixer.dll.a) plus
+                       libtinyxml2.a. SDL2's are here because your game calls
+                       SDL directly and a program cannot borrow its library's
+                       transitive imports.
   include/stormengine2 the engine headers, plus tinyxml2.h.
   include/SDL2         SDL2 headers.
   include/glm          glm headers.

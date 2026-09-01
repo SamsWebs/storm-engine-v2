@@ -280,15 +280,30 @@ cd examples/platformer
 make -f Makefile.win && make -f Makefile.win run   # run needs wine64
 ```
 
-The `.exe` and every DLL it needs land in `bin/win/`. There is no separate
-`win-platformer` example and there should not be one: unlike `nx-platformer`
-and `android-platformer`, whose toolchains need a different project layout
-entirely, the Windows build compiles **the same sources** - so an example needs
-only a three-line `Makefile.win` naming itself and including
-`../examples.win.mk`.
+The `.exe` and every DLL it needs - including `libstormenginev2.dll` - land in
+`bin/win/`. An example needs only a three-line `Makefile.win` naming itself and
+including `../examples.win.mk`, exactly like its Linux `Makefile`.
 
-`nx-platformer` and `android-platformer` are excluded: they target devkitPro
-and the Android NDK.
+These build against the **repository**. `examples/windows-platformer` is the one
+that builds against the **unzipped release zip**, the way a user who downloaded
+it does; see its README. It has no sources of its own - it compiles
+`../platformer/src`, because what it demonstrates is a different way of
+consuming the engine, not a different game.
+
+Seven of the eleven examples cross-compile. The four that do not are excluded
+deliberately:
+
+| Example | Why not |
+|---|---|
+| `nx-platformer` | targets devkitPro |
+| `android-platformer` | targets the Android NDK |
+| `netchat` | `select()` on `STDIN_FILENO` for non-blocking keyboard input |
+| `netplay-checkers` | `fcntl(O_NONBLOCK)` on stdin for its scripted-input test channel |
+
+The last two are **not** a networking limitation -- the net module cross-compiles
+and `netrepl` uses it on Windows. Both examples poll stdin the POSIX way, which
+MinGW does not provide for console handles; making them portable means Windows
+console-handle APIs and a behaviour change, not a build fix.
 
 ### How each example loads its world
 

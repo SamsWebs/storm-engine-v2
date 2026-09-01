@@ -439,26 +439,52 @@ jobs:
       # and not one example had a Makefile.win to do that. Nothing referenced it
       # from CI, the README or any script either, so it could not rot loudly.
       #
-      # All nine desktop examples are wired now, and all nine build here. A
-      # subset was the obvious economy and is the wrong call for this file
-      # specifically: the thing being guarded is a path nobody exercises, and a
-      # subset leaves most of it exactly as unexercised as before. The deps are
-      # already built by the step above, so the marginal cost is compiling the
-      # engine plus a handful of example TUs per example.
+      # Seven of the eleven examples, and the four absences are all deliberate:
       #
-      # nx-platformer and android-platformer are absent on purpose -- devkitPro
-      # and the Android NDK, neither of which is on this runner.
+      #   nx-platformer, android-platformer  devkitPro / Android NDK, neither on
+      #                                      this runner.
+      #   netchat, netplay-checkers          POSIX non-blocking stdin, which
+      #                                      MinGW does not provide for console
+      #                                      handles -- select() on
+      #                                      STDIN_FILENO and fcntl(O_NONBLOCK)
+      #                                      respectively. NOT a networking
+      #                                      limit: netrepl uses the same net
+      #                                      module and builds fine.
+      #
+      # Every example that CAN build is built, rather than a representative
+      # sample. The thing being guarded is a path nobody exercised for so long
+      # that it did not work at all, and a subset would leave most of it exactly
+      # as unexercised as it was. The deps are already built by the step above,
+      # so the marginal cost is the engine plus a few example TUs each.
       - name: Build the examples for Windows
         run: |
           set -e
-          for ex in jrpg netchat netplay-checkers netrepl platformer \
-                    puzzle shooter sports strategy; do
+          for ex in jrpg netrepl platformer puzzle shooter sports strategy; do
             echo "::group::${ex}"
             make -C "examples/${ex}" -f Makefile.win
             test -f "examples/${ex}/bin/win/${ex}.exe" \
               || { echo "::error::examples/${ex} produced no .exe"; exit 1; }
             echo "::endgroup::"
           done
+
+      # The one thing that consumes the ZIP rather than the build tree. It runs
+      # AFTER the shape checks because it proves something they cannot: that the
+      # package is usable, not merely well formed. Both defects it has already
+      # caught -- missing SDL2 import libraries, and the DLL re-exporting
+      # _Unwind_Resume -- passed every check above.
+      - name: Build windows-platformer against the packaged SDK
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          set -e
+          make -C examples/windows-platformer VERSION="${VERSION}"
+          EXE=examples/windows-platformer/bin/win/windows-platformer.exe
+          test -f "$EXE" || { echo "::error::windows-platformer produced no .exe"; exit 1; }
+          # It must link the engine DLL. If it ever static-links the engine
+          # again, it stops testing the package.
+          x86_64-w64-mingw32-objdump -p "$EXE" \
+            | grep -q 'libstormenginev2.dll' \
+            || { echo "::error::windows-platformer does not import libstormenginev2.dll"; exit 1; }
 
       - name: Upload the SDK zip
         uses: actions/upload-artifact@v7

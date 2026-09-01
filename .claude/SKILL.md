@@ -277,7 +277,7 @@ Rules to know before you use it:
 - **Membership is still computed once.** Adding a `BoxColliderComponent` to a
   live entity never gets it into `ContactSystem`; create the entity with its
   collider.
-- **`BoundsOf`, `Overlaps`, `Manifold` and `MinimumTranslation` are static** -
+- **`BoundsOf` is static on `ContactSystem`; `Overlaps`, `Manifold`, `ClosestPointOn` and `MinimumTranslation` are free functions in `<stormengine2/collision/shapes.h>` (the `ContactSystem::` spellings remain as forwarders), and they cover circles as well as boxes** -
   usable with no system registered.
 - **The broadphase sweeps X only.** Everything stacked in one column degrades to
   all-pairs. Fine for a puck and six boards, or bullets and enemies.
@@ -1080,7 +1080,7 @@ General 2D game dev principles, mapped to how Storm Engine v2 implements them.
 | **Tile size** — 16x16, 32x32, 64x64 | `TileMapLoader` constructor takes `tileSize` (default 32). The JRPG example uses 8 to preserve exact editor pixel coordinates. |
 | **Auto-tiling** — use for terrain | Not built in. The tile editor is manual paint/erase. Auto-tiling is a game-side concern. |
 | **Collision** - simplified shapes | `TileMapLoader` parses `hasCollider` + `colliderW`/`colliderH` into each `Tile` and creates **no entities at all** - its whole output is `const Map &getMap()`. The game iterates `getMap()` and decides. Prefer a solid-grid array plus per-axis snapping over one collider entity per tile: `ContactSystem`'s per-box manifold catches on the seams between adjacent tiles. (`CollisionSystem`, which killed on contact and would have been fatal here, was removed in 2.0.0 — it is not an option any more.) |
-| **Animated tiles** — editor-authored | Not supported at runtime. The editor writes animation fields into `.map` files and `TileMapLoader` parses and discards them, because `Tile` has nowhere to put them (fixing that changes `sizeof(Tile)`, an ABI break). Drive tile animation from game code with `AnimationComponent`. |
+| **Animated tiles** — editor-authored | Supported since 2.0.0. `Tile` carries `isAnimated`, `numFrames`, `frameSpeedRate`, `vertical`, `isLooped` and `frameOffset`, named to match `AnimationComponent` so the copy is direct: `if (tile.isAnimated) e.AddComponent<AnimationComponent>(tile.numFrames, tile.frameSpeedRate, tile.vertical, tile.isLooped, tile.frameOffset);`. Before 2.0.0 the loader parsed these fields and threw them away, so animated tiles rendered static. `Tile` also carries `colliderOffset` now, which was being discarded the same way — a collider nudged in the editor collided from its unnudged position. |
 
 | Layer | Content | Engine support |
 |-------|---------|---------------|
@@ -1827,13 +1827,21 @@ the game's own headers.
   `KNOWN_ISSUES.md` with a workaround apiece. 2.0.0 closes several of them:
   `Entity` now carries a generation counter, so a stale handle whose id has
   been recycled is rejected instead of aliasing the live entity holding it;
-  `Entity(std::size_t)` is now `explicit`; `NetServer`/`NetClient`/
-  `NetConnection`/`NetSocket` are no longer copyable; and item 10's collision
-  half is closed (`CollisionSystem` is deleted — its event-bus half stays
-  open). Highlights of what remains: component set frozen at admission, tile
-  animation fields discarded by the loader, and **no namespaces — every
-  engine type (`Entity`, `Registry`, `Logger`, `Tile`…) is a global symbol**,
-  so a game declaring its own collides. (`docs/TECH_DEBT.md` is gitignored
-  and local-only; `KNOWN_ISSUES.md` is the tracked record.)
+    `Entity(std::size_t)` is now `explicit`; `NetServer`/`NetClient`/
+    `NetConnection`/`NetSocket` are no longer copyable; `Tile` carries the
+    editor's animation fields (and `colliderOffset`, which was being discarded
+    the same way); `MAX_COMPONENTS` is 64; a system that overflows the cap is
+    latched off instead of matching every entity; `GameStateMachine` is no
+    longer copyable; **every engine type is in `namespace storm`**, with
+    `<stormengine2/compat/global.h>` as an opt-in bridge; and item 10's
+    collision half is closed (`CollisionSystem` is deleted — its event-bus
+    half stays open). Seven of the ten are resolved outright and an eighth in
+    part. **What remains is two.** The component set is still frozen at
+    admission (item 5 — re-evaluating membership on every component change is
+    an ECS redesign, not a patch), and `states/gameState.h` still pulls in the
+    whole engine (item 8 — `gameStateBase.h` is the slim alternative, but
+    trimming `gameState.h` itself is a source break for a later major).
+    (`docs/TECH_DEBT.md` is gitignored and local-only; `KNOWN_ISSUES.md` is
+    the tracked record.)
 
 

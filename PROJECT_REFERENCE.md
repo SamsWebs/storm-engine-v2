@@ -86,6 +86,7 @@ registry.AddSystem<MoveSystem>();
 > deliberate, one-off exception to the 1.x layout promise.
 
 #### Added
+- `common/collision/shapes.h` - the collision math, with no ECS behind it: `ContactAABB`, `ContactCircle`, and `Overlaps` / `Manifold` / `ClosestPointOn` / `MinimumTranslation` as free functions. Includes glm and nothing else from the engine, so a game using none of the entity machinery can still use it. One solver per shape pair, so `Overlaps` and `Manifold` cannot disagree
 - `common/systems/contact.h` - `ContactSystem`: reports AABB overlaps as `Contact{a, b, normal, depth}`, sorted by `(a.id, b.id)` with `a` always the lower id. `SetOnBeginContact`/`SetOnEndContact` fire once per pair on transitions; `SetPairFilter` skips pairs, which is where layers, masks and sensors live. It never kills, moves or writes anything
 - `common/text.h` - `Text::Draw` / `DrawCentred` / `Measure`, header-only, null-safe, no engine types
 - `common/input/gamepad.h` - `Gamepad`, `GamepadButton`, `GamepadState` and the free button/stick helpers
@@ -282,21 +283,37 @@ The project uses a comprehensive test suite organized by feature:
 
 | Test Suite | Specs | Purpose |
 |------------|-------|---------|
-| `registry.spec.cpp` | 39 | Component/system registration, entity management |
-| `ecs.spec.cpp` | 36 | Entity handles, component misses, the 32-component ceiling |
+| `registry.spec.cpp` | 58 | Component/system registration, entity management |
+| `ecs.spec.cpp` | 57 | Entity handles and generations, component misses, the 64-component ceiling, the disabled latch |
+| `net/*.spec.cpp` | 122 | Packets, varints, snapshots, connections, loopback |
+| `collision/shapes.spec.cpp` | 27 | Box and circle overlap, manifolds, the Overlaps/Manifold agreement contract |
+| `input/actionMap.spec.cpp` | 27 | One action across keyboard, gamepad, virtual pad and touch; edge semantics |
 | `states/gameStateMachine.spec.cpp` | 17 | State transitions, deferred deletion, ownership |
-| `states/gameState.spec.cpp` | 5 | `CapFrameRate` pacing, delta clamping, unseeded timestamp |
-| `systems/contact.spec.cpp` + `contactEvents` + `contactFiltering` | 23 | Manifolds and ordering, begin/end events, pair filtering |
-| `systems/collision.spec.cpp` | 4 | The deprecated kill-on-overlap behaviour, pinned |
+| `xmlLoader.spec.cpp` | 15 | XML texture and object definitions |
+| `tilemapLoaderEditor.spec.cpp` | 12 | Editor map format, including the animation and collider-offset fields |
+| `systems/render.spec.cpp` | 12 | Source-rect bounds, z-ordering, camera offset |
+| `systems/contact.spec.cpp` + `contactEvents` + `contactFiltering` | 26 | Manifolds and ordering, begin/end events, pair filtering |
 | `input/gamepad.spec.cpp` | 11 | Button edges, deadzone and stick normalisation |
-| `input/touchControls.spec.cpp` + `virtualGamepad` | 15 | Touch zone hit-testing, d-pad sectors, action diamond |
-| `text.spec.cpp` | 6 | Null-safe measure and draw |
+| `systemMembership.spec.cpp` | 10 | Membership at admission, and the retrofit for a late system |
+| `input/virtualGamepad.spec.cpp` + `touchControls` | 15 | Touch zone hit-testing, d-pad sectors, action diamond |
+| `components/*.spec.cpp` | 22 | Component construction and defaults |
 | `assetStore.spec.cpp` | 8 | Texture, font and sound caching, and clearing |
-| `net/*.spec.cpp` | 111 | Packets, varints, snapshots, connections, loopback |
-| `tilemapLoaderEditor.spec.cpp` | 8 | Editor map format parsing |
+| `compat/global.spec.cpp` | 8 | The 1.x compatibility bridge, checked against a generated probe |
+| `logger.spec.cpp` | 7 | Log routing and per-instance callbacks |
+| `text.spec.cpp` | 6 | Null-safe measure and draw |
+| `tilemapLoader.spec.cpp` | 6 | CSV map parsing |
+| `systems/renderCollider.spec.cpp` | 6 | Debug collider rendering |
+| `systems/movement.spec.cpp` | 7 | Velocity integration |
+| `systems/animation.spec.cpp` | 5 | Frame advance and looping |
+| `states/gameState.spec.cpp` + `gameStateBase` | 8 | `CapFrameRate` pacing, delta clamping, the slim interface |
+| `layout.spec.cpp` | 1 | The ABI sizes, and the value of `MAX_COMPONENTS` |
+| `gameStateMachineSlim.spec.cpp` + `gameStateMachineNonCopyable` | 3 | The slim header stays slim; the machine is not copyable |
 
-**Total**: 369 specs as of v1.3.0, all passing. Counts above are `It(` tallies
-per file; run `make -f Makefile.debian test` for the authoritative figure.
+**Total**: 501 specs on `main` after 2.0.0, plus whatever the working branch
+adds; all passing. Counts are `It(` tallies per file, and they rot — run
+`make -f Makefile.debian test` for the authoritative figure. (This table
+previously listed `systems/collision.spec.cpp`, which went away with
+`CollisionSystem` in 2.0.0, and totalled 369 "as of v1.3.0".)
 
 The suite covers `common/` only - `TESTSRCS` is `find specs` plus `find
 common`, so nothing under `editor/` or `examples/` is compiled into

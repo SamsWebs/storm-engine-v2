@@ -5,7 +5,7 @@
 // anything or not.
 //
 // The coverage comes from bridgedNames.h, generated from the engine headers.
-// This file's hand-written cases cover 33 of 133 exports and were once the
+// This file's hand-written cases cover a fraction of the exports and were once the
 // whole check -- which could not work, because the same list produced both the
 // bridge and the spec.
 #include "../../common/compat/global.h"
@@ -16,7 +16,8 @@
 // namespace, so a name added to the engine and not to the bridge breaks the
 // build here.
 //
-// The hand-written cases below name 33 of the 133 exports. They were the whole
+// The hand-written cases below name only a fraction of the exports. They were
+// the whole
 // check once, and could not do the job: the same author wrote the bridge and
 // the list, so a name forgotten in one was forgotten in the other and the
 // spec passed anyway. Two really were missing (EcsSuppressionNote,

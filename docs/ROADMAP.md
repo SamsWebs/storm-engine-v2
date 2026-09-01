@@ -372,8 +372,85 @@ This is worth doing because there is a real consumer: a game that uses none of t
 ECS cannot reach `ContactSystem` at all, and ends up hand-rolling overlap tests the
 engine already has.
 
-**Hours — expose the primitives.** Move `Overlaps` and `Manifold` to public, or to
-free functions beside `ContactAABB`. Purely additive, no break, ships in a 2.x minor.
+**~~Hours — expose the primitives.~~ Already done, and this entry was wrong to
+imply otherwise.** `Overlaps`, `Manifold` and `MinimumTranslation` are already
+`public` statics, above the `private:` in `contact.h`. Verified by compiling a
+program against the installed 2.0.0 headers that calls them with no `Registry`,
+no entities and no components: it builds, runs, returns the right numbers, and
+`nm -u` reports **zero** undefined ECS symbols.
+
+Center Ice Hockey's own design audit reached this independently and struck the
+question from its list — *"Does the engine need a non-ECS entry point? No — it
+already has one."* The one engine-side ask it kept was **documentation**: nothing
+in `docs/` says the collision math is usable standalone, which is why a consumer
+had to discover it by experiment.
+
+**The real dependency is shape, not coupling.** A game reaching for this is
+reaching for collision, and the engine has **box colliders only** — a grep for
+`radius` or `Circle` across `common/components/` and `common/systems/` returns
+nothing. Center Ice Hockey's physics is round throughout: puck-vs-boards keeps a
+`radius` off the boards, skater separation takes a `radius`, and the net posts
+are `postRadius = 3.f`. So `Overlaps`/`Manifold` are square math applied to round
+bodies, which is *approximately* usable and quietly wrong at the edges — a puck
+that dings a round post off a square corner has a different feel for no gain.
+
+Circle support is therefore the item that actually unblocks a consumer, and it is
+additive: no break, ships in a 2.x minor.
+
+**Done.** `common/collision/shapes.h` — glm and nothing else from the engine.
+`ContactAABB` moved there, `ContactCircle` joined it, `Overlaps` and `Manifold`
+are overloaded for all three pairings, and `MinimumTranslation` gained a
+`(normal, depth)` form a game with no ECS can call. `systems/contact.h`
+forwards, so `ContactSystem::Overlaps(a, b)` is unchanged.
+
+**Circles are reachable through the free functions only.** `ContactSystem`
+requires `BoxColliderComponent` and there is no circle collider component, so no
+circle contact comes out of the ECS sweep. A circle collider component, and a
+sweep that can produce circle contacts, is a separate item.
+
+### What the adversarial review of that branch found
+
+The first commit claimed "eleven mutants, all killed". True, and worthless:
+**23 of 29 survived**, because all eleven lived in the two cases already in the
+author's head. Deleting *both* Y-axis conjuncts from `Overlaps(AABB, AABB)`
+passed all 492 tests — nothing in the repo, across four spec files, had ever
+tested a pair overlapping in X and separated in Y.
+
+Four correctness bugs, all from the same root cause: `Overlaps` and `Manifold`
+were two expressions answering one question, and the header promised they never
+disagree.
+
+- **Box corners** — the case circles exist for. `Overlaps` compared squared
+  distances, `Manifold` took a square root that can round up to exactly the
+  radius. Disagreed on ~1.8% of near-tangent probes.
+- **Zero-size `ContactAABB`** — which is `BoxColliderComponent`'s *default*,
+  since width and height both default to 0.
+- **Negative radius** — squared by one, compared signed by the other;
+  circle/circle agreed on a *negative* depth, which drives a pair together.
+- **NaN** — "yes" from one, "no" from the other, with the NaN escaping into the
+  caller's output.
+
+Fixed structurally: one solver per shape pair, both entry points call it. The
+class is impossible now rather than merely absent. That also fixed an
+outputs-untouched violation the branch introduced and a `depth == 0` contact
+that `MinimumTranslation` turns into `(0, 0)` — a collision no caller can
+resolve.
+
+**The lesson, again, and it is the same one.** A green check was read as
+evidence about the code when it was evidence about the check. "Eleven mutants
+killed" measured the mutants chosen, not the code covered. Choose mutants from
+the code's branch structure — every early return, every tie-break, every clamp
+in both directions — not from the cases that come to mind, because those are
+the cases already tested.
+
+**And a documentation correction became a documentation error.** The branch
+correctly identified that `MinimumTranslation`'s comment was backwards, then
+replaced it with a stronger claim that is also false: it is a minimum
+translation only when `depth` is a true separation distance, which for box vs
+box it is not when one box is contained within the other along the chosen axis.
+`A={0,0,10,10}` against `B={2,-5,4,15}` reports depth 2 where 4 is needed.
+Reachable in `examples/sports`, where a 16px puck can land inside a 24px board
+after a frame hitch. Confidence in a correction is not evidence for it.
 
 **About a day — extract the sweep.** `ContactSystem::Update()` does three separable
 jobs: build bounds from components, run the broadphase sweep and manifold, and diff
@@ -396,6 +473,15 @@ own non-ECS specs on top.
 Settle two design questions before writing code: what identifies a body (an opaque
 `std::size_t`, or `void*` userdata), and whether the core owns the begin/end state
 or the caller does.
+
+**A third measured problem, ahead of the sweep extraction.** `contact.h` records
+that the broadphase sorts on the X axis only, so *"everything stacked in one
+column degrades to the old all-pairs cost"*. A hockey rink puts ten skaters and a
+puck in a tall narrow space, which is close to that degenerate case — so the
+consumer most likely to adopt the sweep is also the one it serves worst. A
+uniform grid is the fix, and it is worth having before the extraction rather than
+after, since the extraction would otherwise carry the one-axis assumption into a
+new public API.
 
 ### An example with sustained entity churn
 

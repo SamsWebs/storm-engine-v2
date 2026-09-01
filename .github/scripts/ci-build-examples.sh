@@ -20,6 +20,11 @@
 #   * examples/nx-platformer (devkitPro) and examples/android-platformer
 #     (Android NDK + six submodules) — NOT covered. Neither toolchain is in
 #     this image and .dockerignore keeps both trees out of the build context.
+#   * examples/windows-platformer — NOT covered, and unlike those two it IS in
+#     the build context, so it has to be skipped by name below. It is a Windows
+#     example: it builds against the unzipped SDK zip with MinGW-w64, neither of
+#     which exists here. build-and-release.yml's build-windows job builds it, on
+#     the runner rather than in this image.
 #
 set -e
 
@@ -40,7 +45,7 @@ EXAMPLE_LIB="-L/usr/local/lib -Wl,-rpath=/usr/local/lib -lSDL2 -lSDL2_image \
 for dir in examples/*/; do
   name=$(basename "$dir")
   case "$name" in
-    nx-platformer | android-platformer) continue ;;
+    nx-platformer | android-platformer | windows-platformer) continue ;;
   esac
   [ -f "$dir/Makefile" ] || continue
   echo "==> building example: $name"

@@ -96,7 +96,7 @@ IMPLIB      := $(BUILD)/libstormenginev2.dll.a
 # Stamped into the zip name and its README. Overridden by the release workflow
 # with the tag's version, exactly as Makefile.debian's VERSION is -- keep the
 # default in step with that file's.
-VERSION   ?= 2.1.0
+VERSION   ?= 2.1.1
 DISTNAME  := stormengine2-$(VERSION)-win64
 DISTDIR   := $(BUILD)/$(DISTNAME)
 DISTZIP   := $(BUILD)/$(DISTNAME).zip

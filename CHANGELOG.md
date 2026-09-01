@@ -1,5 +1,92 @@
 # Changelog
 
+## [2.1.1] - 2026-09-01
+
+Packaging only. No engine API changed, and no game needs a source edit — but
+**both shipped packages were broken in ways nothing in CI could see**, and the
+`.deb` could not be installed at all on any current Ubuntu or Mint.
+
+### Fixed
+
+- **The `.deb` could not be installed on Ubuntu 22.04 or later.** It unpacked
+  and then refused to configure:
+
+  ```
+  libstormenginev2 depends on libtinyxml2-8 (>= 8.0.0); however:
+   Package libtinyxml2-8 is not installed.
+  ```
+
+  That was unsatisfiable rather than a missing package. Debian numbers tinyxml2
+  **by ABI** — `libtinyxml2-6a`, `-8`, `-9`, `-10` — so `dpkg-shlibdeps`
+  honestly derived whichever the build container had, and the package then
+  refused to configure anywhere else. Mint 22 / Ubuntu 24.04 ship `-10` and
+  have no `-8` candidate at all. **2.0.0 carries the identical `Depends:` line
+  and was equally uninstallable there.**
+
+  Widening `Depends:` to an alternation would have been worse: the soname is in
+  the ELF, so `libtinyxml2-10` does not satisfy a `NEEDED libtinyxml2.so.8`, and
+  the package would have configured cleanly and then failed to load. Moving the
+  build image forward would trade one break for another — the floor is
+  `GLIBC_2.14`, which is what makes the package work from bullseye upward.
+
+  tinyxml2 is now **compiled into the library** from `vendor/android/tinyxml2`,
+  which both the Windows and Android builds already did. Every remaining soname
+  is stable across distros, so one `.deb` is portable. `tinyxml2.h` ships inside
+  the package and `xmlLoader.h` includes it by quoted path, because `XmlLoader`
+  embeds an `XMLDocument` by value — a consumer's own translation unit emits
+  `~XMLDocument` and must agree with the engine on the layout.
+
+- **`libstormenginev2.dll` re-exported `_Unwind_Resume`.** It was linked
+  `-static-libgcc -static-libstdc++`, which absorbs libgcc's unwinder into a
+  *shared* library, and MinGW exports every symbol by default. Any consumer that
+  also linked `-static-libgcc` got `multiple definition of '_Unwind_Resume'`.
+  The DLL and its consumers now share one GCC runtime, staged beside them.
+
+  This was invisible for as long as nothing linked the DLL: the spec suite links
+  the engine **objects**, and the examples used to compile the engine into
+  themselves.
+
+- **`examples/examples.win.mk` had never worked.** It set `-I<root>/common`, so
+  `<stormengine2/text.h>` could not resolve — on Linux that prefix comes from
+  the installed engine under `/usr/local/include`, and there is no install step
+  on Windows. It was an include file with **no includer**: not one example had a
+  `Makefile.win`, and no CI job, script or doc referenced it, so an entire
+  supported build path could not be reached and nothing would have noticed it
+  breaking.
+
+### Added
+
+- **A Windows SDK zip, `stormengine2-<version>-win64.zip`.** No release had ever
+  shipped a Windows artifact, though `Makefile.win` has cross-built the DLL for
+  some time. It carries `libstormenginev2.dll` and its full import closure, the
+  import library (which the link rule never emitted), and the `stormengine2`,
+  `SDL2` and `glm` headers — 12 engine headers include `<SDL2/SDL.h>` and 6
+  include `<glm/...>`, and Windows has no package manager to fetch them from.
+  SDL2's import libraries ship too: a program cannot borrow its library's
+  transitive imports, so without them a game fails on `cannot find
+  -lSDL2_image`.
+
+- **`examples/windows-platformer`.** The only thing in the tree that builds
+  against the **zip** rather than the build tree, the way somebody who
+  downloaded a release does. It has no sources of its own — it compiles
+  `../platformer/src`, because what it demonstrates is a different way of
+  *consuming* the engine, not a different game. It found the missing SDL2
+  import libraries on its first run.
+
+- **Seven examples now cross-compile to Windows**, each with the three-line
+  `Makefile.win` they were always meant to have, and each linking the engine
+  DLL rather than recompiling the engine into itself. `netchat` and
+  `netplay-checkers` are excluded: they poll stdin the POSIX way (`select()` on
+  `STDIN_FILENO`, `fcntl(O_NONBLOCK)`). That is not a networking limit —
+  `netrepl` uses the same net module and builds.
+
+- **CI now checks that a package can be USED, not merely built.** The `.deb` is
+  installed in `debian:bullseye`, `debian:bookworm`, `ubuntu:22.04` and
+  `ubuntu:24.04` containers and its library checked for unresolved sonames; the
+  Windows zip is unpacked, its contents asserted, its DLL's real import table
+  read, and `windows-platformer` built against it. Every defect above passed the
+  checks that existed before.
+
 ## [2.1.0] - 2026-08-31
 
 ### Added

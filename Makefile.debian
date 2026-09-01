@@ -54,7 +54,7 @@ INSTALL_SHARE_DIR = $(DESTDIR)$(PREFIX)/share/stormengine2
 # Stamped into stormengine2.pc. The release workflow already knows the real
 # version; override it there. It is metadata only -- pkg-config reports it,
 # nothing links against it.
-VERSION ?= 2.1.0
+VERSION ?= 2.1.1
 
 # The include dir is wiped before the copy: a bare `cp -r` never removes
 # anything, so headers and whole directories deleted from common/ lived on in

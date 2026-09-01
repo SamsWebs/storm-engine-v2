@@ -308,6 +308,16 @@ p { margin: 0; }
 .code .s { color: #B7D48A; }         /* string   */
 .code .t { color: #E3C07B; }         /* type     */
 .install { display: flex; align-items: stretch; gap: 0; margin-top: 1.4rem; max-width: 620px; }
+.install-note { font-size: .9rem; margin-top: .6rem; max-width: 620px; opacity: .85; }
+/* nowrap per token: the flags are split into separate <code> elements so a
+   wrap lands BETWEEN them. Without this the narrow column broke mid-flag and
+   rendered "-Llib -" / "lstormenginev2" across two lines. */
+.install-note code { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: .85em; white-space: nowrap; }
+.pkg-h {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: .72rem; letter-spacing: .14em; text-transform: uppercase;
+  margin: 1.6rem 0 0; opacity: .7;
+}
 .install .code { flex: 1; border-radius: 4px 0 0 4px; white-space: nowrap; }
 .copy {
   font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: .72rem;
@@ -431,7 +441,7 @@ p { margin: 0; }
         <p class="sub">Storm! Engine v2 is a small, ECS-based 2D engine on SDL2. Nine complete games ship with it — read them, change them, break them, and keep what you learn when you move on.</p>
 
         <div class="hero-meta">
-          <span class="chip chip-v">v2.1.1</span>
+          <span class="chip chip-v" data-ver>v2.1.1</span>
           <span class="chip">C++ / SDL2</span>
           <span class="chip">Linux · Windows · Switch · Android</span>
           <span class="chip">WTFPL</span>
@@ -443,9 +453,13 @@ p { margin: 0; }
         </div>
 
         <div class="install">
-          <pre class="code" id="install-cmd"><span class="c">#</span> sudo dpkg -i libstormenginev2_2.1.1_amd64.deb</pre>
-          <button class="copy" type="button" data-copy="sudo dpkg -i libstormenginev2_2.1.1_amd64.deb">Copy</button>
+          <pre class="code" id="install-cmd" data-ver><span class="c">#</span> sudo dpkg -i libstormenginev2_2.1.1_amd64.deb</pre>
+          <button class="copy" type="button" data-ver data-copy="sudo dpkg -i libstormenginev2_2.1.1_amd64.deb">Copy</button>
         </div>
+        <p class="install-note">
+          <a href="https://github.com/SamsWebs/storm-engine-v2/releases/latest">Download the package from Releases</a>
+          first &mdash; the command above installs a file you already have.
+        </p>
       </div>
 
       <figure class="reveal">
@@ -615,12 +629,25 @@ p { margin: 0; }
     <div class="feature" style="margin-top:2rem">
       <div>
         <h3>Prebuilt packages</h3>
-        <p>Debian packages for amd64 and arm64 — including Raspberry Pi 4 and 5 on a 64-bit OS — are attached to every release.</p>
+        <p>Every release attaches Debian packages for amd64 and arm64 — including Raspberry Pi 4 and 5 on a 64-bit OS — and a Windows SDK zip.</p>
+        <p class="install-note" style="margin-top:1.2rem">
+          <a class="btn btn-primary" href="https://github.com/SamsWebs/storm-engine-v2/releases/latest">Download latest release</a>
+        </p>
+
+        <h4 class="pkg-h">Debian / Ubuntu / Mint</h4>
         <div class="install">
-          <pre class="code">sudo dpkg -i libstormenginev2_2.1.1_amd64.deb</pre>
-          <button class="copy" type="button" data-copy="sudo dpkg -i libstormenginev2_2.1.1_amd64.deb">Copy</button>
+          <pre class="code" data-ver>sudo dpkg -i libstormenginev2_2.1.1_amd64.deb</pre>
+          <button class="copy" type="button" data-ver data-copy="sudo dpkg -i libstormenginev2_2.1.1_amd64.deb">Copy</button>
         </div>
-        <p style="margin-top:1rem"><a href="https://github.com/SamsWebs/storm-engine-v2/releases">Browse releases →</a></p>
+
+        <h4 class="pkg-h">Windows (x64, MinGW-w64)</h4>
+        <div class="install">
+          <pre class="code" data-ver>unzip stormengine2-2.1.1-win64.zip</pre>
+          <button class="copy" type="button" data-ver data-copy="unzip stormengine2-2.1.1-win64.zip">Copy</button>
+        </div>
+        <p class="install-note">No installer. Unzip it, build with <code>-Iinclude</code> <code>-Llib</code> <code>-lstormenginev2</code>, and copy <code>bin\</code> beside your <code>.exe</code>. MSVC is not supported &mdash; the ABI is GCC's.</p>
+
+        <p style="margin-top:1rem"><a href="https://github.com/SamsWebs/storm-engine-v2/releases">Browse all releases →</a></p>
       </div>
       <div>
         <h3>Build from source</h3>
@@ -698,6 +725,44 @@ p { margin: 0; }
 </footer>
 
 <script>
+/* The version is baked in at build time from Makefile.debian's VERSION, so the
+   page is CORRECT with JavaScript off and correct before this request lands.
+   This only saves the page from going stale between releases: the alternative
+   was editing five hardcoded strings in here every time a tag is pushed, which
+   is exactly the kind of thing that gets forgotten and then tells visitors to
+   install a version that is no longer the latest.
+
+   Every element carrying the version is marked data-ver, and the swap is a
+   plain string replacement of the baked value -- so nothing here needs to know
+   which of them is a chip, a shell command or a copy button's payload.
+
+   Failure is silent ON PURPOSE. api.github.com allows 60 unauthenticated
+   requests an hour per IP, and a visitor who has spent them, is offline, or is
+   behind something that blocks the call should still read a working page with
+   a real version on it, not an error. */
+(function () {
+  var BAKED = '2.1.1';
+  var marked = document.querySelectorAll('[data-ver]');
+  if (!marked.length || !window.fetch) return;
+
+  fetch('https://api.github.com/repos/SamsWebs/storm-engine-v2/releases/latest',
+        { headers: { Accept: 'application/vnd.github+json' } })
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (rel) {
+      if (!rel || typeof rel.tag_name !== 'string') return;
+      /* Tags are vX.Y.Z; the filenames and the chip want it without the v. */
+      var latest = rel.tag_name.replace(/^v/, '');
+      if (!/^\d+\.\d+\.\d+$/.test(latest) || latest === BAKED) return;
+
+      marked.forEach(function (el) {
+        el.innerHTML = el.innerHTML.split(BAKED).join(latest);
+        var copy = el.getAttribute('data-copy');
+        if (copy) el.setAttribute('data-copy', copy.split(BAKED).join(latest));
+      });
+    })
+    .catch(function () { /* keep the baked version */ });
+})();
+
 document.querySelectorAll('.copy').forEach(function (btn) {
   btn.addEventListener('click', function () {
     var text = btn.getAttribute('data-copy');

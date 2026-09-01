@@ -134,6 +134,29 @@ sudo dpkg -i libstormenginev2_<version>_amd64.deb
 sudo dpkg -i libstormenginev2_<version>_arm64.deb
 ```
 
+### Windows (x64, MinGW-w64)
+
+Download `stormengine2-<version>-win64.zip` from the same Releases page and
+unzip it anywhere. There is no installer and nothing to register.
+
+```
+g++ -std=c++17 mygame.cpp -Iinclude -Llib -lstormenginev2 -o mygame.exe
+```
+
+Then copy the contents of `bin\` beside your `.exe`, or put that directory on
+`PATH`. Windows resolves DLLs from the executable's own directory first and
+says nothing useful when one is missing, so copy the whole directory rather
+than picking out the ones you think you need.
+
+The zip carries the SDL2, glm and tinyxml2 headers as well as the engine's own,
+because 12 engine headers include `<SDL2/SDL.h>` and 6 include `<glm/...>` --
+on Debian those come from `libsdl2-dev` and `libglm-dev`, and on Windows there
+is no package manager to get them from.
+
+> **MSVC is not supported.** The import library and the C++ ABI are GCC's, so a
+> program compiled with `cl.exe` cannot link this build. Use MinGW-w64, or
+> build from source with your own toolchain.
+
 > **Upgrading from 1.2.x is a rebuild, not a relink.** `AssetStore` grew font
 > and sound caches in 1.3.0, so `sizeof(AssetStore)` went from 112 to 208
 > bytes. Every game allocates the store in its own code, so a binary compiled

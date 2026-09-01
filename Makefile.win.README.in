@@ -1,0 +1,56 @@
+Storm! Engine v2 @VERSION@ — Windows (x64) SDK
+==============================================
+
+Built with MinGW-w64 (x86_64-w64-mingw32, posix threads). This is a
+cross-compile from Linux; nothing here was produced by MSVC.
+
+Contents
+--------
+
+  bin/                 libstormenginev2.dll and every DLL it imports —
+                       SDL2 and satellites, plus the MinGW C++ runtime.
+  lib/                 libstormenginev2.dll.a, the import library.
+  include/stormengine2 the engine headers, plus tinyxml2.h.
+  include/SDL2         SDL2 headers.
+  include/glm          glm headers.
+  template/            a starter game.
+
+SDL2, glm and tinyxml2 headers are included because the engine's own headers
+need them and Windows has no package manager to fetch them from: 12 engine
+headers include <SDL2/SDL.h> and 6 include <glm/...>.
+
+Building a game against it
+--------------------------
+
+With MinGW-w64:
+
+  g++ -std=c++17 mygame.cpp \
+      -Iinclude \
+      -Llib -lstormenginev2 \
+      -o mygame.exe
+
+Then put the contents of bin\ beside mygame.exe, or on PATH. Windows resolves
+DLLs at load time from the executable's own directory first; a missing one
+gives no useful message, so copy the whole directory rather than picking.
+
+MSVC is NOT supported. The import library and the C++ ABI are GCC's, so a
+program compiled with cl.exe cannot link this build. Use MinGW-w64, or build
+the engine from source with your own toolchain.
+
+tinyxml2
+--------
+
+tinyxml2 is compiled INTO libstormenginev2.dll (statically) and its header
+ships here. Do not also link a separate tinyxml2: XmlLoader embeds an
+XMLDocument by value, so your translation unit emits ~XMLDocument and has to
+agree with the engine on the layout. Two copies of different vintages is an
+ODR violation that links cleanly and misbehaves at runtime.
+
+Licensing
+---------
+
+The engine is licensed as stated in the repository. Redistributed here:
+SDL2 and satellites (zlib), glm (MIT/Happy Bunny), tinyxml2 (zlib), and the
+MinGW-w64 runtime. See their upstream projects for full terms.
+
+  https://github.com/WillSams/storm-engine-v2

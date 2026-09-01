@@ -1,0 +1,663 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Storm! Engine v2</title>
+<meta name="description" content="Learn game programming in real C++. Storm! Engine v2 is a small ECS-based 2D engine on SDL2, with nine complete games to read and change.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Storm! Engine v2">
+<meta property="og:description" content="Learn game programming in real C++. A small ECS-based 2D engine on SDL2, with nine complete games to read and change.">
+<meta property="og:image" content="assets/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Luckiest+Guy&display=swap">
+<style>
+/* ---------------------------------------------------------------------------
+   Storm! Engine v2
+   Palette sampled directly from the Sams! Webs wordmark: the band red
+   (#CB2026), the letter fill (#F1F2F2) and the outline black (#231F20). The
+   neutral is warmed toward that outline rather than left a default cool grey.
+   The red band is the structural spine of the page -- behind the wordmark, at
+   every section boundary, and on the edge of every code block.
+--------------------------------------------------------------------------- */
+
+:root {
+  --ink:        #231F20;
+  --ink-soft:   #3C3739;
+  --slate:      #6E6A6B;
+  --paper:      #F1F2F2;
+  --surface:    #FFFFFF;
+  --rule:       #DCDBDB;
+  --storm:      #CB2026;
+  --storm-deep: #A2171C;   /* link text: clears AA on paper where the band red does not */
+  --letter:     #F1F2F2;
+  --outline:    #231F20;
+  --code-bg:    #201C1D;
+  --code-fg:    #E9E6E4;
+
+  --shadow: 0 1px 2px rgba(35,31,32,.06), 0 8px 24px rgba(35,31,32,.07);
+  --measure: 65ch;
+  --gutter: clamp(1.25rem, 4vw, 3rem);
+  --maxw: 1140px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ink:        #F1F2F2;
+    --ink-soft:   #CFCBCC;
+    --slate:      #9A9496;
+    --paper:      #191617;
+    --surface:    #201D1E;
+    --rule:       #383335;
+    --storm:      #E8464C;
+    --storm-deep: #F2777C;
+    --code-bg:    #120F10;
+    --code-fg:    #E9E6E4;
+    --shadow: 0 1px 2px rgba(0,0,0,.5), 0 8px 24px rgba(0,0,0,.45);
+  }
+}
+:root[data-theme="dark"] {
+  --ink:        #F1F2F2;
+  --ink-soft:   #CFCBCC;
+  --slate:      #9A9496;
+  --paper:      #191617;
+  --surface:    #201D1E;
+  --rule:       #383335;
+  --storm:      #E8464C;
+  --storm-deep: #F2777C;
+  --code-bg:    #120F10;
+  --code-fg:    #E9E6E4;
+  --shadow: 0 1px 2px rgba(0,0,0,.5), 0 8px 24px rgba(0,0,0,.45);
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 17px;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+}
+
+a { color: var(--storm-deep); text-decoration-thickness: 1.5px; text-underline-offset: 2px; }
+a:hover { color: var(--storm); }
+:focus-visible { outline: 3px solid var(--storm); outline-offset: 3px; border-radius: 2px; }
+
+h1, h2, h3 { text-wrap: balance; margin: 0; }
+p { margin: 0; }
+
+.wrap { width: min(100% - (var(--gutter) * 2), var(--maxw)); margin-inline: auto; }
+.stack { display: flex; flex-direction: column; }
+
+/* --- the band: the page's structural signature ------------------------- */
+.band-rule { height: 10px; background: var(--storm); border: 0; margin: 0; }
+
+/* --- nav ---------------------------------------------------------------- */
+.nav {
+  position: sticky; top: 0; z-index: 20;
+  background: color-mix(in srgb, var(--paper) 88%, transparent);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--rule);
+}
+.nav-inner { display: flex; align-items: center; gap: 1.5rem; padding: .7rem 0; }
+.nav-mark { flex: 0 0 auto; width: 168px; }
+.nav-links { margin-left: auto; display: flex; gap: 1.4rem; flex-wrap: wrap; align-items: center; }
+.nav-links a {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: .8rem; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--ink-soft); text-decoration: none;
+}
+.nav-links a:hover { color: var(--storm); }
+.nav-gh {
+  border: 2px solid var(--ink); border-radius: 3px; padding: .3rem .7rem;
+  color: var(--ink) !important;
+}
+.nav-gh:hover { background: var(--ink); color: var(--paper) !important; }
+.nav-kofi {
+  border: 2px solid var(--storm); border-radius: 3px; padding: .3rem .7rem;
+  color: var(--storm) !important; font-weight: 600;
+}
+.nav-kofi:hover { background: var(--storm); color: #FFF !important; }
+
+/* Below 760px the five section links wrap onto their own rows and push the
+   wordmark out of the first line. Drop them -- every one is reachable by
+   scrolling, and the mark plus the repository link is what the bar is for. */
+@media (max-width: 760px) {
+  .nav-mark { width: 142px; }
+  .nav-links a:not(.nav-gh) { display: none; }
+}
+
+/* --- wordmark ----------------------------------------------------------- */
+.wordmark { display: block; width: 100%; height: auto; }
+.wordmark .band { fill: var(--storm); }
+.wordmark .wm {
+  font-family: "Luckiest Guy", "Comic Sans MS", cursive;
+  font-size: 96px;
+  fill: var(--letter);
+  stroke: var(--outline);
+  stroke-width: 11;
+  stroke-linejoin: round;
+  paint-order: stroke fill;   /* stroke OUTSIDE the glyph, not eating into it */
+}
+
+/* --- hero --------------------------------------------------------------- */
+.hero { padding: clamp(3rem, 8vw, 5.5rem) 0 clamp(2.5rem, 6vw, 4rem); }
+.hero-mark { max-width: 760px; margin-bottom: 1.75rem; }
+.hero-mark .wordmark { animation: bandwipe .7s cubic-bezier(.2,.8,.2,1) both; }
+@keyframes bandwipe { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
+.tagline {
+  font-family: "Anton", Impact, "Arial Narrow Bold", sans-serif;
+  font-weight: 400; text-transform: uppercase; letter-spacing: .01em;
+  font-size: clamp(2rem, 5vw, 3.1rem); line-height: 1.03;
+  max-width: 18ch; color: var(--ink); margin: 0;
+}
+.sub {
+  font-size: clamp(1.02rem, 1.9vw, 1.18rem); line-height: 1.55;
+  max-width: 52ch; color: var(--ink-soft); margin-top: 1rem;
+}
+.hero-meta {
+  display: flex; flex-wrap: wrap; gap: .6rem; align-items: center;
+  margin-top: 1.5rem;
+  font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: .8rem;
+}
+.chip {
+  border: 1px solid var(--rule); border-radius: 999px; padding: .2rem .7rem;
+  color: var(--slate); background: var(--surface);
+}
+.chip-v { border-color: var(--storm); color: var(--storm); font-weight: 600; }
+.cta-row { display: flex; flex-wrap: wrap; gap: .8rem; margin-top: 2rem; }
+.btn {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: .85rem; letter-spacing: .04em; text-transform: uppercase; font-weight: 600;
+  padding: .8rem 1.4rem; border-radius: 3px; text-decoration: none;
+  border: 2px solid var(--ink); transition: transform .12s ease, background .12s ease;
+}
+.btn-primary { background: var(--storm); border-color: var(--storm); color: #FFF; }
+.btn-primary:hover { background: var(--storm-deep); border-color: var(--storm-deep); color: #FFF; transform: translateY(-2px); }
+.btn-ghost { color: var(--ink); background: transparent; }
+.btn-ghost:hover { background: var(--ink); color: var(--paper); transform: translateY(-2px); }
+
+/* --- sections ----------------------------------------------------------- */
+.section { padding: clamp(3rem, 7vw, 5rem) 0; }
+/* The nav is sticky, so an anchor jump would otherwise land the heading
+   underneath it. */
+[id] { scroll-margin-top: 84px; }
+.eyebrow {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: .75rem; letter-spacing: .16em; text-transform: uppercase;
+  color: var(--storm); margin-bottom: .6rem;
+}
+.h2 {
+  font-family: "Anton", Impact, "Arial Narrow Bold", sans-serif;
+  font-weight: 400; letter-spacing: .01em; text-transform: uppercase;
+  font-size: clamp(1.9rem, 4.6vw, 2.9rem); line-height: 1.05;
+}
+.lede { max-width: var(--measure); color: var(--ink-soft); margin-top: .9rem; }
+
+/* --- feature rows (the microStudio pairing) ----------------------------- */
+.feature { display: grid; gap: clamp(1.5rem, 4vw, 3rem); align-items: center; }
+@media (min-width: 860px) {
+  .feature { grid-template-columns: 1fr 1fr; }
+  .feature.flip .feature-media { order: -1; }
+}
+.feature + .feature { margin-top: clamp(2.5rem, 6vw, 4rem); }
+.feature h3 {
+  font-family: "Anton", Impact, sans-serif; font-weight: 400; text-transform: uppercase;
+  font-size: clamp(1.35rem, 2.6vw, 1.75rem); line-height: 1.1;
+}
+.feature p { margin-top: .7rem; color: var(--ink-soft); max-width: 48ch; }
+.shot {
+  display: block; width: 100%; height: auto; border-radius: 4px;
+  border: 1px solid var(--rule); box-shadow: var(--shadow);
+  background: var(--code-bg);
+  /* These are pixel-art games. Smooth-scaling them would misrepresent them. */
+  image-rendering: pixelated;
+}
+
+/* --- examples gallery --------------------------------------------------- */
+.gallery { display: grid; gap: 1.25rem; grid-template-columns: repeat(auto-fill, minmax(268px, 1fr)); margin-top: 2.25rem; }
+.card {
+  background: var(--surface); border: 1px solid var(--rule); border-radius: 5px;
+  overflow: hidden; display: flex; flex-direction: column;
+  transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease;
+}
+.card:hover { transform: translateY(-3px); box-shadow: var(--shadow); border-color: var(--storm); }
+.card img {
+  width: 100%; aspect-ratio: 4 / 3; display: block;
+  /* contain, not cover: these frames range from 0.79 (a Tetris well) to 2.22
+     (an Android handset). Cropping them to a common ratio cut the playfield
+     out of one and most of the level out of the other. The dark letterbox
+     reads as the screen the game is running on. */
+  object-fit: contain;
+  background: var(--code-bg); image-rendering: pixelated;
+  border-bottom: 1px solid var(--rule);
+}
+.card-body { padding: .9rem 1rem 1.1rem; }
+.card h3 {
+  font-family: "Anton", Impact, sans-serif; font-weight: 400; text-transform: uppercase;
+  font-size: 1.05rem; letter-spacing: .02em;
+}
+.card .kind {
+  font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: .7rem;
+  letter-spacing: .1em; text-transform: uppercase; color: var(--storm); display: block; margin-bottom: .15rem;
+}
+.card p { font-size: .9rem; color: var(--slate); margin-top: .4rem; }
+
+/* --- code --------------------------------------------------------------- */
+.code {
+  background: var(--code-bg); color: var(--code-fg);
+  border: 1px solid rgba(241,242,242,.09);
+  border-left: 3px solid var(--storm); border-radius: 4px;
+  padding: 1.1rem 1.3rem; overflow-x: auto;
+  font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: .84rem; line-height: 1.7;
+  margin: 0;
+}
+.code .c { color: #9A9496; }         /* comment  */
+.code .k { color: #F2777C; }         /* keyword  */
+.code .s { color: #B7D48A; }         /* string   */
+.code .t { color: #E3C07B; }         /* type     */
+.install { display: flex; align-items: stretch; gap: 0; margin-top: 1.4rem; max-width: 620px; }
+.install .code { flex: 1; border-radius: 4px 0 0 4px; white-space: nowrap; }
+.copy {
+  font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: .72rem;
+  letter-spacing: .08em; text-transform: uppercase; font-weight: 600;
+  background: var(--ink); color: var(--paper); border: 0; border-radius: 0 4px 4px 0;
+  padding: 0 1rem; cursor: pointer; transition: background .12s ease;
+}
+.copy:hover { background: var(--storm); }
+
+/* --- two-column prose blocks -------------------------------------------- */
+.cols { display: grid; gap: clamp(1.5rem, 4vw, 2.75rem); margin-top: 2rem; }
+@media (min-width: 780px) { .cols { grid-template-columns: repeat(3, 1fr); } }
+.col h3 {
+  font-family: "Anton", Impact, sans-serif; font-weight: 400; text-transform: uppercase;
+  font-size: 1.15rem; letter-spacing: .02em;
+}
+.col p { margin-top: .5rem; color: var(--ink-soft); font-size: .95rem; }
+.col-num {
+  font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: .72rem;
+  color: var(--storm); letter-spacing: .1em; display: block; margin-bottom: .3rem;
+}
+
+/* --- platforms ---------------------------------------------------------- */
+.plats { display: flex; flex-wrap: wrap; gap: .6rem; margin-top: 1.6rem; }
+.plat {
+  font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: .8rem;
+  border: 1px solid var(--rule); background: var(--surface);
+  border-radius: 3px; padding: .45rem .85rem;
+}
+.plat b { color: var(--storm); font-weight: 600; }
+
+/* --- footer ------------------------------------------------------------- */
+/* The footer is the same near-black in every theme, so its colours are fixed
+   literals rather than tokens that flip underneath it. Three overlapping
+   theme rules used to fight over this background; contrast was carried by
+   opacity, which is how the link columns ended up dim. Both are gone: every
+   value below is stated once and meets AA on #1B1819. */
+.footer {
+  background: #1B1819;
+  color: #E7E4E5;
+  padding: 3rem 0 2.5rem;
+}
+.footer a { color: #FFFFFF; text-decoration-color: rgba(255,255,255,.55); }
+.footer a:hover { color: #FF8A8E; text-decoration-color: #FF8A8E; }
+.footer :focus-visible { outline-color: #FF8A8E; }
+.footer-grid { display: grid; gap: 2rem; }
+@media (min-width: 720px) { .footer-grid { grid-template-columns: 1.4fr 1fr 1fr; } }
+.footer h4 {
+  font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: .78rem;
+  letter-spacing: .14em; text-transform: uppercase; margin: 0 0 .8rem;
+  color: #A9A3A5;   /* 6.0:1 on the footer ground */
+  font-weight: 600;
+}
+.footer ul { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: .4rem; font-size: .92rem; }
+.footer-mark { width: 200px; margin-bottom: 1rem; }
+.colophon {
+  margin-top: 2.5rem; padding-top: 1.5rem;
+  border-top: 1px solid rgba(241,242,242,.18);
+  font-size: .86rem; color: #B7B2B3;   /* 7.0:1 on the footer ground */
+}
+.footer-blurb { font-size: .94rem; color: #C6C2C3; max-width: 38ch; }
+
+.support {
+  border: 2px solid var(--storm); border-radius: 5px;
+  padding: 1.4rem 1.5rem; margin-top: 2.5rem;
+  display: flex; flex-wrap: wrap; gap: 1rem 1.5rem; align-items: center;
+  background: var(--surface);
+}
+.support p { color: var(--ink-soft); max-width: 46ch; font-size: .96rem; }
+.support h3 {
+  font-family: "Anton", Impact, sans-serif; font-weight: 400; text-transform: uppercase;
+  font-size: 1.15rem; letter-spacing: .02em; margin-bottom: .3rem;
+}
+.support .btn { margin-left: auto; }
+@media (max-width: 620px) { .support .btn { margin-left: 0; } }
+
+.skip {
+  position: absolute; left: -9999px; top: 0;
+  background: var(--storm); color: #FFF; padding: .7rem 1rem; z-index: 50; text-decoration: none;
+}
+.skip:focus { left: 0; }
+</style>
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<nav class="nav">
+  <div class="wrap nav-inner">
+    <a class="nav-mark" href="#top" aria-label="Storm! Engine v2 — home">
+      <svg class="wordmark" viewBox="0 0 900 150" role="img" aria-label="Storm! Engine — home">
+        <rect class="band" x="0" y="56" width="900" height="46"></rect>
+        <text class="wm" x="450" y="112" text-anchor="middle" textLength="840" lengthAdjust="spacingAndGlyphs">STORM<tspan>&lt;!&gt;</tspan>ENGINE</text>
+      </svg>
+    </a>
+    <div class="nav-links">
+      <a href="#features">Features</a>
+      <a href="#examples">Examples</a>
+      <a href="#collision">Code</a>
+      <a href="#start">Get started</a>
+      <a class="nav-kofi" href="https://ko-fi.com/samswebs" rel="noopener">Donate</a>
+      <a class="nav-gh" href="https://github.com/SamsWebs/storm-engine-v2">GitHub</a>
+    </div>
+  </div>
+</nav>
+
+<main id="main">
+
+<header class="hero" id="top">
+  <div class="wrap">
+    <div class="hero-mark">
+      <svg class="wordmark" viewBox="0 0 900 150" role="img" aria-label="Storm! Engine v2">
+        <rect class="band" x="0" y="56" width="900" height="46"></rect>
+        <text class="wm" x="450" y="112" text-anchor="middle" textLength="840" lengthAdjust="spacingAndGlyphs">STORM<tspan>&lt;!&gt;</tspan>ENGINE</text>
+      </svg>
+    </div>
+
+    <h1 class="tagline">Learn game programming in real C++.</h1>
+    <p class="sub">Storm! Engine v2 is a small, ECS-based 2D engine on SDL2. Nine complete games ship with it — read them, change them, break them, and keep what you learn when you move on.</p>
+
+    <div class="hero-meta">
+      <span class="chip chip-v">v2.1.0</span>
+      <span class="chip">C++ / SDL2</span>
+      <span class="chip">Linux · Windows · Switch · Android</span>
+      <span class="chip">WTFPL</span>
+    </div>
+
+    <div class="cta-row">
+      <a class="btn btn-primary" href="#start">Get started</a>
+      <a class="btn btn-ghost" href="#examples">See the examples</a>
+    </div>
+
+    <div class="install">
+      <pre class="code" id="install-cmd"><span class="c">#</span> sudo dpkg -i libstormenginev2_&lt;2.1.0&gt;_amd64.deb</pre>
+      <button class="copy" type="button" data-copy="sudo dpkg -i libstormenginev2_&lt;2.1.0&gt;_amd64.deb">Copy</button>
+    </div>
+  </div>
+</header>
+
+<hr class="band-rule">
+
+<section class="section" id="features">
+  <div class="wrap">
+    <p class="eyebrow">What you are actually learning</p>
+    <h2 class="h2">Every system is C++ you can read</h2>
+    <p class="lede">There is no scripting layer and no editor generating code behind your back. You write C++, you call into SDL2 when you want to, and the engine's own source is there to read when you want to know how a piece works. Everything lives under <code>namespace storm</code>, so it never collides with your own <code>Entity</code> or <code>Logger</code>.</p>
+
+    <div class="cols">
+      <div class="col">
+        <span class="col-num">ECS</span>
+        <h3>Composition, not inheritance</h3>
+        <p>An entity is an id; behaviour comes from the components you attach. A <code>std::bitset</code> signature gives <strong>64 component types per binary</strong> — the engine spends five of them, leaving 59 for your game. Ids come from one process-wide counter, so the budget is per binary, not per <code>Registry</code>.</p>
+      </div>
+      <div class="col">
+        <span class="col-num">Contacts</span>
+        <h3>Boxes and circles</h3>
+        <p><code>Contact{a, b, normal, depth}</code> with begin and end callbacks, and a pair filter — which is where layers, masks and sensors live. Overlap is strict: a shared edge is not a contact.</p>
+      </div>
+      <div class="col">
+        <span class="col-num">Input</span>
+        <h3>One action, four devices</h3>
+        <p>Bind a game action across keyboard, gamepad, virtual gamepad and touch at once, and get one edge per action rather than four. Added in 2.0.0.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="wrap">
+
+    <div class="feature">
+      <div>
+        <h3>Learn from a game that plays, not a hello world</h3>
+        <p>Every subsystem is demonstrated by something you can actually play. The platformer teaches tilemap loading, tile-based physics and a scrolling camera. <em>1945</em> teaches a three-state stack, high entity churn and controller input. <em>Realms</em> teaches a pushed state — a side-on battle runs over a campaign map that is still alive underneath it.</p>
+      </div>
+      <div class="feature-media">
+        <img class="shot" src="assets/img/strategy.png" width="1024" height="768" loading="lazy" alt="Realms, a Dragon Force-style campaign map with generals marching between castles.">
+      </div>
+    </div>
+
+    <div class="feature flip">
+      <div>
+        <h3>LAN play that ships in the box</h3>
+        <p>UDP host and join with reliable and unreliable chunks, kick, ban and timeout, and snapshot replication with per-client deltas and a prediction cache. Three networking demos come with it: netchat, netrepl and a playable netplay-checkers.</p>
+      </div>
+      <div class="feature-media">
+        <img class="shot" src="assets/img/shooter.png" width="800" height="600" loading="lazy" alt="1945, a vertically scrolling shoot-'em-up with HUD and score display.">
+      </div>
+    </div>
+
+    <div class="feature">
+      <div>
+        <h3>Paint a map, load it, done</h3>
+        <p>A built-in tile map editor with drag-to-paint, drag-to-erase and layer support. Maps save as <code>.map</code> and the loader auto-detects the format, so there is no export step between painting a level and running it.</p>
+      </div>
+      <div class="feature-media">
+        <img class="shot" src="assets/img/platformer.png" width="799" height="620" loading="lazy" alt="The platformer example, showing a tilemap level with a scrolling camera.">
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<hr class="band-rule">
+
+<section class="section" id="collision">
+  <div class="wrap">
+    <p class="eyebrow">Take one piece at a time</p>
+    <h2 class="h2">The collision math needs none of the engine</h2>
+    <p class="lede">You do not have to adopt an architecture to get started. <code>&lt;stormengine2/collision/shapes.h&gt;</code> includes glm and nothing else, so a program with no <code>Registry</code>, no entities and no components can still use it. Adopting the ECS is a choice about the broadphase, not a precondition for the geometry.</p>
+
+    <pre class="code" style="margin-top:1.6rem"><span class="c">#include</span> <span class="s">&lt;stormengine2/collision/shapes.h&gt;</span>
+<span class="k">using namespace</span> storm;
+
+<span class="t">ContactCircle</span> puck{x, y, <span class="k">3.0f</span>};
+<span class="t">ContactAABB</span>   post{px0, py0, px1, py1};
+
+<span class="t">glm::vec2</span> normal;
+<span class="k">float</span> depth;
+<span class="k">if</span> (Manifold(puck, post, normal, depth)) {
+  <span class="c">// normal runs from the puck INTO the post; depth is how far they overlap.</span>
+  <span class="c">// Applying MinimumTranslation(normal, depth) to the POST separates them --</span>
+  <span class="c">// or negate it and apply it to the puck.</span>
+}</pre>
+
+    <p class="lede" style="margin-top:1.4rem">Boxes and circles are supported in every combination. Circles matter for anything round — a puck kept off the boards by its edge, characters pushed apart by a separation radius, a shot glancing off a post. A circle against a box corner produces a diagonal normal; approximating it with a box would snap that to an axis and change how the game feels.</p>
+  </div>
+</section>
+
+<hr class="band-rule">
+
+<section class="section" id="examples">
+  <div class="wrap">
+    <p class="eyebrow">Worked examples</p>
+    <h2 class="h2">Nine complete games to read</h2>
+    <p class="lede">Not fragments — nine games you can build, run and take apart. Each is written against the same public API you get, with no engine forks and no private headers, so anything you see in an example you can do in your own project. Start with the platformer, then read the one closest to the game you want to make.</p>
+
+    <div class="gallery">
+      <article class="card">
+        <img src="assets/img/platformer.png" loading="lazy" alt="Scrolling platformer with tilemap terrain.">
+        <div class="card-body"><span class="kind">Platformer</span><h3>Platformer</h3>
+        <p>Tilemap loading, tile-based physics with gravity and AABB resolution, and a scrolling camera.</p></div>
+      </article>
+      <article class="card">
+        <img src="assets/img/shooter.png" loading="lazy" alt="Vertical shoot-'em-up in the style of 1942.">
+        <div class="card-body"><span class="kind">Shoot-'em-up</span><h3>1945</h3>
+        <p>A three-state stack, high entity churn with deferred lifecycle, one-shot animations and an immediate-mode HUD.</p></div>
+      </article>
+      <article class="card">
+        <img src="assets/img/strategy.png" loading="lazy" alt="Dragon Force-style campaign map with castles and generals.">
+        <div class="card-body"><span class="kind">Strategy</span><h3>Realms</h3>
+        <p>A campaign map with a pushed side-on massbattle, a shared campaign model and a 64px tilemap.</p></div>
+      </article>
+      <article class="card">
+        <img src="assets/img/puzzle.png" loading="lazy" alt="Tetris-style falling block puzzle game.">
+        <div class="card-body"><span class="kind">Puzzle</span><h3>Puzzle</h3>
+        <p>Custom components and systems, entity reuse, deferred lifecycle and text from the engine's cached fonts.</p></div>
+      </article>
+      <article class="card">
+        <img src="assets/img/jrpg.png" loading="lazy" alt="Top-down role-playing game with dialogue box.">
+        <div class="card-body"><span class="kind">RPG</span><h3>JRPG</h3>
+        <p>Tile-based world loading, NPC interaction and Final Fantasy-style typewriter dialogue.</p></div>
+      </article>
+      <article class="card">
+        <img src="assets/img/sports.png" loading="lazy" alt="Top-down ice hockey game.">
+        <div class="card-body"><span class="kind">Sports</span><h3>Hockey</h3>
+        <p>AI behaviour, puck physics and custom systems — the case the circle colliders were built for.</p></div>
+      </article>
+      <article class="card">
+        <img src="assets/img/android-platformer.png" loading="lazy" alt="The platformer running on an Android device with on-screen controls.">
+        <div class="card-body"><span class="kind">Android</span><h3>Android platformer</h3>
+        <p>Engine and game compiled to a single JNI library via the NDK, with the virtual gamepad replacing the keyboard.</p></div>
+      </article>
+      <article class="card">
+        <img src="assets/img/nx-platformer.png" loading="lazy" alt="The platformer running as Nintendo Switch homebrew.">
+        <div class="card-body"><span class="kind">Switch</span><h3>Switch homebrew</h3>
+        <p>Builds with devkitPro and produces an <code>.nro</code> that runs on a homebrew-enabled console or an emulator.</p></div>
+      </article>
+    </div>
+  </div>
+</section>
+
+<hr class="band-rule">
+
+<section class="section" id="start">
+  <div class="wrap">
+    <p class="eyebrow">Get started</p>
+    <h2 class="h2">Install it, or build it</h2>
+
+    <div class="feature" style="margin-top:2rem">
+      <div>
+        <h3>Prebuilt packages</h3>
+        <p>Debian packages for amd64 and arm64 — including Raspberry Pi 4 and 5 on a 64-bit OS — are attached to every release.</p>
+        <div class="install">
+          <pre class="code">sudo dpkg -i libstormenginev2_&lt;2.1.0&gt;_amd64.deb</pre>
+          <button class="copy" type="button" data-copy="sudo dpkg -i libstormenginev2_&lt;2.1.0&gt;_amd64.deb">Copy</button>
+        </div>
+        <p style="margin-top:1rem"><a href="https://github.com/SamsWebs/storm-engine-v2/releases">Browse releases →</a></p>
+      </div>
+      <div>
+        <h3>Build from source</h3>
+        <p>SDL2 and its extensions, glm, tinyxml2 and GTK for the editor.</p>
+        <pre class="code" style="margin-top:1rem">sudo apt update &amp;&amp; sudo apt install -y \
+    libsdl2-dev libsdl2-image-dev \
+    libsdl2-ttf-dev libsdl2-mixer-dev \
+    libglm-dev libtinyxml2-dev libgtk-3-dev</pre>
+      </div>
+    </div>
+
+    <div style="margin-top:clamp(2rem,5vw,3rem)">
+      <h3 style="font-family:Anton,Impact,sans-serif;font-weight:400;text-transform:uppercase;font-size:1.15rem;letter-spacing:.02em">Platforms</h3>
+      <div class="plats">
+        <span class="plat"><b>Linux</b> — amd64 and arm64, prebuilt <code>.deb</code></span>
+        <span class="plat"><b>Windows</b> — MinGW-w64 cross-build from Linux</span>
+        <span class="plat"><b>Nintendo Switch</b> — source builds, devkitPro</span>
+        <span class="plat"><b>Android</b> — source builds, verified on hardware</span>
+        <span class="plat">iOS — possible via the same SDL layer</span>
+      </div>
+      <p style="margin-top:1rem;font-size:.92rem;color:var(--slate);max-width:var(--measure)">Windows is cross-compiled from Linux with <code>mingw-w64</code> — no Windows toolchain needed, and SDL2 is built from the same vendored sources the Android build uses, so nothing is downloaded. The library and the spec suite cross-build today; the examples are not wired into the Windows build yet, and a native toolchain that runs in cmd or PowerShell is not supported. WSL2 runs the plain Linux build.</p>
+    </div>
+
+    <div class="support">
+      <div>
+        <h3>Support the engine</h3>
+        <p>Storm! Engine v2 is free under the WTFPL and always will be. If it taught you something, a coffee helps keep the examples growing.</p>
+      </div>
+      <a class="btn btn-primary" href="https://ko-fi.com/samswebs" rel="noopener">Donate on Ko-fi</a>
+    </div>
+
+    <div style="margin-top:clamp(2rem,5vw,3rem);max-width:var(--measure)">
+      <h3 style="font-family:Anton,Impact,sans-serif;font-weight:400;text-transform:uppercase;font-size:1.15rem;letter-spacing:.02em">Coming from 1.2.x?</h3>
+      <p style="margin-top:.6rem;color:var(--ink-soft)">v2.0.0 resets the 1.x API freeze: ten breaking changes land together so the traps they fix are gone for good rather than arriving one per release. <strong>It is a rebuild, not a relink</strong> — four structs changed size, and <code>MAX_COMPONENTS</code> changed meaning without changing size at all. <a href="https://github.com/SamsWebs/storm-engine-v2/blob/main/docs/UPGRADING.md">Read the upgrade guide →</a></p>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer class="footer">
+  <div class="wrap">
+    <div class="footer-grid">
+      <div>
+        <div class="footer-mark">
+          <svg class="wordmark" viewBox="0 0 900 150" aria-hidden="true" focusable="false">
+            <rect class="band" x="0" y="56" width="900" height="46"></rect>
+            <text class="wm" x="450" y="112" text-anchor="middle" textLength="840" lengthAdjust="spacingAndGlyphs" style="fill:#F1F2F2;stroke:#231F20">STORM<tspan>&lt;!&gt;</tspan>ENGINE</text>
+          </svg>
+        </div>
+        <p class="footer-blurb">A small, ECS-based 2D game engine on SDL2, for learning game programming in real C++.</p>
+      </div>
+      <div>
+        <h4>Project</h4>
+        <ul>
+          <li><a href="https://github.com/SamsWebs/storm-engine-v2">Source on GitHub</a></li>
+          <li><a href="https://github.com/SamsWebs/storm-engine-v2/releases">Releases</a></li>
+          <li><a href="https://github.com/SamsWebs/storm-engine-v2/blob/main/CHANGELOG.md">Changelog</a></li>
+          <li><a href="https://github.com/SamsWebs/storm-engine-v2/blob/main/KNOWN_ISSUES.md">Known issues</a></li>
+          <li><a href="https://ko-fi.com/samswebs" rel="noopener">Donate on Ko-fi</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>Docs</h4>
+        <ul>
+          <li><a href="https://github.com/SamsWebs/storm-engine-v2/blob/main/TUTORIAL.md">Tutorial</a></li>
+          <li><a href="https://github.com/SamsWebs/storm-engine-v2/blob/main/PROJECT_REFERENCE.md">API reference</a></li>
+          <li><a href="https://github.com/SamsWebs/storm-engine-v2/blob/main/docs/networking.md">Networking</a></li>
+          <li><a href="https://github.com/SamsWebs/storm-engine-v2/blob/main/docs/UPGRADING.md">Upgrading</a></li>
+        </ul>
+      </div>
+    </div>
+    <p class="colophon">Released under the WTFPL. Built by <a href="https://github.com/SamsWebs">Sams! Webs</a>. Screenshots are from the example games in the repository.</p>
+  </div>
+</footer>
+
+<script>
+document.querySelectorAll('.copy').forEach(function (btn) {
+  btn.addEventListener('click', function () {
+    var text = btn.getAttribute('data-copy');
+    navigator.clipboard.writeText(text).then(function () {
+      var was = btn.textContent;
+      btn.textContent = 'Copied';
+      setTimeout(function () { btn.textContent = was; }, 1400);
+    }).catch(function () {
+      btn.textContent = 'Press Ctrl+C';
+      setTimeout(function () { btn.textContent = 'Copy'; }, 1800);
+    });
+  });
+});
+</script>
+
+</body>
+</html>

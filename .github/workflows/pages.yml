@@ -1,0 +1,69 @@
+name: Deploy the website
+
+# Scoped to web/** on purpose. The site is hand-written static files that change
+# rarely, while main takes engine commits constantly -- deploying on every push
+# would rebuild the site for changes that cannot affect it, and burn a
+# concurrency slot each time. workflow_dispatch covers the case where a deploy
+# needs re-running without a content change.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'web/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+# Pages deploys need these; the default GITHUB_TOKEN has neither.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deploy at a time. `cancel-in-progress: false` rather than true: a
+# superseded deploy that is already uploading should finish rather than leave
+# the live site half-published.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # Fail loudly rather than publishing an empty site. `web` was committed
+      # once as a dangling gitlink -- mode 160000 pointing at a commit that
+      # existed nowhere -- so the repository held zero files under it while the
+      # working copy looked complete. A deploy would have succeeded and served
+      # nothing.
+      - name: Check the site is actually in the repository
+        run: |
+          set -euo pipefail
+          if [ ! -f web/index.html ]; then
+            echo "::error::web/index.html is missing. If 'git ls-tree HEAD web' shows mode 160000, web/ is a gitlink and its files were never committed."
+            exit 1
+          fi
+          count=$(find web -type f | wc -l)
+          echo "web/ contains $count files"
+          if [ "$count" -lt 2 ]; then
+            echo "::error::web/ has $count file(s); that is not a site."
+            exit 1
+          fi
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload the site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: web
+
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4

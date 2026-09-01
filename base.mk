@@ -27,8 +27,27 @@ CC = g++
 # parsed by hand (editor/src/utilities/FileLoader.cpp checks the extension
 # only), so the interpreter was never linked for a reason. It also does not
 # build on Debian/Ubuntu, which ship liblua5.4.so but no versionless liblua.so.
+#
+# -ltinyxml2 IS DELIBERATELY ABSENT. tinyxml2 is compiled into the library from
+# vendor/android/tinyxml2 instead -- see TINYXML2_OBJ in Makefile.debian. It was
+# the one distro-specific soname in the shipped .so and it made the .deb
+# uninstallable off the build container's distro: the linker bakes in whatever
+# soname is present (libtinyxml2.so.8 on the bullseye-vintage build image), and
+# Debian numbers that package by ABI -- 6a, 8, 9, 10 -- so no single Depends:
+# can name it. Widening Depends: to an alternation does NOT work: the soname is
+# in the ELF, so libtinyxml2-10 does not satisfy a NEEDED libtinyxml2.so.8, and
+# the package would configure cleanly and then fail to load.
+#
+# Every other soname the .so needs is stable everywhere (SDL2's four have kept
+# -2.0.so.0 for their whole life; libc, libstdc++ and libgcc_s are fixed), so
+# removing this one makes ONE .deb portable from bullseye upward.
+#
+# Windows and Android already did exactly this -- Makefile.win builds tinyxml2
+# with shared=OFF and examples/android-platformer links it BUILD_SHARED_LIBS
+# OFF -- so this makes the Linux path match the other two rather than inventing
+# anything.
 LIB = -L/usr/local/lib -Wl,-rpath=/usr/local/lib -lSDL2 -lSDL2_image -lSDL2_ttf -lSDL2_mixer \
-	-lz -ltinyxml2 -ldl $(shell pkg-config --libs gtk+-3.0)
+	-lz -ldl $(shell pkg-config --libs gtk+-3.0)
 
 # NFD (Native File Dialog) is used by exactly one file -- the editor's
 # FileDialogWin.cpp -- and is vendored as a header only (vendor/nfd/nfd.h) with
@@ -61,7 +80,12 @@ EDITOR_LIB = -lnfd
 # a separate tree at /opt/library and installs from there, so tree-vs-install
 # equality is false by construction in the one environment that would benefit
 # most from the check.
-INCLUDE = -I/usr/local/include -I$(ROOT_DIR)/vendor
+#
+# vendor/android/tinyxml2 is named for the platform that vendored it first, not
+# for the only one that uses it: the Debian library compiles it in too. The
+# path stays as-is because it is a submodule and moving it would rewrite the
+# pin for the Android and Windows builds that already consume it.
+INCLUDE = -I/usr/local/include -I$(ROOT_DIR)/vendor -I$(ROOT_DIR)/vendor/android/tinyxml2
 
 # Build profile. The default is the local-dev one — unoptimized with debug
 # info, which is what it has always been. PROFILE=release drops -g and turns

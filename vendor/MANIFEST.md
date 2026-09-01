@@ -47,8 +47,18 @@ Two notes on the odd ones:
 
 ## Pinned as submodules
 
-Used by the Android build only. These are properly pinned already — git records
-the exact commit — and are listed so the set is visible in one place.
+Used by the Android build, and — for `tinyxml2` — by the Linux and Windows
+builds too. These are properly pinned already — git records the exact commit —
+and are listed so the set is visible in one place.
+
+**`vendor/android/tinyxml2` is no longer Android-only, and the directory name
+is now a misnomer.** The Debian library compiles it in (`base.mk`,
+`Makefile.debian`'s `TINYXML2_OBJ`) rather than linking the system
+`-ltinyxml2`, because Debian numbers that package by ABI — `libtinyxml2-6a`,
+`-8`, `-9`, `-10` — so the shipped `.deb` depended on whichever the build
+container had and would not install anywhere else. `Makefile.win` already built
+it from source with `shared=OFF`. The path is left alone deliberately: moving a
+submodule rewrites the pin for the builds that already consume it.
 
 | Submodule | Pinned commit | Upstream |
 |---|---|---|

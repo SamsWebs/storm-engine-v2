@@ -12,6 +12,10 @@ docs
 .gitignore
 README.md
 vendor/android
+# ...except tinyxml2, which the Debian library now compiles in (see base.mk).
+# The rest of vendor/android is the Android SDL sources -- hundreds of MB
+# that nothing in this image can build.
+!vendor/android/tinyxml2
 # Cross-compiled example trees. Dockerfile.debian copies examples/ so CI can
 # build them, but these two need devkitPro and the Android NDK respectively —
 # nothing in the image can compile them, and together they are ~200 MB of

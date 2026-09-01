@@ -153,8 +153,16 @@ libraries only:
 ```bash
 sudo apt install build-essential pkg-config \
                  libsdl2-dev libsdl2-image-dev libsdl2-ttf-dev \
-                 libsdl2-mixer-dev libglm-dev libtinyxml2-dev
+                 libsdl2-mixer-dev libglm-dev
 ```
+
+> `libtinyxml2-dev` is **no longer required and should not be installed for
+> this**. The engine compiles tinyxml2 in and ships `tinyxml2.h` inside the
+> package, so your game gets the header and the symbols from the engine itself.
+> That is deliberate: `XmlLoader` embeds an `XMLDocument` by value, so your
+> translation unit emits `~XMLDocument` and has to agree with the engine on the
+> layout. Compiling against a system tinyxml2 of a different vintage would be a
+> silent ODR violation.
 
 Copy the starter game and build it:
 
@@ -186,9 +194,20 @@ Install SDL2 and its extensions, plus a few other dependencies:
 ```bash
 sudo apt update && sudo apt install -y \
     libsdl2-dev libsdl2-image-dev libsdl2-ttf-dev libsdl2-mixer-dev \
-    libglm-dev libtinyxml2-dev libgtk-3-dev \
+    libglm-dev libgtk-3-dev \
     valgrind
 ```
+
+**Then fetch the vendored tinyxml2, which the library now compiles in:**
+
+```bash
+git submodule update --init vendor/android/tinyxml2
+```
+
+Without it the build stops at the first `#include "tinyxml2.h"`. It is under
+`vendor/android/` because Android vendored it first, not because Android is the
+only user -- the Linux, Windows and Android builds all compile this same pinned
+copy now, and `libtinyxml2-dev` is no longer a build dependency on any of them.
 
 Install [Igloo](https://github.com/codewars/igloo) (test framework):
 

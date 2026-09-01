@@ -11,11 +11,26 @@ docs
 .github
 .gitignore
 README.md
-vendor/android
-# ...except tinyxml2, which the Debian library now compiles in (see base.mk).
-# The rest of vendor/android is the Android SDL sources -- hundreds of MB
-# that nothing in this image can build.
-!vendor/android/tinyxml2
+# vendor/android is excluded PER DIRECTORY rather than as `vendor/android` plus
+# a `!vendor/android/tinyxml2` exception. The exception form does not work: the
+# context builder prunes the excluded directory's subtree, so the negation
+# re-included the directory entry and none of its contents, and the build died
+# inside the container with
+#
+#     No rule to make target '/opt/library/vendor/android/tinyxml2/tinyxml2.cpp'
+#
+# Listing the five big ones by name has no such ambiguity, and tinyxml2 -- which
+# the Debian library compiles in, see base.mk -- is simply never excluded.
+# Sizes are why this list exists at all: these five are ~585 MB of Android SDL
+# and glm sources that nothing in this image can build. tinyxml2 is 3.7 MB.
+#
+# ADD A LINE HERE IF A NEW ANDROID-ONLY SUBMODULE APPEARS. The old blanket
+# pattern needed no maintenance; this one does.
+vendor/android/SDL2
+vendor/android/SDL_image2
+vendor/android/SDL_mixer2
+vendor/android/SDL_ttf2
+vendor/android/glm
 # Cross-compiled example trees. Dockerfile.debian copies examples/ so CI can
 # build them, but these two need devkitPro and the Android NDK respectively —
 # nothing in the image can compile them, and together they are ~200 MB of

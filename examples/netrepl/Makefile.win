@@ -1,0 +1,3 @@
+NAME = netrepl
+
+include ../examples.win.mk

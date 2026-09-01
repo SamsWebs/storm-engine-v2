@@ -1,0 +1,3 @@
+NAME = netchat
+
+include ../examples.win.mk

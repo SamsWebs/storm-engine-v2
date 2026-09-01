@@ -1,0 +1,3 @@
+NAME = netplay-checkers
+
+include ../examples.win.mk

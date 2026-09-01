@@ -268,6 +268,28 @@ Swap `platformer` for `shooter`, `strategy`, `puzzle`, `jrpg`, `sports`, or `net
 
 Two examples are headless console demos of the networking module - no graphics, run from a terminal. `cd examples/netchat && make && ./bin/netchat host` opens a room; `./bin/netchat join 127.0.0.1 5000` joins it from another terminal. `examples/netrepl` is the same shape (`host` / `join`) and streams snapshot deltas. See each example's README for usage.
 
+### Building an example for Windows
+
+Every desktop example also cross-compiles to a Windows `.exe` from Linux. Build
+the vendored Windows dependencies once, then build any example with its
+`Makefile.win`:
+
+```bash
+make -f Makefile.win deps          # once, from the repo root - slow
+cd examples/platformer
+make -f Makefile.win && make -f Makefile.win run   # run needs wine64
+```
+
+The `.exe` and every DLL it needs land in `bin/win/`. There is no separate
+`win-platformer` example and there should not be one: unlike `nx-platformer`
+and `android-platformer`, whose toolchains need a different project layout
+entirely, the Windows build compiles **the same sources** - so an example needs
+only a three-line `Makefile.win` naming itself and including
+`../examples.win.mk`.
+
+`nx-platformer` and `android-platformer` are excluded: they target devkitPro
+and the Android NDK.
+
 ### How each example loads its world
 
 Each example demonstrates a different approach to managing game resources - pick whichever matches your project's needs:

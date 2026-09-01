@@ -433,6 +433,33 @@ jobs:
           echo "zip verified:"
           find "${ROOT}/bin" -name '*.dll' -printf '  %f\n' | sort
 
+      # examples/examples.win.mk is a complete Windows build for the examples and
+      # was DEAD CODE until this branch: it is an include file, its header says
+      # "an example Makefile sets NAME and then does include ../examples.win.mk",
+      # and not one example had a Makefile.win to do that. Nothing referenced it
+      # from CI, the README or any script either, so it could not rot loudly.
+      #
+      # All nine desktop examples are wired now, and all nine build here. A
+      # subset was the obvious economy and is the wrong call for this file
+      # specifically: the thing being guarded is a path nobody exercises, and a
+      # subset leaves most of it exactly as unexercised as before. The deps are
+      # already built by the step above, so the marginal cost is compiling the
+      # engine plus a handful of example TUs per example.
+      #
+      # nx-platformer and android-platformer are absent on purpose -- devkitPro
+      # and the Android NDK, neither of which is on this runner.
+      - name: Build the examples for Windows
+        run: |
+          set -e
+          for ex in jrpg netchat netplay-checkers netrepl platformer \
+                    puzzle shooter sports strategy; do
+            echo "::group::${ex}"
+            make -C "examples/${ex}" -f Makefile.win
+            test -f "examples/${ex}/bin/win/${ex}.exe" \
+              || { echo "::error::examples/${ex} produced no .exe"; exit 1; }
+            echo "::endgroup::"
+          done
+
       - name: Upload the SDK zip
         uses: actions/upload-artifact@v7
         with:

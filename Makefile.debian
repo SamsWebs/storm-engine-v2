@@ -19,7 +19,24 @@ include ./base.mk
 LIBSRCS  = $(shell find common -name '*.cpp')
 LIBOBJS  = $(LIBSRCS:.cpp=.o)
 
-target : $(LIBOBJS)
+# tinyxml2 is COMPILED IN rather than linked -- see the LIB comment in base.mk
+# for why the soname had to go. Two details are deliberate:
+#
+#  * The object is written to common/, not beside its source. base.mk's `clean`
+#    prunes $(ROOT_DIR)/vendor/android, so an object left in the submodule
+#    would never be cleaned and would show up as a dirty submodule in every
+#    `git status` afterwards.
+#  * The symbols stay EXPORTED. stormengine2.pc used to name tinyxml2 in
+#    Requires: because XmlLoader embeds an XMLDocument by value, so a game's
+#    own translation unit emits ~XMLDocument and needs the symbol at link time.
+#    It now resolves that from libstormenginev2.so itself.
+TINYXML2_DIR = $(ROOT_DIR)/vendor/android/tinyxml2
+TINYXML2_OBJ = common/tinyxml2.o
+
+$(TINYXML2_OBJ): $(TINYXML2_DIR)/tinyxml2.cpp $(ROOT_DIR)/base.mk $(FLAGSTAMP)
+	$(CC) $(CCFLAGS) -o $@ $<
+
+target : $(LIBOBJS) $(TINYXML2_OBJ)
 	mkdir -p $(BIN_DIR)
 	$(CC) $^ $(LIB) -shared -o $(TARGET)
 
@@ -50,6 +67,13 @@ install:
 	mkdir -p $(INSTALL_INCLUDE_DIR) $(INSTALL_LIB_DIR)
 	cp $(TARGET) $(INSTALL_LIB_DIR)
 	cp -r ./common/* $(INSTALL_INCLUDE_DIR)
+	# xmlLoader.h does #include "tinyxml2.h" and embeds an XMLDocument by
+	# value, so a consumer compiles against tinyxml2 whether it wants to or
+	# not. Shipping the vendored header beside it is what makes the quoted
+	# include resolve, and guarantees the consumer and the library agree on
+	# the version -- the package no longer depends on a system tinyxml2 at
+	# all, so there may not be one.
+	cp $(TINYXML2_DIR)/tinyxml2.h $(INSTALL_INCLUDE_DIR)/tinyxml2.h
 	find $(INSTALL_INCLUDE_DIR) \( -name '*.o' -o -name '*.d' -o -name '*.cpp' \) -delete
 	# pkg-config file. Without it a game has to name SDL2, SDL2_image, SDL2_ttf,
 	# SDL2_mixer and tinyxml2 on its own link line -- linking only
@@ -76,7 +100,11 @@ TESTOBJS  	= $(TESTSRCS:.cpp=.o)
 run-test: test-target
 	$(TEST_TARGET)
 
-test-target: $(TESTOBJS)
+# $(TINYXML2_OBJ) is listed explicitly because TESTSRCS is built by
+# `find common`, and this object's SOURCE lives in vendor/android/tinyxml2 --
+# only the .o lands in common/. Without it the specs link against nothing for
+# every tinyxml2 symbol xmlLoader.cpp names.
+test-target: $(TESTOBJS) $(TINYXML2_OBJ)
 	mkdir -p $(BIN_DIR)
 	$(CC) $^ $(LIB) -pthread -o $(TEST_TARGET)
 

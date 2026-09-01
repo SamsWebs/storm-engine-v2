@@ -3,7 +3,15 @@
 #include <string>
 #include <vector>
 #include <unordered_map>
-#include <tinyxml2.h>
+// Quoted, not angled, and that is load-bearing. This header embeds a
+// tinyxml2::XMLDocument BY VALUE, so a consumer's own translation unit emits
+// ~XMLDocument and must agree with the engine on tinyxml2's layout. The engine
+// compiles in vendor/android/tinyxml2 (10.0.0); a consumer picking up a system
+// <tinyxml2.h> of a different vintage would be a silent ODR violation. The
+// quoted form resolves next to this file -- the vendored copy in the source
+// tree, the copy shipped beside it in /usr/local/include/stormengine2 once
+// installed -- so both sides are always the same version.
+#include "tinyxml2.h"
 #include <SDL2/SDL.h>
 
 #include "assetStore.h"

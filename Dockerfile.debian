@@ -44,6 +44,19 @@ COPY ./base.mk /opt/library/base.mk
 COPY ./stormengine2.pc.in /opt/library/stormengine2.pc.in
 COPY ./template /opt/library/template
 
+# base.mk compiles tinyxml2 into the library, so vendor/android/tinyxml2 has to
+# reach the container through BOTH gates: the submodule must be checked out
+# (`submodules: true` in build-and-release.yml) and .dockerignore must not prune
+# it. `COPY ./vendor` above brings it; this asserts it actually arrived.
+#
+# Fail here, naming both gates, rather than 60 objects later with
+# "No rule to make target .../tinyxml2.cpp" -- which is what actually happened
+# and says nothing about why the file is missing.
+RUN test -f /opt/library/vendor/android/tinyxml2/tinyxml2.cpp \
+    || (echo "vendor/android/tinyxml2 is empty in the build context." \
+        && echo "Check: git submodule update --init vendor/android/tinyxml2," \
+        && echo "and that .dockerignore does not exclude it." && false)
+
 # Build the project
 WORKDIR /opt/library
 CMD ["make", "test"]

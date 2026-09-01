@@ -163,6 +163,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
+      # ONLY tinyxml2. base.mk compiles it into the library, so Dockerfile.debian
+      # cannot build without it -- but `submodules: true` would also fetch the
+      # Android SDL trees (SDL2, SDL_image2, SDL_mixer2, SDL_ttf2) and glm, ~585 MB
+      # that nothing in this image builds and .dockerignore excludes anyway.
+      - name: Fetch the vendored tinyxml2
+        run: git submodule update --init --depth 1 vendor/android/tinyxml2
+
       - name: Set up QEMU
         if: matrix.qemu
         uses: docker/setup-qemu-action@v4
@@ -233,13 +240,27 @@ jobs:
             exit 1
           fi
 
-          # The specific regression this guards: tinyxml2 is linked by
-          # common/xmlLoader.cpp and was missing from the shipped Depends: for
-          # every release up to v1.2.1.
+          # THIS GUARD WAS INVERTED, and the reason matters more than the flip.
+          #
+          # It used to demand tinyxml2 be PRESENT: it was linked by
+          # common/xmlLoader.cpp and missing from the shipped Depends: for every
+          # release up to v1.2.1, so the package installed cleanly and then
+          # failed to load. That was a real bug and this caught it.
+          #
+          # The fix for it was the wrong shape, and v2.1.0 is where that came
+          # due. Debian numbers tinyxml2 by ABI -- libtinyxml2-6a, -8, -9, -10 --
+          # so an honest Depends: names whichever the BUILD CONTAINER has, and
+          # the package then refuses to configure on every distro carrying a
+          # different one. v2.1.0 shipped depending on libtinyxml2-8; Ubuntu
+          # 24.04 / Mint 22 have libtinyxml2-10 and no -8 candidate at all, so
+          # the .deb could not be installed there.
+          #
+          # tinyxml2 is now compiled into the library from vendor/android/tinyxml2
+          # (see base.mk), so it must NOT appear here. Every remaining soname is
+          # stable across distros, which is what makes one .deb portable.
           case "${DEPENDS}" in
-            *tinyxml2*) ;;
-            *)
-              echo "::error::tinyxml2 is not in the derived Depends:"
+            *tinyxml2*)
+              echo "::error::tinyxml2 is back in the derived Depends: -- the library is linking the system copy again instead of compiling in vendor/android/tinyxml2, and this .deb will not install off the build container's distro"
               exit 1
               ;;
           esac
@@ -277,6 +298,45 @@ jobs:
 
           cat deb/DEBIAN/control
           dpkg-deb --build deb "libstormenginev2_${VERSION}_${ARCH}.deb"
+
+      # ── THE CHECK THAT WAS MISSING ──────────────────────────────────────
+      #
+      # Everything above verifies the .deb is well FORMED. Nothing verified it
+      # could be INSTALLED, and for v2.0.0 and v2.1.0 it could not be -- on any
+      # distro whose tinyxml2 ABI differed from the build container's, which by
+      # then was every current Ubuntu and Mint. Both releases went out green.
+      #
+      # `apt-get install ./file.deb` resolves the package's own Depends:, so a
+      # dependency this distro cannot satisfy fails the job here instead of on
+      # a user's machine. The ldd pass is the second half and not redundant: a
+      # package whose Depends: is merely INCOMPLETE installs happily and then
+      # fails to load, which is the v1.2.1 bug, so both halves guard a failure
+      # that has actually shipped.
+      #
+      # Bullseye is the floor because the build image is that vintage; noble is
+      # the ceiling that v2.1.0 could not reach.
+      - name: Verify the .deb installs and loads on real distros
+        if: matrix.arch == 'amd64'
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          set -e
+          for image in debian:bullseye debian:bookworm ubuntu:22.04 ubuntu:24.04; do
+            echo "::group::${image}"
+            docker run --rm -v "$PWD:/w" -w /w "${image}" sh -c '
+              set -e
+              apt-get update -qq
+              apt-get install -y -qq ./libstormenginev2_'"${VERSION}"'_amd64.deb
+              missing=$(ldd /usr/local/lib/libstormenginev2.so | grep "not found" || true)
+              if [ -n "${missing}" ]; then
+                echo "unresolved after install:"
+                echo "${missing}"
+                exit 1
+              fi
+              echo "OK: installed and fully resolved"
+            ' || { echo "::error::the .deb does not install cleanly on ${image}"; exit 1; }
+            echo "::endgroup::"
+          done
 
       - name: Upload .deb
         uses: actions/upload-artifact@v7

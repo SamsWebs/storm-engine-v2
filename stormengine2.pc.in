@@ -8,11 +8,20 @@ Description: Storm! Engine v2 - a lightweight ECS-based 2D game engine on SDL2
 URL: https://github.com/WillSams/storm-engine-v2
 Version: @VERSION@
 # Requires, not Requires.private, because a game compiles against these headers
-# directly: <stormengine2/states/gameState.h> pulls SDL2, and XmlLoader embeds a
-# tinyxml2::XMLDocument by value, so the game's TU emits ~XMLDocument and needs
-# to link tinyxml2 itself. glm is deliberately absent - it ships no .pc file and
-# is header-only on a standard include path, so naming it here would make
-# pkg-config fail outright on machines that have it.
-Requires: sdl2 SDL2_image SDL2_ttf SDL2_mixer tinyxml2
+# directly: <stormengine2/states/gameState.h> pulls SDL2.
+#
+# tinyxml2 WAS named here, for a reason that still holds and is now answered
+# differently: XmlLoader embeds a tinyxml2::XMLDocument by value, so the game's
+# TU emits ~XMLDocument and needs the symbol at link time. The engine now
+# compiles tinyxml2 in from vendor/android/tinyxml2 and exports it, and ships
+# tinyxml2.h beside xmlLoader.h, so the game resolves both the header and the
+# symbol from this package. Naming tinyxml2 here would break every consumer
+# that installs the .deb WITHOUT a system tinyxml2 -- which is now the point of
+# the package: pkg-config fails outright on an unknown Requires.
+#
+# glm is deliberately absent - it ships no .pc file and is header-only on a
+# standard include path, so naming it here would make pkg-config fail outright
+# on machines that have it.
+Requires: sdl2 SDL2_image SDL2_ttf SDL2_mixer
 Libs: -L${libdir} -lstormenginev2
 Cflags: -I${includedir}

@@ -3,6 +3,9 @@
 A complete, minimum standalone game: window, state machine, ECS registry, one
 animated entity, keyboard input, quit. Copy the directory, rename, build.
 
+Builds for **Linux** (`Makefile`, against an installed engine) and **Windows**
+(`Makefile.win`, against the SDK zip). Same sources both ways.
+
 Every file here exists because the engine does not ship it. `Game` and the main
 loop are written by the game, not the engine, so a scaffold is the only way to
 avoid re-deriving ~90 lines of boilerplate per project.
@@ -17,8 +20,9 @@ build against an older install, or want the annotated version.
 
 ```
 mygame/
-├── Makefile              # real flags — NOT the 2-line examples/ Makefile
-├── verify.sh             # build + headless run + log check
+├── Makefile              # Linux: real flags — NOT the 2-line examples/ Makefile
+├── Makefile.win          # Windows: MinGW-w64, against the unpacked SDK zip
+├── verify.sh             # build + headless run + log check (Linux)
 ├── assets/
 │   ├── README.md         # frame layout and the `vertical` flag trap
 │   └── gfx/
@@ -35,6 +39,14 @@ mygame/
 
 ## Build and run
 
+There are two makefiles and they build the same sources. The whole difference is
+where the engine comes from.
+
+### Linux
+
+The engine is **installed**, under `/usr/local`: headers on the default include
+path, `libstormenginev2.so` found at run time through `rpath`.
+
 ```bash
 cp -r new-game-scaffold ~/Projects/mygame
 cd ~/Projects/mygame
@@ -45,6 +57,41 @@ make
 
 Run from the game root — the asset path `./assets/gfx/player.png` is relative to
 the working directory, not the binary.
+
+### Windows (x64, MinGW-w64)
+
+There is no install step and no package manager, so the engine comes from the
+**SDK zip** attached to a release. Download it from
+<https://github.com/SamsWebs/storm-engine-v2/releases/latest>, unpack it, and
+point `SDK` at the unpacked directory:
+
+```bash
+sudo apt install mingw-w64            # on the build machine, once
+unzip stormengine2-2.1.1-win64.zip -d ~/sdk
+make -f Makefile.win SDK=~/sdk/stormengine2-2.1.1-win64
+make -f Makefile.win SDK=~/sdk/stormengine2-2.1.1-win64 run    # under wine
+```
+
+The build copies every DLL from the SDK's `bin/` beside your `.exe`, because
+Windows resolves DLLs from the executable's own directory first and reports a
+missing one as a bare non-zero exit with no message.
+
+Three things about the Windows build are load-bearing and easy to undo:
+
+- **One include root.** The zip ships `stormengine2/`, `SDL2/` and `glm/`
+  together under `include/`, because the engine's own headers need all three and
+  there is no `libsdl2-dev` or `libglm-dev` to fall back on.
+- **SDL2 is on the link line even though the engine already links it.** A
+  program cannot borrow its library's transitive imports, and any real game
+  calls SDL directly.
+- **No `-static-libgcc` / `-static-libstdc++`.** The engine DLL uses the shared
+  GCC runtime; a game that statically linked its own copy collides with it on
+  the unwinder (`multiple definition of '_Unwind_Resume'`).
+
+**MinGW-w64 only.** MSVC cannot link this — the import library and the C++ ABI
+are GCC's. This cross-compiles *from* Linux; building on Windows itself works
+with the same flags under MSYS2/MinGW, dropping the `CROSS` prefix and setting
+`CXX = g++`.
 
 ## Engine version
 

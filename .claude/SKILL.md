@@ -51,8 +51,14 @@ directly into the project (common for Switch, Android, and submodule consumers).
 
 A Windows cross-build exists via MinGW-w64 (`Makefile.win`,
 `cmake/toolchain-mingw64.cmake`, `examples/examples.win.mk`), producing
-`libstormenginev2.dll` plus the spec suite. It is not covered by CI, which
-builds `Dockerfile.debian` only.
+`libstormenginev2.dll` plus the spec suite, and from **2.1.1** a redistributable
+SDK zip (`make -f Makefile.win dist`) attached to every release. Seven of the
+examples cross-compile to Windows, each linking the DLL rather than compiling
+the engine into itself.
+
+`pr-validate.yml` still builds `Dockerfile.debian` only; the Windows leg runs in
+`build-and-release.yml`, which fires on a `v*.*.*` tag push. So a Windows break
+surfaces when a release is cut, not when a PR is opened.
 
 The `common/net/` module is a port of Teeworlds 0.7.5 networking (zlib).
 Android compiles all of `common/` including `common/net/`
@@ -800,10 +806,10 @@ consumers; the first two deleted their own diverging copies of this file for it.
 
 | Platform | How it works |
 |----------|-------------|
-| **Linux** | `.deb` package or build from source via `Makefile.debian` |
+| **Linux** | `.deb` package (amd64 / arm64) or build from source via `Makefile.debian` |
 | **Nintendo Switch** | devkitPro + SDL2 portlibs, compiles engine into `.nro` |
 | **Android** | Gradle + CMake + NDK, engine compiled into JNI library via `SDLActivity` |
-| **Windows** | MinGW-w64 cross-compile from Linux: `make -f Makefile.win` builds `build/win/libstormenginev2.dll` + `tests.exe` against the *same* vendored SDL2 sources Android uses (`vendor/android/`). `make -f Makefile.win test` runs the suite under Wine. Not covered by CI. |
+| **Windows** | Prebuilt **SDK zip** (`stormengine2-<version>-win64.zip`) from 2.1.1, or MinGW-w64 cross-compile from Linux: `make -f Makefile.win` builds `build/win/libstormenginev2.dll` + `tests.exe` against the *same* vendored SDL2 sources Android uses (`vendor/android/`), and `make -f Makefile.win dist` packages the zip. `make -f Makefile.win test` runs the suite under Wine. **MinGW-w64 only — MSVC cannot link it**, the import library and C++ ABI are GCC's. |
 | **WSL** | WSL2 with the same `apt` prerequisites drives the Linux `Makefile.debian` path |
 
 When consuming as a submodule (Switch, Android, or game-specific), the engine
@@ -860,10 +866,24 @@ make -f Makefile.debian PROFILE=release target
 ```bash
 make -f Makefile.win deps      # one-time: cross-build vendored SDL2 et al
 make -f Makefile.win           # build/win/libstormenginev2.dll + tests.exe
-make -f Makefile.win test      # run the spec suite under wine64
+make -f Makefile.win dist      # package the redistributable SDK zip
+make -f Makefile.win test      # run the spec suite under Wine
 make -f Makefile.win clean     # drop objects, keep deps
 make -f Makefile.win distclean # drop everything including deps
 ```
+
+`test` invokes `wine64`. Modern Wine ships a single `wine` binary that is
+already 64-bit and **no `wine64` at all** (Debian dropped it with the 32-bit
+multilib packages), so on such a machine that target fails with
+`wine64: command not found` while the build itself is fine — run
+`wine build/win/tests.exe` directly.
+
+**The DLL and everything that links it must share one GCC runtime.** Do not add
+`-static-libgcc` / `-static-libstdc++` to either side. Statically linking the
+runtime into a *shared* library absorbs libgcc's unwinder, and MinGW exports
+every symbol by default, so the DLL re-exports `_Unwind_Resume` and any consumer
+that also links `-static-libgcc` fails with `multiple definition of
+'_Unwind_Resume'`. That shipped in 2.1.0 and was fixed in 2.1.1.
 
 Prereqs: `sudo apt install mingw-w64 cmake`. Uses `x86_64-w64-mingw32-g++-posix`
 (the win32-threads gcc has no `<thread>`, which `specs/net/netLoopback.spec.cpp`
@@ -1742,7 +1762,7 @@ Load these when the task calls for them rather than reading them up front.
 
 | File | Use it when |
 |------|-------------|
-| `references/new-game-scaffold/` | Starting a new standalone game. A complete compiling project: real Makefile (the in-repo examples' 2-line Makefile does **not** work outside `examples/`), the `Game` class and main loop the engine does not ship, and a `PlayState` demonstrating system-registration order, deferred flush, input ownership and render. Compiles against any 1.x install. Read its `README.md` first. (Since 1.3.0 the engine also *installs* a starter game at `$(PREFIX)/share/stormengine2/template`, built with `pkg-config`; that one targets 1.3.0 and uses `ContactSystem`, `AddFont` and `Text`.) |
+| `references/new-game-scaffold/` | Starting a new standalone game. A complete compiling project: real Makefile (the in-repo examples' 2-line Makefile does **not** work outside `examples/`), a `Makefile.win` building the same sources for Windows against an unpacked SDK zip, the `Game` class and main loop the engine does not ship, and a `PlayState` demonstrating system-registration order, deferred flush, input ownership and render. Compiles against any 1.x install. Read its `README.md` first. (Since 1.3.0 the engine also *installs* a starter game at `$(PREFIX)/share/stormengine2/template`, built with `pkg-config`; that one targets 1.3.0 and uses `ContactSystem`, `AddFont` and `Text`.) |
 | `references/eval/` | Asking whether a model can actually build a game from this skill. Three task specs, a scoring harness (`run-eval.sh`), and recorded results. Read `eval/README.md` for the method; the failures it surfaces are what should become new rules here. |
 | `references/compile-errors.md` | A build fails. Real compiler and linker output mapped to cause and fix, including the stale-install signatures (`no member named 'DoesTagExist'`, `RenderSystem::Update` arity) and the runtime failures that look like build problems. |
 

@@ -1,0 +1,76 @@
+# Standalone Storm! Engine v2 game — Windows (x64), MinGW-w64.
+#
+# The companion to this directory's `Makefile`, which is the Linux build. Same
+# game, same sources; the whole difference is where the engine comes from.
+#
+#   Linux    the engine is INSTALLED, under /usr/local — headers on the default
+#            include path, libstormenginev2.so found at run time through rpath.
+#   Windows  there is no install step and no package manager. The engine comes
+#            from the SDK zip attached to a release, unpacked wherever you like,
+#            and every DLL it needs is copied beside your .exe.
+#
+# Get the zip from https://github.com/SamsWebs/storm-engine-v2/releases/latest,
+# unpack it, and point SDK at it:
+#
+#   make -f Makefile.win SDK=/path/to/stormengine2-2.1.1-win64
+#   make -f Makefile.win SDK=/path/to/stormengine2-2.1.1-win64 run   # via wine
+#
+# Prereqs on the build machine: sudo apt install mingw-w64
+# (This cross-compiles FROM Linux. Building on Windows itself works with the
+# same flags under MSYS2/MinGW — drop the CROSS prefix and set CXX = g++.)
+
+NAME    = mygame
+BIN_DIR = bin/win
+TARGET  = $(BIN_DIR)/$(NAME).exe
+
+SDK ?= $(error Set SDK to an unpacked stormengine2-<version>-win64 directory)
+
+SRCS = $(wildcard src/*.cpp) $(wildcard src/**/*.cpp)
+OBJS = $(patsubst src/%.cpp, $(BIN_DIR)/obj/%.o, $(SRCS))
+DEPS = $(OBJS:.o=.d)
+
+# -posix, not the bare cross-gcc: the win32-threads build has no <thread>, and
+# mixing the two threading models across the engine/game boundary is an ABI
+# hazard rather than merely a link error.
+CROSS = x86_64-w64-mingw32
+CXX   = $(CROSS)-g++-posix
+
+# ONE include root. The zip ships stormengine2/, SDL2/ and glm/ together under
+# include/, because the engine's own headers need all three -- there is no
+# libsdl2-dev or libglm-dev to fall back on here.
+CXXFLAGS = -Wall -c -g -std=c++17 -MMD -MP -D_WIN32_WINNT=0x0600 -I$(SDK)/include
+
+# NO -static-libgcc / -static-libstdc++. The engine DLL uses the shared GCC
+# runtime and a game that statically linked its own copy would collide with it
+# on the unwinder. The runtime DLLs are copied from the SDK below instead.
+LDFLAGS = -L$(SDK)/lib -mconsole
+# SDL2 is named even though the engine already links it: a program cannot borrow
+# its library's transitive imports, and any real game calls SDL directly.
+LIBS    = -lmingw32 -lstormenginev2 \
+          -lSDL2main -lSDL2 -lSDL2_image -lSDL2_ttf -lSDL2_mixer -lws2_32
+
+all: $(TARGET)
+
+$(TARGET): $(OBJS)
+	mkdir -p $(BIN_DIR)
+	$(CXX) $^ $(LDFLAGS) $(LIBS) -o $@
+	# Windows resolves DLLs from the .exe's own directory first and says
+	# nothing useful when one is missing -- under Wine it is a bare non-zero
+	# exit. Copy the whole set rather than picking.
+	cp -u $(SDK)/bin/*.dll $(BIN_DIR)/
+	cp -r assets $(BIN_DIR)/ 2>/dev/null || true
+
+$(BIN_DIR)/obj/%.o: src/%.cpp
+	mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) -o $@ $<
+
+# Scoped to this project only, exactly as the Linux Makefile's clean is.
+clean:
+	rm -rf $(BIN_DIR)
+
+run: $(TARGET)
+	cd $(BIN_DIR) && wine $(NAME).exe
+
+-include $(DEPS)
+
+.PHONY: all clean run

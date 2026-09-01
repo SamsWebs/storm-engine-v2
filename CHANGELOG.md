@@ -1,5 +1,75 @@
 # Changelog
 
+## [2.1.2] - 2026-09-01
+
+Packaging again, and for the same underlying reason as 2.1.1: **the package was
+verified as built rather than as installed.** 2.1.1 fixed the dependency that
+could not be satisfied; this fixes the two remaining ways the install failed for
+a real person on a real machine.
+
+### Fixed
+
+- **The command the documentation told you to run could not install
+  dependencies.** Every document — `README.md`, the release notes and the
+  website — said:
+
+  ```
+  sudo dpkg -i libstormenginev2_<version>_amd64.deb
+  ```
+
+  `dpkg -i` does not fetch dependencies. On any machine without the SDL2 runtime
+  already present it stops, and a graphical installer reports it as
+
+  ```
+  Error: Dependency is not satisfiable: libsdl2-2.0-0
+  ```
+
+  which reads like a broken package and is not one. The documented command is
+  now `sudo apt install ./libstormenginev2_<version>_amd64.deb` — the leading
+  `./` is required, or apt looks for a package by that name instead of the file.
+
+  **The CI check could not catch this, because it ran a different command.** The
+  install verification added in 2.1.1 used `apt-get install`, which resolves
+  dependencies, while every document said `dpkg -i`, which does not. It
+  therefore verified a path no user was told to take and stayed green while the
+  documented one failed. It now runs the documented command, and additionally
+  asserts `libsdl2-2.0-0` is present afterwards — otherwise it would still pass
+  on a base image that happened to ship SDL2 already, proving nothing.
+
+- **The package refused to install on Ubuntu 20.04 and Linux Mint 20.**
+
+  ```
+  Depends: libsdl2-2.0-0 (>= 2.0.12) but 2.0.10+dfsg1-3 is to be installed
+  ```
+
+  That floor was not a real requirement. The library imports exactly four
+  symbols from SDL2 proper — `SDL_GetError`, `SDL_FreeSurface`,
+  `SDL_DestroyTexture` and `SDL_CreateTextureFromSurface` — and all four have
+  existed since SDL 2.0.0. Everything else comes from SDL2_image, SDL2_ttf and
+  SDL2_mixer, or is header code your game compiles rather than the shipped
+  library. The 2.0.12 came from Debian's `libsdl2-2.0-0` symbols file, which
+  stamps a blanket floor rather than per-symbol introduction versions: even
+  `SDL_GetError` is listed there as 2.0.12.
+
+  Lowered to `>= 2.0.10`. Every other derived dependency already cleared on
+  20.04. **The supported baseline is now SDL2 2.0.10** — Ubuntu 20.04 / Mint 20
+  and Debian 11 upward — and `ubuntu:20.04` joins the images the package is
+  installed into on every release, so that is a tested claim rather than an
+  intention.
+
+  The override is deliberately narrow, because overriding a *derived*
+  dependency is what caused the v1.2.1 bug where a hand-written `Depends:`
+  omitted tinyxml2 and the package installed and then failed to load. It
+  rewrites one named package, only when the derived value is exactly the
+  `2.0.12` known to be an artifact, and **fails the build** on anything higher —
+  a genuinely newer requirement silently lowered would rebuild that same
+  failure.
+
+### Note
+
+No engine code changed. Nothing about the layout of any type moved, so a game
+built against 2.1.0 or 2.1.1 does not need rebuilding.
+
 ## [2.1.1] - 2026-09-01
 
 Packaging only. No engine API changed, and no game needs a source edit — but

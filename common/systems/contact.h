@@ -217,6 +217,12 @@ public:
   // specs/systems/contact.spec.cpp pinned the correct value throughout; only
   // the prose was wrong, which is the kind of error a game pays for at runtime.
   //
+  // It is a minimum translation only when `depth` is a true separation
+  // distance, which for box vs box it is NOT whenever one box is contained
+  // within the other along the chosen axis -- the overlap is then the inner
+  // box's own extent, not the distance to a face. See the note on
+  // storm::MinimumTranslation in <stormengine2/collision/shapes.h>.
+  //
   // The system does not apply it: there is no scheduler, so resolution order is
   // the game's call.
   static glm::vec2 MinimumTranslation(const Contact &contact) {

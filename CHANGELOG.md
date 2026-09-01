@@ -1,5 +1,64 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- **Circle colliders, and the collision math in a header with no ECS in it.**
+  `<stormengine2/collision/shapes.h>` includes glm and nothing else from the
+  engine. `ContactAABB` moves there and `ContactCircle` joins it; `Overlaps`
+  and `Manifold` are overloaded for AABB/AABB, circle/circle and circle/AABB in
+  either order, and `MinimumTranslation` gains a `(normal, depth)` form that a
+  game with no ECS can actually call — the existing one takes a `Contact`,
+  which holds two `Entity` values.
+
+  The math was always ECS-free and did not look it, sitting as statics on a
+  class deriving from `System`. `systems/contact.h` includes the new header and
+  keeps `ContactSystem::Overlaps` / `Manifold` / `MinimumTranslation` as
+  forwarders, so existing calls are unchanged.
+
+  A circle against a box corner produces a diagonal normal where a box snaps to
+  an axis. That is the point: anything round — a puck kept off the boards by
+  its edge, characters pushed apart by a separation radius, a shot glancing off
+  a post — was previously square math applied to a round body.
+
+  **Circles are reachable through the free functions only.** `ContactSystem`
+  requires `BoxColliderComponent` and there is no circle collider component, so
+  no circle contact comes out of the ECS sweep.
+
+### Fixed
+
+- **`MinimumTranslation`'s documentation was backwards, and then wrong a second
+  way.** It said "how far to move `a` … to separate the pair"; the normal
+  points from `a` *into* `b`, so applying it to `a` drives them together. The
+  specs pinned the correct vector all along and all three in-tree callers
+  already negate — only the prose was wrong. The replacement then overreached
+  by calling it a minimum translation unconditionally: for box vs box it is not
+  one whenever a box is contained within the other along the chosen axis, where
+  the overlap is the inner box's own extent rather than a face distance. Both
+  are now stated correctly, with the containment case named.
+
+- **`Overlaps` and `Manifold` could disagree**, which the header documents as
+  impossible. They were separate expressions and drifted apart four ways: at
+  box corners, `Overlaps` compared squared distances while `Manifold` took a
+  square root that could round up to exactly the radius (about 1.8% of
+  near-tangent probes); a zero-size `ContactAABB` overlapped by one measure and
+  not the other, and zero size is `BoxColliderComponent`'s default; a negative
+  radius was squared by one and compared signed by the other; and a NaN
+  coordinate produced "yes" from one and "no" from the other. There is now one
+  solver per shape pair that both call, so there is nothing left to disagree.
+
+- **A contact could be reported that the caller could not resolve.** Near
+  tangency, `depth` could round to exactly 0 while the pair still reported a
+  contact, so `MinimumTranslation` returned `(0, 0)`. Contact is now decided on
+  the penetration itself, which is what "`depth` is always > 0" requires.
+
+- **`Manifold` wrote its outputs and then returned false** on the circle/AABB
+  path, against its own documented contract, leaving a caller holding a normal
+  for a contact that was never reported. The reversed overload was worse: it
+  returned early without negating, so the stale normal pointed the wrong way
+  for the argument order requested.
+
 ## [2.0.0] - 2026-08-31
 
 > **This release requires a REBUILD, not a relink.** Four structs changed size

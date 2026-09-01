@@ -277,7 +277,7 @@ Rules to know before you use it:
 - **Membership is still computed once.** Adding a `BoxColliderComponent` to a
   live entity never gets it into `ContactSystem`; create the entity with its
   collider.
-- **`BoundsOf`, `Overlaps`, `Manifold` and `MinimumTranslation` are static** -
+- **`BoundsOf` is static on `ContactSystem`; `Overlaps`, `Manifold`, `ClosestPointOn` and `MinimumTranslation` are free functions in `<stormengine2/collision/shapes.h>` (the `ContactSystem::` spellings remain as forwarders), and they cover circles as well as boxes** -
   usable with no system registered.
 - **The broadphase sweeps X only.** Everything stacked in one column degrades to
   all-pairs. Fine for a puck and six boards, or bullets and enemies.

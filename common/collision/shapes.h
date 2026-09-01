@@ -24,9 +24,15 @@
 //
 //   * Overlap is STRICT. A shared edge or a tangent touch is not a contact,
 //     because a zero-area overlap has no meaningful normal.
-//   * `Manifold` writes a UNIT normal pointing from `a` toward `b`, along the
-//     axis of least penetration, and a `depth` that is always > 0. It returns
-//     false and leaves the outputs untouched when the pair does not overlap.
+//   * `Manifold` writes a UNIT normal pointing from `a` toward `b` and a
+//     `depth` that is always > 0, and returns false leaving the outputs
+//     untouched when the pair does not overlap.
+//
+//     The normal is the axis of least penetration only for box vs box, and for
+//     a circle whose centre is inside a box. When a circle's centre is outside,
+//     it runs along the line to the closest point on the other shape -- which
+//     is the whole reason circles are here, since that is what makes a round
+//     body glance off a corner instead of snapping to a face.
 //   * Shapes are world-space, with any collider offset and transform scale
 //     already applied. Nothing here reads a component.
 
@@ -54,22 +60,49 @@ struct ContactCircle {
   float radius = 0.0f;
 };
 
-// ── AABB vs AABB ────────────────────────────────────────────────────────────
-
-// Strict: a shared edge is not a contact, because a zero-area overlap has no
-// meaningful normal, unlike an inclusive comparison that would count a touching
-// edge as a collision.
-inline bool Overlaps(const ContactAABB &a, const ContactAABB &b) {
-  return a.minX < b.maxX && a.maxX > b.minX && a.minY < b.maxY &&
-         a.maxY > b.minY;
+// The closest point on `box` to (x, y), which is the point itself when it lies
+// inside the box. For an inverted box (minX > maxX) the clamp collapses to
+// minX, which the solvers then reject rather than building a manifold from
+// negative extents.
+inline glm::vec2 ClosestPointOn(const ContactAABB &box, float x, float y) {
+  return glm::vec2(std::max(box.minX, std::min(x, box.maxX)),
+                   std::max(box.minY, std::min(y, box.maxY)));
 }
 
-// Axis of least penetration. Returns false when the boxes do not overlap.
-inline bool Manifold(const ContactAABB &a, const ContactAABB &b,
-                     glm::vec2 &normal, float &depth) {
+// ── One source of truth per shape pair ──────────────────────────────────────
+//
+// Each pair has exactly ONE function that decides contact and computes the
+// manifold; `Overlaps` and `Manifold` are both thin wrappers over it. That is
+// structural, not stylistic. When the two were written separately they drifted
+// apart in four different ways -- `Overlaps` compared squared distances while
+// `Manifold` took a square root and compared against the radius, so `sqrt`
+// rounding up to exactly the radius made them disagree on about 1.8% of
+// near-tangent probes at box corners; a zero-size AABB overlapped by one
+// measure and not the other; a negative radius was squared by one and compared
+// signed by the other; and a NaN coordinate produced "yes" from one and "no"
+// from the other. Every one of those is impossible now: there is nothing left
+// to disagree.
+//
+// The wrappers also give the outputs-untouched guarantee for free. The solver
+// writes only to its own locals, and `Manifold` copies them out after it knows
+// the answer -- an earlier version assigned the normal on the way to deciding
+// and then returned false, leaving a caller holding a normal for a contact
+// that was never reported.
+namespace detail {
+
+// A radius is a length. Negative is not a smaller circle, it is nonsense, and
+// the two measures used to disagree about which nonsense. Clamping to zero
+// makes such a circle a point -- the geometric limit -- consistently
+// everywhere.
+inline float SaneRadius(float radius) { return radius > 0.0f ? radius : 0.0f; }
+
+inline bool SolveBoxBox(const ContactAABB &a, const ContactAABB &b,
+                        glm::vec2 &normal, float &depth) {
   const float overlapX = std::min(a.maxX, b.maxX) - std::max(a.minX, b.minX);
   const float overlapY = std::min(a.maxY, b.maxY) - std::max(a.minY, b.minY);
-  if (overlapX <= 0.0f || overlapY <= 0.0f)
+  // Not `<= 0`: NaN fails `> 0` too, so this rejects NaN rather than carrying
+  // it into the outputs.
+  if (!(overlapX > 0.0f) || !(overlapY > 0.0f))
     return false;
 
   if (overlapX < overlapY) {
@@ -86,76 +119,154 @@ inline bool Manifold(const ContactAABB &a, const ContactAABB &b,
   return true;
 }
 
+inline bool SolveCircleCircle(const ContactCircle &a, const ContactCircle &b,
+                              glm::vec2 &normal, float &depth) {
+  const float dx = b.x - a.x;
+  const float dy = b.y - a.y;
+  const float sum = SaneRadius(a.radius) + SaneRadius(b.radius);
+  const float distanceSquared = dx * dx + dy * dy;
+  const float distance = std::sqrt(distanceSquared);
+  const float penetration = sum - distance;
+
+  // Decided on the penetration itself, not on a squared comparison that a
+  // later sqrt might contradict. Two circles overlapping by less than float
+  // precision at their scale are reported as not touching -- which is the only
+  // answer that can also honour "depth is always > 0". NaN fails this too.
+  if (!(penetration > 0.0f))
+    return false;
+
+  if (distance > 0.0f) {
+    normal = glm::vec2(dx / distance, dy / distance);
+  } else {
+    // Concentric: overlapping maximally, with no direction to report. A stable
+    // +X keeps callers deterministic instead of dividing by zero.
+    normal = glm::vec2(1.0f, 0.0f);
+  }
+  depth = penetration;
+  return true;
+}
+
+inline bool SolveCircleBox(const ContactCircle &circle, const ContactAABB &box,
+                           glm::vec2 &normal, float &depth) {
+  const float radius = SaneRadius(circle.radius);
+  const glm::vec2 closest = ClosestPointOn(box, circle.x, circle.y);
+  const float dx = closest.x - circle.x;
+  const float dy = closest.y - circle.y;
+  const float distanceSquared = dx * dx + dy * dy;
+
+  if (distanceSquared > 0.0f) {
+    // Centre outside the box: the contact is against the closest point on the
+    // boundary, so the normal runs along the line to it. This is what makes a
+    // round body glance off a corner as a round body instead of snapping to a
+    // face axis -- the reason circles exist here at all.
+    const float distance = std::sqrt(distanceSquared);
+    const float penetration = radius - distance;
+    if (!(penetration > 0.0f))
+      return false;
+    normal = glm::vec2(dx / distance, dy / distance);
+    depth = penetration;
+    return true;
+  }
+
+  // Centre on or inside the box. There is no line to a closest point -- it IS
+  // the centre -- so the least-penetration face is used, the same way box vs
+  // box picks its axis.
+  //
+  // "On" is included deliberately. The rule across every shape pair here is
+  // INTERIOR INTERSECTION: a contact exists when the shapes share a point that
+  // is interior to at least one of them. That explains all five cases at once,
+  // where the area argument this comment used to make did not -- it justified
+  // the on-edge case by "half its area is inside" and then, three lines later,
+  // made a zero-area point strictly inside a box a contact too.
+  //
+  //   tangent circles          shared boundary point only   -> no
+  //   circle centred on an edge  half-disk interior to it   -> yes
+  //   AABBs sharing an edge    shared boundary segment only -> no
+  //   point on the boundary    shared boundary point only   -> no
+  //   point strictly inside    interior to the box          -> yes
+  const float toMinX = circle.x - box.minX;
+  const float toMaxX = box.maxX - circle.x;
+  const float toMinY = circle.y - box.minY;
+  const float toMaxY = box.maxY - circle.y;
+  // Reachable only for an inverted box (minX > maxX), where ClosestPointOn
+  // clamps to minX and the centre can land "inside" a box with no interior, or
+  // for NaN. Both must report nothing rather than a manifold built from
+  // negative extents.
+  if (!(toMinX >= 0.0f) || !(toMaxX >= 0.0f) || !(toMinY >= 0.0f) ||
+      !(toMaxY >= 0.0f))
+    return false;
+
+  float best = toMinX;
+  glm::vec2 candidate(1.0f, 0.0f); // nearest face is minX: the box lies +X
+  if (toMaxX < best) {
+    best = toMaxX;
+    candidate = glm::vec2(-1.0f, 0.0f);
+  }
+  if (toMinY < best) {
+    best = toMinY;
+    candidate = glm::vec2(0.0f, 1.0f);
+  }
+  if (toMaxY < best) {
+    best = toMaxY;
+    candidate = glm::vec2(0.0f, -1.0f);
+  }
+
+  const float penetration = best + radius;
+  // A zero-radius point resting exactly on the boundary: no area, no contact,
+  // matching the tangent rule.
+  if (!(penetration > 0.0f))
+    return false;
+  normal = candidate;
+  depth = penetration;
+  return true;
+}
+
+} // namespace detail
+
+// ── AABB vs AABB ────────────────────────────────────────────────────────────
+
+inline bool Overlaps(const ContactAABB &a, const ContactAABB &b) {
+  glm::vec2 normal(0.0f, 0.0f);
+  float depth = 0.0f;
+  return detail::SolveBoxBox(a, b, normal, depth);
+}
+
+inline bool Manifold(const ContactAABB &a, const ContactAABB &b,
+                     glm::vec2 &normal, float &depth) {
+  glm::vec2 solvedNormal(0.0f, 0.0f);
+  float solvedDepth = 0.0f;
+  if (!detail::SolveBoxBox(a, b, solvedNormal, solvedDepth))
+    return false;
+  normal = solvedNormal;
+  depth = solvedDepth;
+  return true;
+}
+
 // ── Circle vs circle ────────────────────────────────────────────────────────
 
 inline bool Overlaps(const ContactCircle &a, const ContactCircle &b) {
-  const float dx = b.x - a.x;
-  const float dy = b.y - a.y;
-  const float sum = a.radius + b.radius;
-  // Compared squared to avoid the square root, and strict to match the AABB
-  // rule: two circles exactly touching are not in contact.
-  return (dx * dx + dy * dy) < (sum * sum);
+  glm::vec2 normal(0.0f, 0.0f);
+  float depth = 0.0f;
+  return detail::SolveCircleCircle(a, b, normal, depth);
 }
 
-// Normal points from `a`'s centre toward `b`'s centre; depth is how far they
-// interpenetrate along it.
-//
-// Concentric centres are the one case with no direction to report. Unlike a
-// shared edge -- which is a zero-area overlap and correctly returns false --
-// two circles at the same point overlap *maximally*, so returning false there
-// would hide a real collision. A stable +X is used instead, with the full
-// penetration depth, so a caller separating along the normal still does
-// something sane and deterministic rather than dividing by zero.
 inline bool Manifold(const ContactCircle &a, const ContactCircle &b,
                      glm::vec2 &normal, float &depth) {
-  const float dx = b.x - a.x;
-  const float dy = b.y - a.y;
-  const float sum = a.radius + b.radius;
-  const float distanceSquared = dx * dx + dy * dy;
-  if (distanceSquared >= sum * sum)
+  glm::vec2 solvedNormal(0.0f, 0.0f);
+  float solvedDepth = 0.0f;
+  if (!detail::SolveCircleCircle(a, b, solvedNormal, solvedDepth))
     return false;
-
-  const float distance = std::sqrt(distanceSquared);
-  if (distance <= 0.0f) {
-    normal = glm::vec2(1.0f, 0.0f);
-    depth = sum;
-    return true;
-  }
-  normal = glm::vec2(dx / distance, dy / distance);
-  depth = sum - distance;
+  normal = solvedNormal;
+  depth = solvedDepth;
   return true;
 }
 
 // ── Circle vs AABB ──────────────────────────────────────────────────────────
 
-// The closest point on `box` to (x, y), which is the point itself when it lies
-// inside the box.
-inline glm::vec2 ClosestPointOn(const ContactAABB &box, float x, float y) {
-  return glm::vec2(std::max(box.minX, std::min(x, box.maxX)),
-                   std::max(box.minY, std::min(y, box.maxY)));
-}
-
 inline bool Overlaps(const ContactCircle &circle, const ContactAABB &box) {
-  const glm::vec2 closest = ClosestPointOn(box, circle.x, circle.y);
-  const float dx = circle.x - closest.x;
-  const float dy = circle.y - closest.y;
-  const float distanceSquared = dx * dx + dy * dy;
-
-  // Centre strictly outside the box: contact iff it is nearer than the radius.
-  if (distanceSquared > 0.0f)
-    return distanceSquared < circle.radius * circle.radius;
-
-  // Centre on or inside the box. Any positive radius means a positive-area
-  // overlap -- a circle centred exactly on an edge has half its area inside,
-  // which IS a contact. Strictness rules out zero-area overlaps (a tangent
-  // touch), not this.
-  if (circle.radius > 0.0f)
-    return true;
-
-  // A zero-radius circle is a point, and a point has no area, so it only counts
-  // when strictly inside -- a point resting on the edge is a zero-area touch.
-  return circle.x > box.minX && circle.x < box.maxX && circle.y > box.minY &&
-         circle.y < box.maxY;
+  glm::vec2 normal(0.0f, 0.0f);
+  float depth = 0.0f;
+  return detail::SolveCircleBox(circle, box, normal, depth);
 }
 
 inline bool Overlaps(const ContactAABB &box, const ContactCircle &circle) {
@@ -163,97 +274,50 @@ inline bool Overlaps(const ContactAABB &box, const ContactCircle &circle) {
 }
 
 // Normal points from the circle toward the box.
-//
-// Two distinct cases, and they need different math rather than one formula:
-//
-//   * Centre OUTSIDE the box -- the contact is against the closest point on the
-//     boundary, so the normal is along the line from the centre to that point.
-//     This is what makes a round body glance off a corner as a round body
-//     rather than snapping to a face axis, which is the whole reason circles
-//     are worth having.
-//   * Centre INSIDE the box -- there is no such line (the closest point IS the
-//     centre), so the least-penetration face is used, matching how box-vs-box
-//     picks its axis. Without this branch a deeply overlapping pair would
-//     divide by zero.
 inline bool Manifold(const ContactCircle &circle, const ContactAABB &box,
                      glm::vec2 &normal, float &depth) {
-  const glm::vec2 closest = ClosestPointOn(box, circle.x, circle.y);
-  const float dx = closest.x - circle.x;
-  const float dy = closest.y - circle.y;
-  const float distanceSquared = dx * dx + dy * dy;
-
-  if (distanceSquared > 0.0f) {
-    const float distance = std::sqrt(distanceSquared);
-    if (distance >= circle.radius)
-      return false;
-    normal = glm::vec2(dx / distance, dy / distance);
-    depth = circle.radius - distance;
-    return true;
-  }
-
-  // Centre on or inside the box. Pick the nearest face and push out through it.
-  //
-  // "On" is included deliberately: a circle centred exactly on an edge has half
-  // its area inside the box, so it is a real contact and Overlaps says so. An
-  // earlier version returned false here, which made the two disagree -- caught
-  // by mutation testing, because removing the guard broke nothing.
-  //
-  // A zero-radius point exactly on the boundary is the one case that is not a
-  // contact, and it falls out: best is then 0 and depth is 0, which the caller
-  // sees as no penetration.
-  const float toMinX = circle.x - box.minX;
-  const float toMaxX = box.maxX - circle.x;
-  const float toMinY = circle.y - box.minY;
-  const float toMaxY = box.maxY - circle.y;
-  if (toMinX < 0.0f || toMaxX < 0.0f || toMinY < 0.0f || toMaxY < 0.0f)
-    return false; // outside the box entirely
-
-  float best = toMinX;
-  normal = glm::vec2(1.0f, 0.0f); // circle is left of centre: box lies +X of it
-  if (toMaxX < best) {
-    best = toMaxX;
-    normal = glm::vec2(-1.0f, 0.0f);
-  }
-  if (toMinY < best) {
-    best = toMinY;
-    normal = glm::vec2(0.0f, 1.0f);
-  }
-  if (toMaxY < best) {
-    best = toMaxY;
-    normal = glm::vec2(0.0f, -1.0f);
-  }
-  depth = best + circle.radius;
-  return depth > 0.0f;
+  glm::vec2 solvedNormal(0.0f, 0.0f);
+  float solvedDepth = 0.0f;
+  if (!detail::SolveCircleBox(circle, box, solvedNormal, solvedDepth))
+    return false;
+  normal = solvedNormal;
+  depth = solvedDepth;
+  return true;
 }
 
 // Same contact, normal reversed, so a caller can order the pair whichever way
-// suits it without having to remember to negate.
+// suits it without having to remember to negate. On a miss the outputs are
+// untouched, like every other overload -- an earlier version returned early
+// without negating and left the caller a normal pointing the wrong way.
 inline bool Manifold(const ContactAABB &box, const ContactCircle &circle,
                      glm::vec2 &normal, float &depth) {
-  if (!Manifold(circle, box, normal, depth))
+  glm::vec2 solvedNormal(0.0f, 0.0f);
+  float solvedDepth = 0.0f;
+  if (!detail::SolveCircleBox(circle, box, solvedNormal, solvedDepth))
     return false;
-  normal = -normal;
+  normal = -solvedNormal;
+  depth = solvedDepth;
   return true;
 }
 
 // ── Resolution ──────────────────────────────────────────────────────────────
 
 // The penetration vector: it points from `a` toward `b` with a magnitude equal
-// to how deeply they overlap.
+// to `depth`.
 //
 // Read the direction carefully, because the obvious reading is backwards. The
-// normal points from `a` INTO `b`, so this vector separates the pair when it is
-// applied to `b`, or when its negation is applied to `a`. Applying it to `a`
-// unchanged drives them further together. Splitting it -- half to each, negated
-// for `a` -- separates both.
+// normal points from `a` INTO `b`, so this separates the pair when applied to
+// `b`, or when its negation is applied to `a`. Applying it to `a` unchanged
+// drives them further together.
 //
-// The engine does not apply it: there is no scheduler, so resolution order is
-// the game's call.
-//
-// Takes the normal and depth rather than a Contact, because Contact holds two
-// Entity values and a game with no ECS cannot build one -- which made the
-// Contact-shaped version unreachable for exactly the callers this header is
-// for.
+// It is a minimum translation only when `depth` is a true separation distance.
+// For circles it always is. For BOX vs BOX it is not, whenever one box is
+// contained within the other along the chosen axis: `Manifold` computes the
+// overlap as min(maxes) - max(mins), which for containment is the inner box's
+// own extent rather than the distance to a face. A={0,0,10,10} against
+// B={2,-5,4,15} reports depth 2 where 4 is needed, and applying it separates
+// nothing. Resolve deep box overlaps iteratively, or keep bodies from reaching
+// containment in the first place.
 inline glm::vec2 MinimumTranslation(const glm::vec2 &normal, float depth) {
   return normal * depth;
 }

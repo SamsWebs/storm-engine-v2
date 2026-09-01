@@ -254,6 +254,230 @@ Describe(CollisionShapesSpec) {
     Assert::That(Overlaps(a2, b2), Equals(true));
   };
 
+  // ── the review's falsifying inputs, one case each ─────────────────────────
+  //
+  // Each case below is an input an adversarial review used to break an earlier
+  // version. They share one cause: Overlaps and Manifold were separate
+  // expressions that could disagree. There is now a single solver per shape
+  // pair and both call it, so these pin that structure.
+
+  It(should_never_let_overlaps_and_manifold_disagree) {
+    const ContactAABB box{0.f, 0.f, 10.f, 10.f};
+    glm::vec2 normal(0.f, 0.f);
+    float depth = 0.f;
+
+    // Corner rounding: Overlaps compared squared distances while Manifold took
+    // a square root, and sqrt could round up to exactly the radius. It fired on
+    // roughly 1.8% of near-tangent probes at corners -- which is the case
+    // circles exist for.
+    const ContactCircle grazing{0x1.670852p+0f, 0x1.ea3b98p+0f, 0x1.ffc8b0p-1f};
+    const ContactAABB unitBox{0.f, 0.f, 1.f, 1.f};
+    Assert::That(Overlaps(grazing, unitBox),
+                 Equals(Manifold(grazing, unitBox, normal, depth)));
+
+    // A zero-size box is BoxColliderComponent's DEFAULT -- width and height
+    // both default to 0, so AddComponent<BoxColliderComponent>() makes one.
+    Assert::That(Overlaps(ContactAABB{5.f, 0.f, 5.f, 10.f}, box),
+                 Equals(Manifold(ContactAABB{5.f, 0.f, 5.f, 10.f}, box, normal,
+                                 depth)));
+    Assert::That(Overlaps(ContactAABB{5.f, 5.f, 5.f, 5.f}, box),
+                 Equals(Manifold(ContactAABB{5.f, 5.f, 5.f, 5.f}, box, normal,
+                                 depth)));
+
+    // A radius is a length; negative is nonsense, and the two measures used to
+    // disagree about which nonsense. Clamped to a point, consistently.
+    Assert::That(Overlaps(ContactCircle{1.f, 5.f, -1.f}, box),
+                 Equals(Manifold(ContactCircle{1.f, 5.f, -1.f}, box, normal,
+                                 depth)));
+
+    // An inverted box has no interior; the solver rejects it rather than
+    // building a manifold out of negative extents.
+    const ContactAABB inverted{10.f, 0.f, 0.f, 10.f};
+    Assert::That(Overlaps(ContactCircle{5.f, 5.f, 1.f}, inverted),
+                 Equals(Manifold(ContactCircle{5.f, 5.f, 1.f}, inverted, normal,
+                                 depth)));
+    Assert::That(Overlaps(ContactCircle{5.f, 5.f, 1.f}, inverted),
+                 Equals(false));
+  };
+
+  // depth > 0 is documented, and a true-with-zero-depth contact is one the
+  // caller cannot resolve: MinimumTranslation hands back (0,0).
+  It(should_never_report_a_contact_it_cannot_resolve) {
+    glm::vec2 normal(0.f, 0.f);
+    float depth = 0.f;
+
+    const ContactCircle a{0x1.8e852cp-2f, -0x1.b4c51ep-1f, 0x1.035c5ep-1f};
+    const ContactCircle b{-0x1.785642p-6f, -0x1.bd1066p-2f, 0x1.4acee8p-4f};
+    if (Manifold(a, b, normal, depth))
+      Assert::That(depth > 0.f, Equals(true));
+
+    // A negative radius used to produce a NEGATIVE depth, which drives a pair
+    // together instead of apart.
+    if (Manifold(ContactCircle{0.f, 0.f, -3.f}, ContactCircle{1.f, 0.f, 0.f},
+                 normal, depth))
+      Assert::That(depth > 0.f, Equals(true));
+
+    // Exact tangency through Manifold, all three pairings. Only Overlaps was
+    // tested here before, so a `>=` weakened to `>` returned true with depth 0
+    // and nothing failed.
+    Assert::That(Manifold(ContactCircle{0.f, 0.f, 5.f},
+                          ContactCircle{10.f, 0.f, 5.f}, normal, depth),
+                 Equals(false));
+    Assert::That(Manifold(ContactCircle{15.f, 5.f, 5.f},
+                          ContactAABB{0.f, 0.f, 10.f, 10.f}, normal, depth),
+                 Equals(false));
+    Assert::That(Manifold(ContactAABB{0.f, 0.f, 10.f, 10.f},
+                          ContactAABB{10.f, 0.f, 20.f, 10.f}, normal, depth),
+                 Equals(false));
+  };
+
+  // "Outputs untouched on a miss" was pinned for one overload out of four, and
+  // the circle/box path was the one breaking it: it assigned the normal on the
+  // way to deciding, then returned false.
+  It(should_leave_outputs_untouched_on_a_miss_in_every_overload) {
+    const ContactAABB box{0.f, 0.f, 10.f, 10.f};
+    const ContactCircle pointOnEdge{10.f, 5.f, 0.f};
+
+    glm::vec2 normal(11.f, 22.f);
+    float depth = 33.f;
+
+    Assert::That(Manifold(pointOnEdge, box, normal, depth), Equals(false));
+    Assert::That(normal.x, EqualsWithDelta(11.0, 0.0001));
+    Assert::That(depth, EqualsWithDelta(33.0, 0.0001));
+
+    Assert::That(Manifold(box, pointOnEdge, normal, depth), Equals(false));
+    Assert::That(normal.x, EqualsWithDelta(11.0, 0.0001));
+    Assert::That(depth, EqualsWithDelta(33.0, 0.0001));
+
+    Assert::That(Manifold(ContactAABB{0.f, 0.f, 1.f, 1.f},
+                          ContactAABB{5.f, 5.f, 6.f, 6.f}, normal, depth),
+                 Equals(false));
+    Assert::That(normal.y, EqualsWithDelta(22.0, 0.0001));
+    Assert::That(depth, EqualsWithDelta(33.0, 0.0001));
+  };
+
+  // ── coverage the first pass missed entirely ───────────────────────────────
+
+  // Every circle-vs-box case used one box at the origin with non-negative
+  // coordinates, so the lower clamps in ClosestPointOn were the identity in all
+  // of them. Break either and a circle entirely left of or below a box reports
+  // a contact.
+  It(should_clamp_on_both_axes_in_both_directions) {
+    const ContactAABB box{0.f, 0.f, 10.f, 10.f};
+    Assert::That(Overlaps(ContactCircle{-6.f, 5.f, 5.f}, box), Equals(false));
+    Assert::That(Overlaps(ContactCircle{5.f, -6.f, 5.f}, box), Equals(false));
+    Assert::That(Overlaps(ContactCircle{-4.f, 5.f, 5.f}, box), Equals(true));
+    Assert::That(Overlaps(ContactCircle{5.f, -4.f, 5.f}, box), Equals(true));
+
+    // And a box away from the origin, so minX/minY are not zero.
+    const ContactAABB offset{-30.f, -30.f, -20.f, -20.f};
+    Assert::That(ClosestPointOn(offset, -100.f, -100.f).x,
+                 EqualsWithDelta(-30.0, 0.0001));
+    Assert::That(ClosestPointOn(offset, -100.f, -100.f).y,
+                 EqualsWithDelta(-30.0, 0.0001));
+    Assert::That(ClosestPointOn(offset, 0.f, 0.f).x,
+                 EqualsWithDelta(-20.0, 0.0001));
+    Assert::That(ClosestPointOn(offset, -25.f, -25.f).x,
+                 EqualsWithDelta(-25.0, 0.0001)); // inside: the point itself
+    Assert::That(Overlaps(ContactCircle{-25.f, -34.f, 5.f}, offset),
+                 Equals(true));
+  };
+
+  // All four faces of the inside-the-box branch with their exact normals. Only
+  // two were pinned, and the -Y face was never produced by any test, so its
+  // normal could be flipped with nothing failing.
+  It(should_pick_each_inside_face_with_the_right_normal) {
+    const ContactAABB box{0.f, 0.f, 100.f, 100.f};
+    glm::vec2 normal(0.f, 0.f);
+    float depth = 0.f;
+
+    struct Case { float x, y, nx, ny, depth; };
+    const Case cases[] = {
+        {10.f, 50.f, 1.f, 0.f, 11.f},  // nearest -X face: the box lies +X
+        {90.f, 50.f, -1.f, 0.f, 11.f}, // nearest +X face
+        {50.f, 10.f, 0.f, 1.f, 11.f},  // nearest -Y face
+        {50.f, 90.f, 0.f, -1.f, 11.f}, // nearest +Y face
+    };
+    for (const Case &c : cases) {
+      Assert::That(Manifold(ContactCircle{c.x, c.y, 1.f}, box, normal, depth),
+                   Equals(true));
+      Assert::That(normal.x, EqualsWithDelta(c.nx, 0.0001));
+      Assert::That(normal.y, EqualsWithDelta(c.ny, 0.0001));
+      Assert::That(depth, EqualsWithDelta(c.depth, 0.0001));
+    }
+  };
+
+  // Ties resolve by strict `<` in declaration order, so the first face wins.
+  // Untested, every comparison could be loosened to `<=`, which reverses the
+  // normal for a body on the far side.
+  It(should_break_inside_face_ties_deterministically) {
+    glm::vec2 normal(0.f, 0.f);
+    float depth = 0.f;
+
+    // Dead centre of a square: all four distances equal, -X wins.
+    Assert::That(Manifold(ContactCircle{5.f, 5.f, 1.f},
+                          ContactAABB{0.f, 0.f, 10.f, 10.f}, normal, depth),
+                 Equals(true));
+    Assert::That(normal.x, EqualsWithDelta(1.0, 0.0001));
+    Assert::That(normal.y, EqualsWithDelta(0.0, 0.0001));
+
+    // An X tie inside a tall box: -X still wins over +X.
+    Assert::That(Manifold(ContactCircle{5.f, 10.f, 1.f},
+                          ContactAABB{0.f, 0.f, 10.f, 20.f}, normal, depth),
+                 Equals(true));
+    Assert::That(normal.x, EqualsWithDelta(1.0, 0.0001));
+
+    // Exactly on a corner: a two-way zero tie that must still resolve.
+    Assert::That(Manifold(ContactCircle{10.f, 10.f, 4.f},
+                          ContactAABB{0.f, 0.f, 10.f, 10.f}, normal, depth),
+                 Equals(true));
+    Assert::That(depth, EqualsWithDelta(4.0, 0.0001));
+    Assert::That(glm::length(normal), EqualsWithDelta(1.0, 0.0001));
+  };
+
+  // The header documents a STABLE +X for concentric circles. Asserting only
+  // that the normal was unit length let any direction pass.
+  It(should_use_a_stable_plus_x_for_concentric_circles) {
+    glm::vec2 normal(0.f, 0.f);
+    float depth = 0.f;
+    Assert::That(Manifold(ContactCircle{7.f, 7.f, 4.f},
+                          ContactCircle{7.f, 7.f, 3.f}, normal, depth),
+                 Equals(true));
+    Assert::That(normal.x, EqualsWithDelta(1.0, 0.0001));
+    Assert::That(normal.y, EqualsWithDelta(0.0, 0.0001));
+    Assert::That(depth, EqualsWithDelta(7.0, 0.0001));
+  };
+
+  // The reversed overload was called once, expecting true, so `return true;`
+  // passed it. It needs a false case and a tangent case.
+  It(should_delegate_the_reversed_overlap_faithfully) {
+    const ContactAABB box{0.f, 0.f, 10.f, 10.f};
+    Assert::That(Overlaps(box, ContactCircle{15.f, 5.f, 6.f}), Equals(true));
+    Assert::That(Overlaps(box, ContactCircle{15.f, 5.f, 4.f}), Equals(false));
+    Assert::That(Overlaps(box, ContactCircle{15.f, 5.f, 5.f}), Equals(false));
+    Assert::That(Overlaps(box, ContactCircle{-6.f, 5.f, 5.f}), Equals(false));
+  };
+
+  // MinimumTranslation only ever saw axis-aligned normals, so zeroing its Y
+  // component broke nothing -- and the diagonal MTV is the entire feature.
+  It(should_carry_both_components_through_the_translation) {
+    const glm::vec2 mtv = MinimumTranslation(glm::vec2(0.6f, 0.8f), 10.f);
+    Assert::That(mtv.x, EqualsWithDelta(6.0, 0.0001));
+    Assert::That(mtv.y, EqualsWithDelta(8.0, 0.0001));
+
+    // End to end from a real corner contact: applying it to the box separates.
+    ContactCircle circle{13.f, 13.f, 5.f};
+    ContactAABB box{0.f, 0.f, 10.f, 10.f};
+    glm::vec2 normal(0.f, 0.f);
+    float depth = 0.f;
+    Assert::That(Manifold(circle, box, normal, depth), Equals(true));
+    const glm::vec2 push = MinimumTranslation(normal, depth);
+    Assert::That(std::abs(push.y) > 0.001f, Equals(true)); // genuinely diagonal
+    box.minX += push.x; box.maxX += push.x;
+    box.minY += push.y; box.maxY += push.y;
+    Assert::That(Overlaps(circle, box), Equals(false));
+  };
+
   // ── the AABB math still behaves as it always did ──────────────────────────
 
   // Same cases as the ContactSystem statics, called as free functions, so the
@@ -271,5 +495,28 @@ Describe(CollisionShapesSpec) {
     Assert::That(normal.x, EqualsWithDelta(1.0, 0.0001));
     Assert::That(normal.y, EqualsWithDelta(0.0, 0.0001));
     Assert::That(depth, EqualsWithDelta(2.0, 0.0001));
+
+    // Separated on Y while overlapping on X. Nothing in the entire suite --
+    // here or in the three ContactSystem spec files -- covered this, so both Y
+    // conjuncts could be deleted from Overlaps and all 492 tests still passed.
+    Assert::That(Overlaps(a, ContactAABB{0.f, 20.f, 10.f, 30.f}), Equals(false));
+    Assert::That(Overlaps(a, ContactAABB{0.f, 10.f, 10.f, 20.f}),
+                 Equals(false)); // shared edge on Y
+    Assert::That(Overlaps(a, ContactAABB{0.f, 9.f, 10.f, 19.f}), Equals(true));
+
+    // The axis tie-break: equal overlap on both axes takes the Y branch,
+    // because the test is a strict `overlapX < overlapY`.
+    Assert::That(Manifold(a, ContactAABB{5.f, 5.f, 15.f, 15.f}, normal, depth),
+                 Equals(true));
+    Assert::That(normal.x, EqualsWithDelta(0.0, 0.0001));
+    Assert::That(normal.y, EqualsWithDelta(1.0, 0.0001));
+    Assert::That(depth, EqualsWithDelta(5.0, 0.0001));
+
+    // The centre tie-break: equal centres on the chosen axis give +1, because
+    // the comparison is `centerA <= centerB`.
+    Assert::That(Manifold(a, ContactAABB{2.f, 0.f, 8.f, 10.f}, normal, depth),
+                 Equals(true));
+    Assert::That(normal.x, EqualsWithDelta(1.0, 0.0001));
+    Assert::That(depth, EqualsWithDelta(6.0, 0.0001));
   };
 };

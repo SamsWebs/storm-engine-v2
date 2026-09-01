@@ -52,6 +52,8 @@ Overlap is **strict** throughout: a shared edge or a tangent touch is not a cont
 
 `ContactSystem` (`<stormengine2/systems/contact.h>`) is the ECS-facing layer on top: it builds bounds from components, sweeps for pairs, and reports begin/end contacts through callbacks. Using it means adopting the ECS - but that is a choice about the broadphase, not a precondition for using the math.
 
+**Circles are available through the free functions only.** `ContactSystem` requires `BoxColliderComponent` and there is no circle collider component, so no circle contact can come out of the ECS sweep. A game that wants round bodies calls `Overlaps`/`Manifold` itself and does its own broadphase.
+
 ## Namespace
 
 Every engine type lives in `namespace storm` as of 2.0.0. Before that they were all global, so a game declaring its own `Entity` or `Logger` collided with the engine's.

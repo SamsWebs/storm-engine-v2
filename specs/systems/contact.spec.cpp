@@ -119,6 +119,37 @@ It(offers_the_minimum_translation_needed_to_separate_a_pair) {
   Assert::That(mtv.y, EqualsWithDelta(0.0, 0.001));
 }
 
+// The ContactSystem:: spellings are the compat promise made when the math
+// moved to <stormengine2/collision/shapes.h>: they are public, they shipped in
+// 2.0.0, and they had NO caller anywhere in the repo -- both forwarders could
+// be deleted with the whole suite still green. These are the callers.
+It(should_keep_forwarding_the_contact_system_statics) {
+  const ContactAABB a{0.f, 0.f, 10.f, 10.f};
+  const ContactAABB b{8.f, 2.f, 18.f, 12.f};
+
+  Assert::That(ContactSystem::Overlaps(a, b), Equals(true));
+  Assert::That(ContactSystem::Overlaps(a, ContactAABB{20.f, 0.f, 30.f, 10.f}),
+               Equals(false));
+
+  glm::vec2 normal(0.f, 0.f);
+  float depth = 0.f;
+  Assert::That(ContactSystem::Manifold(a, b, normal, depth), Equals(true));
+  Assert::That(normal.x, EqualsWithDelta(1.0, 0.0001));
+  Assert::That(depth, EqualsWithDelta(2.0, 0.0001));
+
+  // Identical to the free functions they forward to.
+  glm::vec2 freeNormal(0.f, 0.f);
+  float freeDepth = 0.f;
+  Assert::That(Manifold(a, b, freeNormal, freeDepth), Equals(true));
+  Assert::That(normal.x, EqualsWithDelta(freeNormal.x, 0.0001));
+  Assert::That(depth, EqualsWithDelta(freeDepth, 0.0001));
+
+  // MinimumTranslation's forwarder is already covered by the
+  // minimum-translation case above, which builds a real Contact through the
+  // registry -- Contact is not default constructible, because Entity has no
+  // default constructor.
+};
+
 It(never_kills_an_entity_however_deeply_it_overlaps) {
   Registry registry;
   registry.AddSystem<ContactSystem>();

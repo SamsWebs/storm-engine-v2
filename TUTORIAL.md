@@ -36,7 +36,8 @@ Create your example directory alongside the existing ones:
 
 ```
 examples/mygame/
-├── Makefile
+├── Makefile              # Linux
+├── Makefile.win          # Windows, optional — same sources
 ├── assets/
 │   └── gfx/
 └── src/
@@ -57,6 +58,42 @@ include ../examples.mk
 ```
 
 `examples.mk` and `base.mk` handle all compiler flags, SDL2 linking, and the build rules automatically.
+
+### Building it for Windows too
+
+Add a second three-line file. Nothing else changes — same sources, same assets:
+
+**Makefile.win:**
+
+```makefile
+NAME = mygame
+
+include ../examples.win.mk
+```
+
+```bash
+make -f Makefile.win deps          # once, from the repo root — slow, cross-builds SDL2
+cd examples/mygame
+make -f Makefile.win               # bin/win/mygame.exe
+make -f Makefile.win run           # under wine
+```
+
+This cross-compiles with MinGW-w64 (`sudo apt install mingw-w64 cmake`) and
+links `libstormenginev2.dll`, copying it and every DLL it needs into `bin/win/`
+beside your `.exe` — Windows resolves DLLs from the executable's own directory
+first and reports a missing one as a bare non-zero exit.
+
+There is no separate "windows-mygame" example to write. `nx-platformer` and
+`android-platformer` are separate trees because devkitPro and the Android NDK
+need a different project layout; Windows compiles **the same sources**, which is
+why the whole difference is this one file.
+
+Two things do not port automatically. If your game polls stdin the POSIX way —
+`select()` on `STDIN_FILENO`, or `fcntl(O_NONBLOCK)` — it will not compile for
+Windows; MinGW has no `<sys/select.h>` and does not provide non-blocking console
+handles that way. That is what keeps `netchat` and `netplay-checkers` off the
+Windows list, and it is not a networking limit: `netrepl` uses the same net
+module and builds fine.
 
 ## The Game Loop
 
@@ -693,10 +730,14 @@ bool PlayState::onExit()  { m_exiting = true;         return true; }
 
 | Thing | Location |
 |---|---|
-| Engine headers | `/usr/local/include/stormengine2/` |
+| Engine headers | `/usr/local/include/stormengine2/` (Linux, installed) |
 | Example source | `examples/<name>/src/` |
 | Assets | `examples/<name>/assets/` - paths are relative to the binary |
-| Binary output | `examples/<name>/bin/` |
-| Build rules | `base.mk`, `examples/examples.mk` |
+| Binary output | `examples/<name>/bin/` (Linux), `examples/<name>/bin/win/` (Windows, with its DLLs) |
+| Build rules | `base.mk`, `examples/examples.mk`; `examples/examples.win.mk` for Windows |
+
+On Windows the engine is not installed anywhere — the examples link
+`build/win/libstormenginev2.dll` from the repo, and a game outside the repo
+links the SDK zip attached to a release. See `README.md`.
 
 See `examples/shooter/` for a complete action game example and `examples/puzzle/` for a Tetris-style example using custom components and systems.

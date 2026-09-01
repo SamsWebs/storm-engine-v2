@@ -228,8 +228,11 @@ There is no CMake build and no plain `Makefile` at the repo root - every root
 invocation needs `-f Makefile.debian`.
 
 ```bash
-# Prerequisites: SDL2, SDL_image, SDL_ttf, SDL_mixer, tinyxml2, glm, GTK3,
-# plus Igloo + snowhouse built from source for the specs (see README.md)
+# Prerequisites: SDL2, SDL_image, SDL_ttf, SDL_mixer, glm, GTK3,
+# plus Igloo + snowhouse built from source for the specs (see README.md).
+# tinyxml2 is NOT one: from 2.1.1 it is compiled in from vendor/android/tinyxml2
+# and libtinyxml2-dev is no longer needed to build or to consume the engine.
+# Also fetch that submodule:  git submodule update --init vendor/android/tinyxml2
 make -f Makefile.debian            # runs the spec suite, then builds ./bin/libstormenginev2.so
 make -f Makefile.debian target     # library only
 sudo make -f Makefile.debian install
@@ -258,7 +261,20 @@ cd ~/mygame && make run
 ```bash
 sudo apt install mingw-w64 cmake
 make -f Makefile.win        # build/win/libstormenginev2.dll + build/win/tests.exe
+make -f Makefile.win dist   # stormengine2-<version>-win64.zip — the release artifact
 ```
+
+The zip is an SDK, not just the DLL: it carries the import library and the
+`stormengine2`, `SDL2` and `glm` headers, because 12 engine headers include
+`<SDL2/SDL.h>` and 6 include `<glm/...>` and Windows has no package manager to
+fetch them from. **MinGW-w64 only — MSVC cannot link it**, the import library
+and the C++ ABI are GCC's.
+
+Do not add `-static-libgcc` / `-static-libstdc++` to the DLL or to anything that
+links it: statically linking the runtime into a *shared* library absorbs
+libgcc's unwinder, and MinGW exports every symbol by default, so the DLL
+re-exports `_Unwind_Resume` and consumers fail on a duplicate definition. That
+shipped in 2.1.0 and was fixed in 2.1.1.
 
 ### Android
 ```bash
@@ -415,7 +431,7 @@ gameMachine.changeState(state);  // State is owned by machine, don't delete!
 ## License & Credits
 
 - **License**: WTFPL (see `LICENSE.md`). `common/net/` is a port of Teeworlds 0.7.5 networking, zlib-licensed
-- **Dependencies**: SDL2, SDL_image, SDL_ttf, SDL_mixer, tinyxml2, glm (apt on desktop; pinned submodules for the Android build)
+- **Dependencies**: SDL2, SDL_image, SDL_ttf, SDL_mixer, glm (apt on desktop; pinned submodules for the Android build). tinyxml2 is vendored (`vendor/android/tinyxml2`) and compiled into the library on every platform since 2.1.1 — it was the one distro-specific soname in the `.deb` and made the package uninstallable off the build container's distro
 - **Contributors**: See GitHub contributors and commit history
 
 ---

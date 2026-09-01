@@ -8,6 +8,7 @@
 
 #include "../components/boxCollider.h"
 #include "../components/transform.h"
+#include "../collision/shapes.h"
 #include "../ecs.h"
 
 namespace storm {
@@ -17,14 +18,12 @@ namespace storm {
 // contact means and in what order to respond, because the engine has no
 // system scheduler.
 
-// A world-space AABB with the collider offset and the transform scale
-// already applied.
-struct ContactAABB {
-  float minX = 0.0f;
-  float minY = 0.0f;
-  float maxX = 0.0f;
-  float maxY = 0.0f;
-};
+// ContactAABB, ContactCircle and the math over them now live in
+// <stormengine2/collision/shapes.h>, which includes glm and nothing else from
+// the engine. They were always ECS-free; they did not look it, sitting as
+// statics on a class deriving from System, and a consumer had to discover by
+// experiment that they link without ecs.o. The types and every existing call
+// are unchanged -- this header includes that one.
 
 // One overlapping pair for the current frame. `a` always holds the lower
 // entity id, so `normal` - a unit axis pointing from `a` toward `b` along the
@@ -195,41 +194,33 @@ public:
     return box;
   }
 
-  // Strict: a shared edge is not a contact, because a zero-area overlap has
-  // no meaningful normal, unlike an inclusive comparison that would count a
-  // touching edge as a collision.
+  // Kept so `ContactSystem::Overlaps(a, b)` keeps compiling: that spelling is
+  // already in use outside this repo. New code should call storm::Overlaps and
+  // storm::Manifold from <stormengine2/collision/shapes.h> directly, which also
+  // cover circles.
   static bool Overlaps(const ContactAABB &a, const ContactAABB &b) {
-    return a.minX < b.maxX && a.maxX > b.minX && a.minY < b.maxY &&
-           a.maxY > b.minY;
+    return storm::Overlaps(a, b);
   }
 
-  // Axis of least penetration. Returns false when the boxes do not overlap.
   static bool Manifold(const ContactAABB &a, const ContactAABB &b,
                        glm::vec2 &normal, float &depth) {
-    const float overlapX = std::min(a.maxX, b.maxX) - std::max(a.minX, b.minX);
-    const float overlapY = std::min(a.maxY, b.maxY) - std::max(a.minY, b.minY);
-    if (overlapX <= 0.0f || overlapY <= 0.0f)
-      return false;
-
-    if (overlapX < overlapY) {
-      const float centerA = (a.minX + a.maxX) * 0.5f;
-      const float centerB = (b.minX + b.maxX) * 0.5f;
-      normal = glm::vec2(centerA <= centerB ? 1.0f : -1.0f, 0.0f);
-      depth = overlapX;
-    } else {
-      const float centerA = (a.minY + a.maxY) * 0.5f;
-      const float centerB = (b.minY + b.maxY) * 0.5f;
-      normal = glm::vec2(0.0f, centerA <= centerB ? 1.0f : -1.0f);
-      depth = overlapY;
-    }
-    return true;
+    return storm::Manifold(a, b, normal, depth);
   }
 
-  // How far to move `a` along the contact normal to separate the pair. The
-  // system does not apply this: there is no scheduler, so resolution order is
+  // The penetration vector: from `a` toward `b`, with a magnitude equal to how
+  // deeply they overlap.
+  //
+  // The direction is the opposite of what the old comment here claimed. It said
+  // "how far to move `a` ... to separate the pair", but the normal points from
+  // `a` INTO `b` -- so applying this to `a` unchanged drives them together. It
+  // separates when applied to `b`, or negated and applied to `a`.
+  // specs/systems/contact.spec.cpp pinned the correct value throughout; only
+  // the prose was wrong, which is the kind of error a game pays for at runtime.
+  //
+  // The system does not apply it: there is no scheduler, so resolution order is
   // the game's call.
   static glm::vec2 MinimumTranslation(const Contact &contact) {
-    return contact.normal * contact.depth;
+    return storm::MinimumTranslation(contact.normal, contact.depth);
   }
 
 private:

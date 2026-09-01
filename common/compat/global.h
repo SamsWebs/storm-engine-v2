@@ -24,6 +24,7 @@
 // which parts a game uses. Reach for the individual headers in your own code.
 
 #include "../assetStore.h"
+#include "../collision/shapes.h"
 #include "../ecs.h"
 #include "../gameStateMachine.h"
 #include "../logger.h"
@@ -110,6 +111,15 @@ using storm::BoxColliderComponent;
 using storm::RigidBodyComponent;
 using storm::SpriteComponent;
 using storm::TransformComponent;
+
+// ── Collision math ──────────────────────────────────────────────────────────
+// Overlaps, Manifold and MinimumTranslation are overloaded free functions; one
+// using-declaration each brings every overload across.
+using storm::ClosestPointOn;
+using storm::ContactCircle;
+using storm::Manifold;
+using storm::MinimumTranslation;
+using storm::Overlaps;
 
 // ── Systems ─────────────────────────────────────────────────────────────────
 using storm::AnimationSystem;

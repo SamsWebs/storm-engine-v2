@@ -26,6 +26,32 @@ A lightweight, ECS-based 2D game engine built on SDL2 - made for game jams and p
 - Example games: platformer, shooter (*1945*, a vertical shoot-'em-up with menu, HUD and controller support), strategy (*Realms*, a *Dragon Force*-style campaign map with pushed side-on battles - artwork downloaded separately, see below), puzzle, JRPG, sports, Android platformer, Switch platformer, and networking demos (netchat, netrepl, netplay-checkers)
 - Platforms: Linux, Nintendo Switch (source builds), Android (source builds, verified on hardware); iOS possible via the same SDL layer
 
+## Collision math without the ECS
+
+The collision math is pure geometry and needs none of the engine's entity machinery. `<stormengine2/collision/shapes.h>` includes glm and nothing else from the engine, so a game that uses no `Registry`, no entities and no components can still use it:
+
+```cpp
+#include <stormengine2/collision/shapes.h>
+using namespace storm;
+
+ContactCircle puck{x, y, 3.0f};
+ContactAABB   post{px0, py0, px1, py1};
+
+glm::vec2 normal;
+float depth;
+if (Manifold(puck, post, normal, depth)) {
+  // normal runs from the puck INTO the post; depth is how far they overlap.
+  // Applying MinimumTranslation(normal, depth) to the POST separates them -
+  // or negate it and apply it to the puck.
+}
+```
+
+Boxes and circles are both supported, in every combination: `Overlaps` and `Manifold` are overloaded for AABB/AABB, circle/circle and circle/AABB (either order). Circles matter for anything round - a puck kept off the boards by its edge, characters pushed apart by a separation radius, a shot glancing off a post. A circle against a box corner produces a diagonal normal; approximating it with a box would snap that to an axis and change how the game feels.
+
+Overlap is **strict** throughout: a shared edge or a tangent touch is not a contact, because a zero-area overlap has no meaningful normal. A circle centred exactly *on* an edge is a contact, though - half its area is inside.
+
+`ContactSystem` (`<stormengine2/systems/contact.h>`) is the ECS-facing layer on top: it builds bounds from components, sweeps for pairs, and reports begin/end contacts through callbacks. Using it means adopting the ECS - but that is a choice about the broadphase, not a precondition for using the math.
+
 ## Namespace
 
 Every engine type lives in `namespace storm` as of 2.0.0. Before that they were all global, so a game declaring its own `Entity` or `Logger` collided with the engine's.

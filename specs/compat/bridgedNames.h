@@ -8,7 +8,7 @@
 // third of the exports, so a name missing from the bridge was missing
 // from the spec too.
 //
-// 133 names.
+// 138 names.
 #pragma once
 
 namespace storm_compat_probe {
@@ -20,11 +20,13 @@ using ::AnimationSystem;
 using ::AssetStore;
 using ::AssetStore_Ptr;
 using ::BoxColliderComponent;
+using ::ClosestPointOn;
 using ::Component;
 using ::ComponentMiss;
 using ::ComponentMissDescription;
 using ::Contact;
 using ::ContactAABB;
+using ::ContactCircle;
 using ::ContactSystem;
 using ::DpadFromPoint;
 using ::ECS_MAX_DIAGNOSTIC_REPORTS;
@@ -62,7 +64,9 @@ using ::MAX_COMPONENTS;
 using ::MILLISECS_PER_FRAME;
 using ::MakeDefaultZones;
 using ::MakeVPadLayout;
+using ::Manifold;
 using ::Map;
+using ::MinimumTranslation;
 using ::MovementSystem;
 using ::NetAddress;
 using ::NetAddressFromParts;
@@ -94,6 +98,7 @@ using ::NetSocket;
 using ::NetVarIntPack;
 using ::NetVarIntUnpack;
 using ::NonceToToken;
+using ::Overlaps;
 using ::Pool;
 using ::Registry;
 using ::RenderColliderSystem;

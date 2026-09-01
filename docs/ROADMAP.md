@@ -372,8 +372,30 @@ This is worth doing because there is a real consumer: a game that uses none of t
 ECS cannot reach `ContactSystem` at all, and ends up hand-rolling overlap tests the
 engine already has.
 
-**Hours — expose the primitives.** Move `Overlaps` and `Manifold` to public, or to
-free functions beside `ContactAABB`. Purely additive, no break, ships in a 2.x minor.
+**~~Hours — expose the primitives.~~ Already done, and this entry was wrong to
+imply otherwise.** `Overlaps`, `Manifold` and `MinimumTranslation` are already
+`public` statics, above the `private:` in `contact.h`. Verified by compiling a
+program against the installed 2.0.0 headers that calls them with no `Registry`,
+no entities and no components: it builds, runs, returns the right numbers, and
+`nm -u` reports **zero** undefined ECS symbols.
+
+Center Ice Hockey's own design audit reached this independently and struck the
+question from its list — *"Does the engine need a non-ECS entry point? No — it
+already has one."* The one engine-side ask it kept was **documentation**: nothing
+in `docs/` says the collision math is usable standalone, which is why a consumer
+had to discover it by experiment.
+
+**The real dependency is shape, not coupling.** A game reaching for this is
+reaching for collision, and the engine has **box colliders only** — a grep for
+`radius` or `Circle` across `common/components/` and `common/systems/` returns
+nothing. Center Ice Hockey's physics is round throughout: puck-vs-boards keeps a
+`radius` off the boards, skater separation takes a `radius`, and the net posts
+are `postRadius = 3.f`. So `Overlaps`/`Manifold` are square math applied to round
+bodies, which is *approximately* usable and quietly wrong at the edges — a puck
+that dings a round post off a square corner has a different feel for no gain.
+
+Circle support is therefore the item that actually unblocks a consumer, and it is
+additive: no break, ships in a 2.x minor.
 
 **About a day — extract the sweep.** `ContactSystem::Update()` does three separable
 jobs: build bounds from components, run the broadphase sweep and manifold, and diff
@@ -396,6 +418,15 @@ own non-ECS specs on top.
 Settle two design questions before writing code: what identifies a body (an opaque
 `std::size_t`, or `void*` userdata), and whether the core owns the begin/end state
 or the caller does.
+
+**A third measured problem, ahead of the sweep extraction.** `contact.h` records
+that the broadphase sorts on the X axis only, so *"everything stacked in one
+column degrades to the old all-pairs cost"*. A hockey rink puts ten skaters and a
+puck in a tall narrow space, which is close to that degenerate case — so the
+consumer most likely to adopt the sweep is also the one it serves worst. A
+uniform grid is the fix, and it is worth having before the extraction rather than
+after, since the extraction would otherwise carry the one-axis assumption into a
+new public API.
 
 ### An example with sustained entity churn
 

@@ -154,7 +154,45 @@ p { margin: 0; }
 
 /* --- hero --------------------------------------------------------------- */
 .hero { padding: clamp(3rem, 8vw, 5.5rem) 0 clamp(2.5rem, 6vw, 4rem); }
-.hero-mark { max-width: 760px; margin-bottom: 1.75rem; }
+.hero-mark { max-width: 760px; margin-bottom: 2rem; }
+
+/* Two columns above 1000px: the pitch on the left, the game on the right.
+   Below that the screenshot follows the call to action rather than pushing it
+   off the first screen. */
+.hero-grid { display: grid; gap: clamp(2rem, 5vw, 3.5rem); align-items: start; }
+@media (min-width: 1000px) {
+  .hero-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); align-items: center; }
+}
+
+/* --- the reveal --------------------------------------------------------- */
+.reveal { margin: 0; }
+.reveal-frame {
+  position: relative;
+  border-radius: 6px;
+  padding: 6px;                       /* the bezel */
+  background: linear-gradient(160deg, #2C2729 0%, #191617 60%, #2C2729 100%);
+  box-shadow:
+    0 0 0 1px rgba(203,32,38,.55),    /* a red edge, not a red glow */
+    0 18px 44px rgba(35,31,32,.28);
+}
+.reveal-frame img {
+  display: block; width: 100%; height: auto; border-radius: 3px;
+  /* Pixel art. Any smoothing here softens exactly the thing being shown off. */
+  image-rendering: pixelated;
+}
+.reveal-tag {
+  position: absolute; top: -11px; left: 14px; z-index: 2;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: .66rem; letter-spacing: .16em; text-transform: uppercase; font-weight: 600;
+  background: var(--storm); color: #FFF;
+  padding: .25rem .6rem; border-radius: 2px;
+}
+.reveal figcaption {
+  margin-top: 1rem; font-size: .96rem; line-height: 1.5;
+  color: var(--ink-soft); max-width: 46ch;
+}
+.reveal figcaption strong { color: var(--ink); }
+.reveal-note { color: var(--slate); }
 .hero-mark .wordmark { animation: bandwipe .7s cubic-bezier(.2,.8,.2,1) both; }
 @keyframes bandwipe { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
 .tagline {
@@ -165,8 +203,9 @@ p { margin: 0; }
 }
 .sub {
   font-size: clamp(1.02rem, 1.9vw, 1.18rem); line-height: 1.55;
-  max-width: 52ch; color: var(--ink-soft); margin-top: 1rem;
+  max-width: 48ch; color: var(--ink-soft); margin-top: 1rem;
 }
+.hero-copy .install { max-width: 100%; }
 .hero-meta {
   display: flex; flex-wrap: wrap; gap: .6rem; align-items: center;
   margin-top: 1.5rem;
@@ -386,24 +425,39 @@ p { margin: 0; }
       </svg>
     </div>
 
-    <h1 class="tagline">Learn game programming in real C++.</h1>
-    <p class="sub">Storm! Engine v2 is a small, ECS-based 2D engine on SDL2. Nine complete games ship with it — read them, change them, break them, and keep what you learn when you move on.</p>
+    <div class="hero-grid">
+      <div class="hero-copy">
+        <h1 class="tagline">Learn game programming in real C++.</h1>
+        <p class="sub">Storm! Engine v2 is a small, ECS-based 2D engine on SDL2. Nine complete games ship with it — read them, change them, break them, and keep what you learn when you move on.</p>
 
-    <div class="hero-meta">
-      <span class="chip chip-v">v2.1.0</span>
-      <span class="chip">C++ / SDL2</span>
-      <span class="chip">Linux · Windows · Switch · Android</span>
-      <span class="chip">WTFPL</span>
-    </div>
+        <div class="hero-meta">
+          <span class="chip chip-v">v2.1.0</span>
+          <span class="chip">C++ / SDL2</span>
+          <span class="chip">Linux · Windows · Switch · Android</span>
+          <span class="chip">WTFPL</span>
+        </div>
 
-    <div class="cta-row">
-      <a class="btn btn-primary" href="#start">Get started</a>
-      <a class="btn btn-ghost" href="#examples">See the examples</a>
-    </div>
+        <div class="cta-row">
+          <a class="btn btn-primary" href="#start">Get started</a>
+          <a class="btn btn-ghost" href="#examples">See the examples</a>
+        </div>
 
-    <div class="install">
-      <pre class="code" id="install-cmd"><span class="c">#</span> sudo dpkg -i libstormenginev2_&lt;2.1.0&gt;_amd64.deb</pre>
-      <button class="copy" type="button" data-copy="sudo dpkg -i libstormenginev2_&lt;2.1.0&gt;_amd64.deb">Copy</button>
+        <div class="install">
+          <pre class="code" id="install-cmd"><span class="c">#</span> sudo dpkg -i libstormenginev2_&lt;version&gt;_amd64.deb</pre>
+          <button class="copy" type="button" data-copy="sudo dpkg -i libstormenginev2_&lt;version&gt;_amd64.deb">Copy</button>
+        </div>
+      </div>
+
+      <figure class="reveal">
+        <div class="reveal-frame">
+          <span class="reveal-tag">First look</span>
+          <img src="assets/img/center-ice-hockey.png" width="1920" height="1080" alt="Center Ice Hockey: a top-down pixel-art hockey game, Calgary against Toronto, 13:05 left in the first period, players contesting the puck at centre ice.">
+        </div>
+        <figcaption>
+          Built with Storm! Engine v2, customizable <strong>Center Ice Hockey</strong> is set for release in late September 2026.
+          <span class="reveal-note">Graphics subject to change.</span>
+        </figcaption>
+      </figure>
     </div>
   </div>
 </header>
@@ -563,8 +617,8 @@ p { margin: 0; }
         <h3>Prebuilt packages</h3>
         <p>Debian packages for amd64 and arm64 — including Raspberry Pi 4 and 5 on a 64-bit OS — are attached to every release.</p>
         <div class="install">
-          <pre class="code">sudo dpkg -i libstormenginev2_&lt;2.1.0&gt;_amd64.deb</pre>
-          <button class="copy" type="button" data-copy="sudo dpkg -i libstormenginev2_&lt;2.1.0&gt;_amd64.deb">Copy</button>
+          <pre class="code">sudo dpkg -i libstormenginev2_&lt;version&gt;_amd64.deb</pre>
+          <button class="copy" type="button" data-copy="sudo dpkg -i libstormenginev2_&lt;version&gt;_amd64.deb">Copy</button>
         </div>
         <p style="margin-top:1rem"><a href="https://github.com/SamsWebs/storm-engine-v2/releases">Browse releases →</a></p>
       </div>

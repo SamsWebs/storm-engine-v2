@@ -343,14 +343,33 @@ jobs:
             docker run --rm -v "$PWD:/w" -w /w "${image}" sh -c '
               set -e
               apt-get update -qq
+
+              # THE COMMAND THE DOCS TELL PEOPLE TO RUN, on an image that has no
+              # SDL2 runtime -- which is the whole point. This step used to run
+              # `apt-get install` while README, the release notes and the
+              # website all said `dpkg -i`, so it verified a path no user was
+              # told to take: apt resolves dependencies and dpkg does not, and
+              # the documented command failed for anyone without SDL2 already
+              # installed while this check stayed green. Reported from a clean
+              # machine as
+              #   Error: Dependency is not satisfiable: libsdl2-2.0-0
+              # The docs now say apt; this runs what they say.
               apt-get install -y -qq ./libstormenginev2_'"${VERSION}"'_amd64.deb
+
+              # And prove the dependencies really were pulled in, rather than
+              # having happened to be in the base image.
+              dpkg -s libsdl2-2.0-0 >/dev/null 2>&1 || {
+                echo "libsdl2-2.0-0 absent after install -- Depends: is not doing its job"
+                exit 1
+              }
+
               missing=$(ldd /usr/local/lib/libstormenginev2.so | grep "not found" || true)
               if [ -n "${missing}" ]; then
                 echo "unresolved after install:"
                 echo "${missing}"
                 exit 1
               fi
-              echo "OK: installed and fully resolved"
+              echo "OK: installed, dependencies pulled, fully resolved"
             ' || { echo "::error::the .deb does not install cleanly on ${image}"; exit 1; }
             echo "::endgroup::"
           done
@@ -550,13 +569,18 @@ jobs:
 
             **Debian / Ubuntu / Linux Mint (amd64)**
             ```bash
-            sudo dpkg -i libstormenginev2_${{ needs.version.outputs.version }}_amd64.deb
+            sudo apt install ./libstormenginev2_${{ needs.version.outputs.version }}_amd64.deb
             ```
 
             **Raspberry Pi 4/5 with 64-bit OS (arm64)**
             ```bash
-            sudo dpkg -i libstormenginev2_${{ needs.version.outputs.version }}_arm64.deb
+            sudo apt install ./libstormenginev2_${{ needs.version.outputs.version }}_arm64.deb
             ```
+
+            `apt`, not `dpkg -i`: **dpkg does not install dependencies**, so on a
+            machine without the SDL2 runtime it stops with a dependency error.
+            The leading `./` is required. If `dpkg -i` already left it
+            half-installed, `sudo apt-get install -f` finishes it.
 
             After installing, link with `-lstormenginev2`.
 

@@ -125,13 +125,22 @@ Pre-built `.deb` packages are available on the [Releases](https://github.com/Wil
 ### Debian / Ubuntu / Linux Mint (amd64)
 
 ```bash
-sudo dpkg -i libstormenginev2_<version>_amd64.deb
+sudo apt install ./libstormenginev2_<version>_amd64.deb
 ```
+
+> Use `apt`, not `dpkg -i`. **`dpkg -i` does not install dependencies** — on a
+> machine without the SDL2 runtime it stops with
+> `dependency problems prevent configuration` (or, if you double-click the file,
+> *"Error: Dependency is not satisfiable: libsdl2-2.0-0"*). `apt` fetches them.
+> The leading `./` is required: without it apt looks for a package by that name
+> instead of the file. If you already ran `dpkg -i` and it half-installed,
+> `sudo apt-get install -f` finishes the job.
+
 
 #### Raspberry Pi 4/5 with 64-bit OS (arm64)
 
 ```bash
-sudo dpkg -i libstormenginev2_<version>_arm64.deb
+sudo apt install ./libstormenginev2_<version>_arm64.deb
 ```
 
 ### Windows (x64, MinGW-w64)

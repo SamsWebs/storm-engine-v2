@@ -297,7 +297,24 @@ jobs:
           } > deb/DEBIAN/control
 
           cat deb/DEBIAN/control
-          dpkg-deb --build deb "libstormenginev2_${VERSION}_${ARCH}.deb"
+
+          # -Zxz, NOT the runner's default. dpkg-deb on ubuntu-latest defaults
+          # to zstd, and Debian bullseye's dpkg (1.20) cannot read a zstd
+          # control member at all:
+          #
+          #   dpkg-deb: error: archive '...' uses unknown compression for
+          #   member 'control.tar.zst', giving up
+          #
+          # That is a hard failure before Depends: is even consulted, so no
+          # amount of getting the dependencies right helps. It is also not new
+          # -- every .deb this workflow has produced since the runner image
+          # started defaulting to zstd has been unreadable on bullseye, and
+          # nothing noticed until the install verification below was added.
+          #
+          # xz is understood by every dpkg that matters and is what Debian
+          # itself still ships. The size difference on a package this small is
+          # not worth a compatibility cliff.
+          dpkg-deb -Zxz --build deb "libstormenginev2_${VERSION}_${ARCH}.deb"
 
       # ── THE CHECK THAT WAS MISSING ──────────────────────────────────────
       #
@@ -365,10 +382,25 @@ jobs:
 
       # Windows needs MORE of vendor/android than Linux does: Makefile.win
       # cross-builds SDL2 and satellites from these trees, and its CXXFLAGS
-      # name vendor/android/glm directly. This is the one job that wants the
-      # blanket form.
+      # name vendor/android/glm directly.
+      #
+      # SDL_ttf2 additionally needs ITS OWN submodules -- external/freetype and
+      # external/harfbuzz -- because Makefile.win configures it with
+      # -DSDL2TTF_VENDORED=ON. Without them its cmake configure fails and the
+      # whole deps stage dies at the third library:
+      #
+      #   configure failed for SDL_ttf2
+      #
+      # Recursive is scoped to SDL_ttf2 rather than applied to vendor/android,
+      # and the scope is tied to those VENDORED flags: SDL_image2 and
+      # SDL_mixer2 are built VENDORED=OFF, so their nested trees are never
+      # compiled -- and they are 215 MB and 95 MB against SDL_ttf2's 109 MB.
+      # IF A VENDORED FLAG IN Makefile.win IS EVER FLIPPED ON, THE MATCHING
+      # SUBMODULE HAS TO BE ADDED HERE.
       - name: Fetch vendored sources
-        run: git submodule update --init --depth 1 vendor/android
+        run: |
+          git submodule update --init --depth 1 vendor/android
+          git submodule update --init --depth 1 --recursive vendor/android/SDL_ttf2
 
       - name: Install the cross toolchain
         run: |

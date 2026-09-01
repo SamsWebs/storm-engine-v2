@@ -1,0 +1,3 @@
+NAME = strategy
+
+include ../examples.win.mk

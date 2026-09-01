@@ -67,3 +67,6 @@ editor/imgui.ini
 # Only gfx/ is the downloaded art. assets/ui/ (generated from a font by
 # gen-ui.sh) and assets/maps/ (authored here) are ours and stay tracked.
 examples/strategy/assets/gfx/
+
+# windows-platformer unpacks the release zip here to build against it.
+examples/windows-platformer/bin/

@@ -1,0 +1,3 @@
+NAME = jrpg
+
+include ../examples.win.mk

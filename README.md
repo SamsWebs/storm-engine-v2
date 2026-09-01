@@ -134,6 +134,29 @@ sudo dpkg -i libstormenginev2_<version>_amd64.deb
 sudo dpkg -i libstormenginev2_<version>_arm64.deb
 ```
 
+### Windows (x64, MinGW-w64)
+
+Download `stormengine2-<version>-win64.zip` from the same Releases page and
+unzip it anywhere. There is no installer and nothing to register.
+
+```
+g++ -std=c++17 mygame.cpp -Iinclude -Llib -lstormenginev2 -o mygame.exe
+```
+
+Then copy the contents of `bin\` beside your `.exe`, or put that directory on
+`PATH`. Windows resolves DLLs from the executable's own directory first and
+says nothing useful when one is missing, so copy the whole directory rather
+than picking out the ones you think you need.
+
+The zip carries the SDL2, glm and tinyxml2 headers as well as the engine's own,
+because 12 engine headers include `<SDL2/SDL.h>` and 6 include `<glm/...>` --
+on Debian those come from `libsdl2-dev` and `libglm-dev`, and on Windows there
+is no package manager to get them from.
+
+> **MSVC is not supported.** The import library and the C++ ABI are GCC's, so a
+> program compiled with `cl.exe` cannot link this build. Use MinGW-w64, or
+> build from source with your own toolchain.
+
 > **Upgrading from 1.2.x is a rebuild, not a relink.** `AssetStore` grew font
 > and sound caches in 1.3.0, so `sizeof(AssetStore)` went from 112 to 208
 > bytes. Every game allocates the store in its own code, so a binary compiled
@@ -244,6 +267,43 @@ make && make run
 Swap `platformer` for `shooter`, `strategy`, `puzzle`, `jrpg`, `sports`, or `netplay-checkers` to try the others. `netplay-checkers` is a graphical 2-player game: the host validates every move over the net module and the first two joiners are seated RED and BLACK (`host` starts it with `S`).
 
 Two examples are headless console demos of the networking module - no graphics, run from a terminal. `cd examples/netchat && make && ./bin/netchat host` opens a room; `./bin/netchat join 127.0.0.1 5000` joins it from another terminal. `examples/netrepl` is the same shape (`host` / `join`) and streams snapshot deltas. See each example's README for usage.
+
+### Building an example for Windows
+
+Every desktop example also cross-compiles to a Windows `.exe` from Linux. Build
+the vendored Windows dependencies once, then build any example with its
+`Makefile.win`:
+
+```bash
+make -f Makefile.win deps          # once, from the repo root - slow
+cd examples/platformer
+make -f Makefile.win && make -f Makefile.win run   # run needs wine64
+```
+
+The `.exe` and every DLL it needs - including `libstormenginev2.dll` - land in
+`bin/win/`. An example needs only a three-line `Makefile.win` naming itself and
+including `../examples.win.mk`, exactly like its Linux `Makefile`.
+
+These build against the **repository**. `examples/windows-platformer` is the one
+that builds against the **unzipped release zip**, the way a user who downloaded
+it does; see its README. It has no sources of its own - it compiles
+`../platformer/src`, because what it demonstrates is a different way of
+consuming the engine, not a different game.
+
+Seven of the eleven examples cross-compile. The four that do not are excluded
+deliberately:
+
+| Example | Why not |
+|---|---|
+| `nx-platformer` | targets devkitPro |
+| `android-platformer` | targets the Android NDK |
+| `netchat` | `select()` on `STDIN_FILENO` for non-blocking keyboard input |
+| `netplay-checkers` | `fcntl(O_NONBLOCK)` on stdin for its scripted-input test channel |
+
+The last two are **not** a networking limitation -- the net module cross-compiles
+and `netrepl` uses it on Windows. Both examples poll stdin the POSIX way, which
+MinGW does not provide for console handles; making them portable means Windows
+console-handle APIs and a behaviour change, not a build fix.
 
 ### How each example loads its world
 

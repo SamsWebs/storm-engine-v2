@@ -1,0 +1,3 @@
+NAME = puzzle
+
+include ../examples.win.mk

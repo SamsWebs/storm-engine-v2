@@ -1,0 +1,3 @@
+NAME = sports
+
+include ../examples.win.mk

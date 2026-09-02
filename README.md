@@ -65,6 +65,24 @@ One thing falls out of that requirement: a collider added to a live entity now t
 
 `RenderColliderSystem` draws both shapes, and resolves them through `ContactSystem`'s own statics — so the debug overlay cannot disagree with the sweep about where a body is or which of two colliders won. It requires `TransformComponent` alone for the same reason `ContactSystem` does, and `Update(renderer, &camera)` pans the outlines the way `RenderSystem` pans a non-fixed sprite. The camera defaults to `nullptr`, so an existing `Update(renderer)` call is unchanged.
 
+## Lighting without shaders
+
+`<stormengine2/lighting.h>` is a two-layer overlay: a warm key layer whose alpha follows a radial falloff, and a cool vignette layer whose alpha is the inverse of the same falloff. Both are built once at quarter resolution, cached, and drawn over the finished frame with two `SDL_RenderCopy` calls.
+
+The pairing is what makes it read as light rather than as a colour filter — a single warm layer is a tint; adding the cool layer where the warm one is absent gives the frame two colour temperatures and a boundary between them, and the eye reads that boundary as illumination. Quarter resolution is why it is cheap, and it costs nothing visually, because the upscale's bilinear filter does the smoothing a full-resolution falloff would have computed per pixel.
+
+No shaders, so it runs on the plain SDL2 renderer — Switch and Android included. Like the collision math, it includes no engine header, so a game with no `Registry` can use it.
+
+```cpp
+LightingOverlay lighting;
+lighting.Build(renderer, LightingOverlay::Params{});   // once, on enter
+...
+registry.GetSystem<RenderSystem>().Update(renderer, assetStore, &camera);
+lighting.Draw(renderer);                               // last, over the frame
+```
+
+Draw it last. It is a post-pass: anything drawn afterwards is not lit, which is what you want for a HUD and never what you want for the world.
+
 ## Namespace
 
 Every engine type lives in `namespace storm` as of 2.0.0. Before that they were all global, so a game declaring its own `Entity` or `Logger` collided with the engine's.

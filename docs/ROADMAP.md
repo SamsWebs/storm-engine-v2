@@ -577,9 +577,18 @@ lighting rather than a tint. No shaders, so it runs on the SDL2 renderer on ever
 target including Switch and Android. That portability is what makes it engine
 material rather than a desktop nicety.
 
-The design question to settle first: does the engine own light *entities* in the
-ECS, or is this a standalone overlay that a state drives? That choice is hard to
-reverse.
+**Done.** `<stormengine2/lighting.h>` — `LightingOverlay::Build` once, `Draw`
+last, over the finished frame.
+
+The design question this listed as needing to be settled first — does the engine
+own light *entities* in the ECS, or is this a standalone overlay a state drives?
+— was settled as the **standalone overlay**, and the reasoning is worth keeping
+because the choice is hard to reverse. The technique is one key light and its
+complement, not a set of lights: there is nothing per-entity to store, and a
+`LightComponent` would imply a compositing pass the engine does not have. It also
+keeps the header ECS-free, like `text.h` and `collision/shapes.h`, so a game
+using none of the entity machinery still gets it. Light entities remain
+available later as an additive layer on top; the reverse would not have been.
 
 ### A debug overlay
 

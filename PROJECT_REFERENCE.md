@@ -185,6 +185,7 @@ registry.AddSystem<MoveSystem>();
 | `states/gameState.h` | `gameStateBase.h` plus the convenience includes (every component, every system, AssetStore, Logger, TileMapLoader) - 146,748 lines |
 | `assetStore.h/cpp` | Texture, font and sound caching |
 | `text.h` | One-line SDL_ttf drawing: `Draw`, `DrawCentred`, `Measure` |
+| `lighting.h` | `LightingOverlay`: a warm key layer and a cool vignette, built once at quarter resolution and drawn over the finished frame with two `SDL_RenderCopy` calls. No shaders, no engine header |
 | `logger.h/cpp` | Console logging with color codes |
 | `tilemapLoader.h/cpp` | Map parsing; editor and legacy CSV formats, auto-detected |
 | `xmlLoader.h/cpp` | XML configuration parser |
@@ -308,7 +309,8 @@ The project uses a comprehensive test suite organized by feature:
 | `xmlLoader.spec.cpp` | 15 | XML texture and object definitions |
 | `tilemapLoaderEditor.spec.cpp` | 12 | Editor map format, including the animation and collider-offset fields |
 | `systems/render.spec.cpp` | 12 | Source-rect bounds, z-ordering, camera offset |
-| `systems/contact.spec.cpp` + `contactEvents` + `contactFiltering` + `contactCircle` | 40 | Manifolds and ordering, begin/end events, pair filtering, and mixed box/circle sweeps |
+| `systems/contact.spec.cpp` + `contactEvents` + `contactFiltering` + `contactCircle` + `contactNonFinite` + `contactBroadphase` | 53 | Manifolds and ordering, begin/end events, pair filtering, mixed box/circle sweeps, non-finite rejection, and grid output invariance |
+| `lighting.spec.cpp` | 10 | Two-layer falloff, radius and centre, rebuild and release, against a real software renderer |
 | `input/gamepad.spec.cpp` | 11 | Button edges, deadzone and stick normalisation |
 | `systemMembership.spec.cpp` | 10 | Membership at admission, and the retrofit for a late system |
 | `input/virtualGamepad.spec.cpp` + `touchControls` | 15 | Touch zone hit-testing, d-pad sectors, action diamond |
@@ -325,8 +327,8 @@ The project uses a comprehensive test suite organized by feature:
 | `layout.spec.cpp` | 1 | The ABI sizes, and the value of `MAX_COMPONENTS` |
 | `gameStateMachineSlim.spec.cpp` + `gameStateMachineNonCopyable` | 3 | The slim header stays slim; the machine is not copyable |
 
-**Total**: 531 specs on `main` after the circle-collider branch, plus whatever
-the working branch adds; all passing. Counts are `It(` tallies per file, and they rot — run
+**Total**: 554 specs on `main` after the 2.3.0 wave, plus whatever the working
+branch adds; all passing. Counts are `It(` tallies per file, and they rot — run
 `make -f Makefile.debian test` for the authoritative figure. (This table
 previously listed `systems/collision.spec.cpp`, which went away with
 `CollisionSystem` in 2.0.0, and totalled 369 "as of v1.3.0".)

@@ -2,6 +2,41 @@
 
 ## [Unreleased]
 
+### Added
+
+- **A lighting overlay, with no shaders.**
+  `<stormengine2/lighting.h>` — `LightingOverlay::Build(renderer, Params)` once,
+  `Draw(renderer)` last over the finished frame.
+
+  Two quarter-resolution RGBA textures, built once and cached: a warm key layer
+  whose alpha follows a radial falloff, and a cool vignette layer whose alpha is
+  the **inverse** of the same falloff. `Draw` is two `SDL_RenderCopy` calls
+  regardless of screen size.
+
+  The pairing is the technique, not a detail. One warm layer is a colour filter;
+  the cool layer where the warm one is absent gives the frame two colour
+  temperatures with a boundary between them, and the eye reads that boundary as
+  illumination. Quarter resolution is why it is cheap and costs nothing
+  visually — the upscale's bilinear filter does the smoothing a full-resolution
+  falloff would have computed per pixel.
+
+  No shaders means the plain SDL2 renderer, so Switch and Android work as-is,
+  which is what makes this engine material rather than a desktop nicety. Like
+  `text.h` and `collision/shapes.h` it includes no engine header, so a game with
+  no `Registry` can use it.
+
+  It is an **overlay a state drives, not light entities in the ECS** — the
+  roadmap listed that as the design question to settle first, and it is settled.
+  The technique is one key light and its complement, so there is nothing
+  per-entity to store, and a `LightComponent` would imply a compositing pass the
+  engine does not have. Light entities stay available later as an additive layer
+  on top; the reverse would not have been.
+
+  Draw it last: anything drawn afterwards is unlit, which is right for a HUD and
+  wrong for the world. `Build` returns `false` on a null renderer or a
+  non-positive size, and `Draw` on an unbuilt overlay is a no-op, so a failure
+  costs the lighting rather than the frame.
+
 ### Changed
 
 - **`ContactSystem`'s broadphase is a uniform grid**, where it sorted bodies by

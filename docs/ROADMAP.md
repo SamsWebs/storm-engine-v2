@@ -749,6 +749,22 @@ Reviewed, ruled on, deliberately deferred.
 - **`Makefile.win` has no `-pthread`/`-mthreads`** while two spec files now use `std::thread`. Untested — no
   MinGW toolchain available here. `Makefile.debian` has it.
 
+### Carried from the 2.3.0 wave
+
+- **The grid allocates per frame.** `CollectCandidates` builds a fresh
+  `unordered_map` of cells, each holding a `vector` of body indices, every time
+  `Update()` runs. The sweep it replaced allocated two vectors. Holding the map
+  as a member and clearing it would keep the bucket array but not the per-cell
+  vectors, which is half a fix; the whole one is a flat counting-sort layout —
+  count bodies per cell, prefix-sum, fill one array — which allocates once and
+  is reused. Not done here because the change already carries the output
+  guarantees, and this is a profile question nothing in-repo is near.
+- **`kMaxCellsPerBody` and `kBruteForceBelow` are reasoned, not measured.** 4096
+  cells and 6 bodies. Both are the right shape — a body thousands of times
+  larger than the grid should leave it, and all-pairs beats a hash table for a
+  handful — but the exact numbers came from argument. A game that sits near
+  either boundary would be the thing to measure against.
+
 ### Carried from the circle-collider wave
 
 - ~~**A non-finite transform makes `ContactSystem`'s sweep undefined.**~~

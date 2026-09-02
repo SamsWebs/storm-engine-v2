@@ -450,7 +450,7 @@ p { margin: 0; }
         <p class="sub">Inspired by <a href='https://pikuma.com/courses/cpp-2d-game-engine-development' target='_blank'>Gustavo Pezzi's C++ Game Engine Programming course</a>, Storm! Engine v2 is a small, ECS-based 2D engine on SDL2. Nine complete games ship with it - read them, change them, break them, and keep what you learn when you move on. You download, you own it.</p>
 
         <div class="hero-meta">
-          <span class="chip chip-v" data-ver>v2.2.0</span>
+          <span class="chip chip-v" data-ver>v2.3.0</span>
           <span class="chip">C++ / SDL2</span>
           <span class="chip">Linux · Windows · Switch · Android</span>
           <span class="chip">WTFPL</span>
@@ -462,8 +462,8 @@ p { margin: 0; }
         </div>
 
         <div class="install">
-          <pre class="code" id="install-cmd" data-ver><span class="c"># Native Debian-based Linux package</span><br />sudo apt install ./libstormenginev2_2.2.0_amd64.deb</pre>
-          <button class="copy" type="button" data-ver data-copy="sudo apt install ./libstormenginev2_2.2.0_amd64.deb">Copy</button>
+          <pre class="code" id="install-cmd" data-ver><span class="c"># Native Debian-based Linux package</span><br />sudo apt install ./libstormenginev2_2.3.0_amd64.deb</pre>
+          <button class="copy" type="button" data-ver data-copy="sudo apt install ./libstormenginev2_2.3.0_amd64.deb">Copy</button>
         </div>
         <p class="install-note">
           <a href="https://github.com/SamsWebs/storm-engine-v2/releases/latest">Download Linux, Raspberry PI, or Windows packages from the Releases page.</a>
@@ -643,14 +643,14 @@ p { margin: 0; }
 
         <h4 class="pkg-h">Debian / Ubuntu / Mint</h4>
         <div class="install">
-          <pre class="code" data-ver>sudo apt install ./libstormenginev2_2.2.0_amd64.deb</pre>
-          <button class="copy" type="button" data-ver data-copy="sudo apt install ./libstormenginev2_2.2.0_amd64.deb">Copy</button>
+          <pre class="code" data-ver>sudo apt install ./libstormenginev2_2.3.0_amd64.deb</pre>
+          <button class="copy" type="button" data-ver data-copy="sudo apt install ./libstormenginev2_2.3.0_amd64.deb">Copy</button>
         </div>
 
         <h4 class="pkg-h">Windows (x64, MinGW-w64)</h4>
         <div class="install">
-          <pre class="code" data-ver>unzip stormengine2-2.2.0-win64.zip</pre>
-          <button class="copy" type="button" data-ver data-copy="unzip stormengine2-2.2.0-win64.zip">Copy</button>
+          <pre class="code" data-ver>unzip stormengine2-2.3.0-win64.zip</pre>
+          <button class="copy" type="button" data-ver data-copy="unzip stormengine2-2.3.0-win64.zip">Copy</button>
         </div>
         <p class="install-note">No installer. Unzip it, build with <code>-Iinclude</code> <code>-Llib</code> <code>-lstormenginev2</code>, and copy <code>bin\</code> beside your <code>.exe</code>. MSVC is not supported &mdash; the ABI is GCC's.</p>
 
@@ -748,7 +748,7 @@ p { margin: 0; }
    behind something that blocks the call should still read a working page with
    a real version on it, not an error. */
 (function () {
-  var BAKED = '2.2.0';
+  var BAKED = '2.3.0';
   var marked = document.querySelectorAll('[data-ver]');
   if (!marked.length || !window.fetch) return;
 

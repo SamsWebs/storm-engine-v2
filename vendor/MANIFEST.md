@@ -17,15 +17,24 @@ Frozen by being committed. Headers only unless noted.
 
 | Dependency | Version | Upstream | Files |
 |---|---|---|---|
-| Dear ImGui | **1.79 WIP** (`IMGUI_VERSION_NUM` 17803) | https://github.com/ocornut/imgui | `imgui.{h,cpp}`, `imgui_draw.cpp`, `imgui_widgets.cpp`, `imgui_demo.cpp`, `imgui_internal.h`, `imconfig.h`, `imgui_stdlib.{h,cpp}` |
+| Dear ImGui | **1.79 WIP** (`IMGUI_VERSION_NUM` 17803) | https://github.com/ocornut/imgui | `imgui.{h,cpp}`, `imgui_draw.cpp`, `imgui_widgets.cpp`, `imgui_internal.h`, `imconfig.h`, `imgui_stdlib.{h,cpp}` |
 | ImGuiFileDialog | **v0.5.1** | https://github.com/aiekick/ImGuiFileDialog | `ImGuiFileDialog.{h,cpp}`, `ImGuiFileDialogConfig.h` |
 | imgui_sdl | unversioned upstream | https://github.com/Tyyppi77/imgui_sdl | `imgui_sdl.{h,cpp}` |
 | ImGui SDL2 backend | ships with Dear ImGui | https://github.com/ocornut/imgui | `imgui_impl_sdl.{h,cpp}` |
 | stb (rectpack, textedit, truetype) | ships with Dear ImGui | https://github.com/nothings/stb | `imstb_*.h` |
 | sol2 | **3.2.3** (`SOL_VERSION_STRING`) | https://github.com/ThePhD/sol2 | `sol.hpp`, `config.hpp`, `forward.hpp` |
 | Lua | **5.3.5** (`LUA_VERSION_*`) | https://www.lua.org/ | headers only: `lua.h`, `lua.hpp`, `luaconf.h`, `lauxlib.h`, `lualib.h` |
-| FakeIt | unrecorded — single header, carries no version macro | https://github.com/eranpeer/FakeIt | `fakeit.h` |
 | Native File Dialog | unrecorded — header only, no library shipped | https://github.com/mlabbe/nativefiledialog | `nfd.h` |
+
+Two files are deliberately absent from upstream's set:
+
+- **`imgui_demo.cpp` is not vendored.** `editor/Makefile` builds
+  `$(wildcard ../vendor/imgui/*.cpp)`, so keeping it compiled 5,586 lines of
+  `ShowDemoWindow` into the editor that nothing calls. Restore it if you ever
+  want the demo window; it is one file from upstream at the version above.
+- **FakeIt was removed.** 7,776 lines of a mocking framework with no reference
+  anywhere in `common/`, `editor/`, `examples/` or `specs/` — the suite is Igloo
+  and snowhouse, and nothing in it mocks.
 
 Two notes on the odd ones:
 

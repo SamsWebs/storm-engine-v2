@@ -30,8 +30,17 @@ Two files are deliberately absent from upstream's set:
 
 - **`imgui_demo.cpp` is not vendored.** `editor/Makefile` builds
   `$(wildcard ../vendor/imgui/*.cpp)`, so keeping it compiled 5,586 lines of
-  `ShowDemoWindow` into the editor that nothing calls. Restore it if you ever
-  want the demo window; it is one file from upstream at the version above.
+  `ShowDemoWindow` into the editor that nothing calls.
+
+  **`imgui.h` diverges from upstream because of it.** The six functions that
+  file defined — `ShowDemoWindow`, `ShowAboutWindow`, `ShowStyleEditor`,
+  `ShowStyleSelector`, `ShowFontSelector`, `ShowUserGuide` — have had their
+  declarations removed, so a call fails to compile rather than compiling and
+  then failing at link. `ShowMetricsWindow` is untouched; it lives in
+  `imgui.cpp`. Note that `IMGUI_DISABLE_DEMO_WINDOWS` is not an alternative
+  here: the empty stubs it selects were also in `imgui_demo.cpp`. To restore
+  the demo, take `imgui_demo.cpp` from upstream at the version above and put
+  the six declarations back with it.
 - **FakeIt was removed.** 7,776 lines of a mocking framework with no reference
   anywhere in `common/`, `editor/`, `examples/` or `specs/` — the suite is Igloo
   and snowhouse, and nothing in it mocks.

@@ -1,6 +1,7 @@
 #include "../common/lighting.h"
 #include "support/softwareRenderer.h"
 #include <igloo/igloo_alt.h>
+#include <limits>
 
 using namespace igloo;
 using namespace storm;
@@ -127,6 +128,43 @@ Describe(LightingOverlaySpec) {
     // Warm near the requested centre, not near the middle of the screen.
     Assert::That(PixelAt(target, 8, 8).r,
                  Is().GreaterThan(PixelAt(target, 32, 32).r));
+  }
+
+  // A negative centre is legitimate -- a key light anchored off the corner --
+  // and must not be mistaken for "no centre given". The sentinel is NaN for
+  // exactly this reason.
+  It(honours_a_centre_outside_the_screen) {
+    SpecSurfaceTarget target(64, 64);
+    LightingOverlay lighting;
+    LightingOverlay::Params params;
+    params.width = 64;
+    params.height = 64;
+    params.centre = glm::vec2(-8, -8);
+    params.radius = 48.0f;
+    Assert::That(lighting.Build(target.renderer, params), Equals(true));
+
+    lighting.Draw(target.renderer);
+
+    // Brightest toward the corner the light sits beyond, not the middle.
+    Assert::That(PixelAt(target, 2, 2).r,
+                 Is().GreaterThan(PixelAt(target, 40, 40).r));
+  }
+
+  // Any other route to a NaN -- an uninitialised camera, a division by a zero
+  // viewport -- lands on the same sentinel and gives a centred light rather
+  // than a layer of undefined alpha.
+  It(falls_back_to_the_screen_centre_for_a_non_finite_centre) {
+    SpecSurfaceTarget target(64, 64);
+    LightingOverlay lighting;
+    LightingOverlay::Params params;
+    params.width = 64;
+    params.height = 64;
+    params.centre = glm::vec2(std::numeric_limits<float>::quiet_NaN(), 10.0f);
+    Assert::That(lighting.Build(target.renderer, params), Equals(true));
+
+    lighting.Draw(target.renderer);
+    Assert::That(PixelAt(target, 32, 32).r,
+                 Is().GreaterThan(PixelAt(target, 2, 2).r));
   }
 
   It(draws_nothing_when_it_was_never_built) {

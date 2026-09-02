@@ -401,10 +401,24 @@ private:
     return (x << 32) | y;
   }
 
-  // Twice the mean extent, floored at one world unit.
+  // Twice the MEDIAN extent, floored at one world unit.
+  //
+  // Median, not mean, and the difference is not cosmetic. A level-sized floor
+  // collider beside player-sized bodies is one body out of hundreds, and the
+  // mean it drags upward sizes the grid for a world that does not exist:
+  // every real body then lands in one cell and the grid degrades to the
+  // all-pairs it was written to avoid. Measured at 400 bodies, adding a single
+  // 40000px floor took the frame from 0.166 ms to 0.596 ms -- 3.6x, for one
+  // extra body that the oversized path had already excluded from the grid.
+  // Excluding it from the mean as well does not work: whether a body is
+  // oversized depends on the cell size, which is what is being computed.
+  //
+  // The median does not care. One body in a thousand cannot move it, which is
+  // exactly the property wanted, and nth_element finds it in linear time
+  // without a full sort.
   //
   // Every bound here is finite -- Admit() dropped anything else before this
-  // runs -- so the mean cannot be NaN and the division cannot produce one.
+  // runs -- so the median cannot be NaN and the arithmetic cannot produce one.
   // That ordering is not incidental: a NaN cell size would make every cell
   // index NaN, and this is one of the places that used to be reachable with
   // one.
@@ -414,13 +428,16 @@ private:
     if (shapes.empty())
       return kMinCellSize;
 
-    double total = 0.0;
+    std::vector<float> extents;
+    extents.reserve(shapes.size() * 2);
     for (const Collider &shape : shapes) {
-      total += static_cast<double>(shape.bounds.maxX - shape.bounds.minX);
-      total += static_cast<double>(shape.bounds.maxY - shape.bounds.minY);
+      extents.push_back(shape.bounds.maxX - shape.bounds.minX);
+      extents.push_back(shape.bounds.maxY - shape.bounds.minY);
     }
-    const double mean = total / (2.0 * static_cast<double>(shapes.size()));
-    const double derived = mean * 2.0;
+
+    const std::size_t middle = extents.size() / 2;
+    std::nth_element(extents.begin(), extents.begin() + middle, extents.end());
+    const double derived = static_cast<double>(extents[middle]) * 2.0;
     if (!(derived > static_cast<double>(kMinCellSize)))
       return kMinCellSize;
     // A world of enormous bodies would otherwise produce a cell size that

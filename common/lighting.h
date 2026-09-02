@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <limits>
 
 #include <SDL2/SDL.h>
 #include <glm/glm.hpp>
@@ -52,9 +53,16 @@ public:
     int width = 0;
     int height = 0;
 
-    // Key-light centre, in the same pixel space as width/height. Defaults to
-    // the middle of the screen when left at the sentinel below.
-    glm::vec2 centre{-1.0f, -1.0f};
+    // Key-light centre, in the same pixel space as width/height. Left
+    // non-finite (the default), it becomes the middle of the screen.
+    //
+    // NaN is the sentinel rather than a negative value, because a negative
+    // centre is legitimate -- a key light anchored off the top-left corner,
+    // lighting one corner of the screen -- and no arithmetic here can produce
+    // NaN from a real one. A "< 0 means default" test would have quietly
+    // ignored (-5, -5) while honouring (-5, 10), which is worse than either.
+    glm::vec2 centre{std::numeric_limits<float>::quiet_NaN(),
+                     std::numeric_limits<float>::quiet_NaN()};
 
     // Distance in pixels from `centre` at which the key light has fallen off
     // completely and the vignette is at full strength. 0 means "half the
@@ -104,11 +112,16 @@ public:
     const int lowWidth = std::max(1, (params.width + kScale - 1) / kScale);
     const int lowHeight = std::max(1, (params.height + kScale - 1) / kScale);
 
+    // Non-finite means "use the middle", which also makes every other way a
+    // NaN could arrive -- an uninitialised camera, a division by a zero
+    // viewport -- degrade to a centred light rather than to a layer of
+    // undefined alpha.
+    const bool centreGiven =
+        std::isfinite(params.centre.x) && std::isfinite(params.centre.y);
     const glm::vec2 centre =
-        (params.centre.x < 0.0f && params.centre.y < 0.0f)
-            ? glm::vec2(static_cast<float>(params.width) * 0.5f,
-                        static_cast<float>(params.height) * 0.5f)
-            : params.centre;
+        centreGiven ? params.centre
+                    : glm::vec2(static_cast<float>(params.width) * 0.5f,
+                                static_cast<float>(params.height) * 0.5f);
 
     const float radius =
         params.radius > 0.0f

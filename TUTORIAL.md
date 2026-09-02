@@ -436,8 +436,10 @@ manifold picks the axis of least penetration *per box*, so a character sliding
 along a floor made of adjacent tile colliders can pick up a sideways normal
 from a tile it barely overlaps and get shoved out of the wall - the classic
 ghost-vertex problem, and the reason Box2D has a dedicated chain shape for it.
-`ContactSystem` suits a modest number of distinct bodies: a puck and six
-boards, bullets and enemies, a player and a handful of triggers. For tiles,
+`ContactSystem` suits distinct bodies rather than terrain: a puck and the
+boards, bullets and enemies, a player and a handful of triggers. The broadphase
+is a uniform grid, so a column of bodies costs no more than a row, and the
+practical ceiling is the manifold work rather than the pairing. For tiles,
 snap to the grid instead the way `examples/platformer` does - it reads
 `IsSolid(col, row)` and resolves one axis at a time against tile boundaries
 (`src/states/playState.cpp:230-245`), which cannot catch on a seam because it

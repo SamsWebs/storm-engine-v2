@@ -292,8 +292,15 @@ Rules to know before you use it:
   keeps pre-2.2 entities behaving identically.
 - **`ContactSystem::BoundsOf` and `ContactSystem::CircleOf` are statics resolving a transform plus a collider to world space (each takes an `Entity` or a `(transform, collider)` pair); `Overlaps`, `Manifold`, `ClosestPointOn`, `MinimumTranslation` and `BoundsOf(const ContactCircle &)` are free functions in `<stormengine2/collision/shapes.h>` (the `ContactSystem::` spellings remain as forwarders), and they cover circles as well as boxes** -
   usable with no system registered.
-- **The broadphase sweeps X only.** Everything stacked in one column degrades to
-  all-pairs. Fine for a puck and six boards, or bullets and enemies.
+- **The broadphase is a uniform grid**, with no preferred axis — a column of
+  platforms costs the same as a row. Cell size is derived per frame from the
+  bodies present (twice their mean extent); `SetCellSize(float)` overrides it
+  and 0 restores the derived value. Set it only with a measurement in hand: the
+  derived value adapts when a game's body sizes change between states, and a
+  hand-picked one that suited a level is silently wrong for the next. A body far
+  larger than the grid — a level-sized floor collider — is tested against
+  everything instead of filling thousands of cells, so it costs O(n) for that
+  one body rather than degrading the whole frame.
 - **Do not build tilemap collision out of one collider entity per tile.** The
   manifold picks the axis of least penetration *per box*, so a character sliding
   along adjacent tile colliders picks up a sideways normal from a tile it barely

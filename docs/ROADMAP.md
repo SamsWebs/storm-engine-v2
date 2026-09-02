@@ -528,14 +528,13 @@ Settle two design questions before writing code: what identifies a body (an opaq
 `std::size_t`, or `void*` userdata), and whether the core owns the begin/end state
 or the caller does.
 
-**A third measured problem, ahead of the sweep extraction.** `contact.h` records
-that the broadphase sorts on the X axis only, so *"everything stacked in one
-column degrades to the old all-pairs cost"*. A hockey rink puts ten skaters and a
-puck in a tall narrow space, which is close to that degenerate case — so the
-consumer most likely to adopt the sweep is also the one it serves worst. A
-uniform grid is the fix, and it is worth having before the extraction rather than
-after, since the extraction would otherwise carry the one-axis assumption into a
-new public API.
+**A third measured problem, ahead of the sweep extraction — since fixed.**
+`contact.h` used to record that the broadphase sorted on the X axis only, so
+*"everything stacked in one column degrades to the old all-pairs cost"*. A hockey
+rink puts ten skaters and a puck in a tall narrow space, which is close to that
+degenerate case — so the consumer most likely to adopt the sweep was also the one
+it served worst. The uniform grid landed first, exactly so the extraction would
+not carry the one-axis assumption into a new public API.
 
 ### An example with sustained entity churn
 
@@ -752,12 +751,15 @@ Reviewed, ruled on, deliberately deferred.
   keeps its silent drop because it redraws every frame and would repeat that
   line 60 times a second. `storm::IsFinite` is exposed for a game running its
   own broadphase, which has the identical problem the moment it sorts.
-- **The broadphase still sweeps one axis.** Sorting by `minX` and breaking on
-  the first candidate past the current right edge degrades to all-pairs for
-  anything stacked in a column, and circles do not change that. A uniform grid
-  would also remove the per-frame scan the widened membership requirement
-  introduced — the two are the same rework, which is the argument for doing
-  neither on its own.
+- ~~**The broadphase still sweeps one axis.**~~ **Fixed** — it is a uniform
+  grid now. **But this entry's other claim was wrong, and the correction is the
+  part worth keeping:** it said a grid "would also remove the per-frame scan the
+  widened membership requirement introduced — the two are the same rework". They
+  are not. The scan exists because nothing notifies a system when a component is
+  added, so the narrowing has to look every frame no matter what indexes the
+  bodies afterwards. Removing it needs a change to the ECS — membership that
+  re-evaluates, or a component-change hook — not a better broadphase. Bundling
+  the two made the scan look like it had an owner when it did not.
 - **`ContactSystem::BoundsOf(const Entity &)` and `CircleOf(const Entity &)` are
   public API the engine itself no longer calls.** `Update()` resolves components
   once and uses the `(transform, collider)` forms. Both `Entity` overloads read

@@ -2,6 +2,37 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **`ContactSystem`'s broadphase is a uniform grid**, where it sorted bodies by
+  `minX` and stopped the inner loop at the first candidate past the current
+  right edge. That is fine when bodies are spread along X and degrades to
+  all-pairs when they are not — a column of platforms, a wall of bricks, a
+  hockey rink, anything stacked. The grid has no preferred axis.
+
+  Measured on a column of overlapping boxes, the case the sweep was worst at:
+  0.13 ms at 500 bodies, 0.27 at 1000, 0.58 at 2000, 1.26 at 4000 — a little
+  over 2x per doubling, where the sweep was quadratic on this input.
+
+  **The output is unchanged, and that is pinned rather than asserted.**
+  `GetContacts()` reports the same contacts in the same `(a.id, b.id)` order,
+  and `SetPairFilter` sees candidate pairs in the same sequence — the specs
+  compare a run at the derived cell size against runs at 0.5, 1, 7, 64 and
+  100000, and across the small-scene threshold where the grid is skipped for
+  all-pairs. A broadphase is an acceleration structure; if the answer depends on
+  it, it is wrong.
+
+- **`ContactSystem::SetCellSize(float)`** overrides the grid cell size. The
+  default, and any value at or below zero, derives it per frame from the bodies
+  present: twice their mean extent. Set it only with a measurement in hand — the
+  derived value adapts to a game whose body sizes change between states, and a
+  hand-picked one that was right for a level is silently wrong for the next.
+
+  A body far larger than the grid — a level-sized floor collider beside
+  player-sized bodies — is tested against everything rather than being written
+  into thousands of cells, so it costs O(n) for that one body instead of
+  degrading the whole frame.
+
 ### Fixed
 
 - **A non-finite transform no longer makes the contact sweep undefined.** A NaN

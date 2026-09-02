@@ -1,6 +1,19 @@
 # Changelog
 
-## [Unreleased]
+## [2.2.0] - 2026-09-02
+
+Circle colliders reach the ECS sweep, and the debug overlay draws them and takes
+a camera.
+
+**One behaviour changed for code that already exists.** `ContactSystem` and
+`RenderColliderSystem` now require `TransformComponent` alone, so
+`GetSystemEntities()` on either reports every entity carrying a transform rather
+than the bodies carrying a collider. Nothing else in the public surface moved —
+no signature changed, no type's layout changed, and `GetContacts()` is unchanged
+— but a game that walked either system's entity vector expecting bodies has to
+read `GetContacts()` instead. Both systems also scan their whole membership each
+frame to narrow it back down, which is new per-frame work in a game with
+thousands of sprites and a handful of bodies.
 
 ### Added
 

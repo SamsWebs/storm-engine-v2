@@ -34,8 +34,7 @@ public:
 };
 
 // System::sortEntities is protected, so a subclass is the only way to reach
-// it — which is exactly how RenderSystem orders by z-index
-// (common/systems/render.h:25).
+// it — which is exactly how RenderSystem::Update orders by z-index.
 class SpecSortableSystem : public System {
 public:
   SpecSortableSystem() { RequireComponent<SpecMembershipPosition>(); }
@@ -66,7 +65,7 @@ Describe(SystemMembershipSpec) {
   //
   // THESE CASES PIN A KNOWN LIMITATION, NOT DESIRED BEHAVIOUR. Membership is
   // computed once per entity, when Registry::Update() flushes
-  // entitiesToBeAdded (common/ecs.cpp:231-237). AddComponent and
+  // entitiesToBeAdded. AddComponent and
   // RemoveComponent only flip signature bits; nothing re-evaluates which
   // systems the entity belongs to. Fixing that is an ECS redesign that
   // changes System's layout, so it is frozen out of the 1.x line.
@@ -255,9 +254,8 @@ Describe(SystemMembershipSpec) {
       Entity real = registry.CreateEntity();
       registry.Update();
 
-      // 88 was never allocated by this registry. KillEntity rejects an id
-      // that is not alive (common/ecs.cpp:328), so this is a no-op rather
-      // than corrupting memory.
+      // 88 was never allocated by this registry. KillEntity gates on
+      // Registry::IsAlive, so this is a no-op rather than corrupting memory.
       registry.KillEntity(Entity(88));
       registry.Update();
 

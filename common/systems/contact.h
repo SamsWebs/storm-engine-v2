@@ -194,9 +194,8 @@ public:
 
         // A killed entity has no meaningful "end", and its id may already
         // have been recycled onto a different, live entity by the time this
-        // runs: Registry::Update() (common/ecs.cpp:439) returns a killed
-        // entity's id to the free list in the same pass that drops it from
-        // this system, and the next CreateEntity() can hand that id straight
+        // runs: Registry::Update() pushes a killed entity's id onto
+        // `freeIds` in the same pass that drops it from this system, and the next CreateEntity() can hand that id straight
         // back out. `key` carries each side's generation alongside its id
         // (PairKey), and FindLive compares the full Entity - id and
         // generation together - via operator==, so a key naming a recycled

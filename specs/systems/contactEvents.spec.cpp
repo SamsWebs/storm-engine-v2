@@ -101,9 +101,8 @@ It(does_not_fire_end_for_a_pair_whose_entity_was_killed) {
 
   system.Update();
 
-  // KillEntity returns the id to the free list (Registry::Update(),
-  // common/ecs.cpp:439), so firing an end here would hand back a handle
-  // naming whatever entity now holds that id.
+  // Registry::Update()'s kill pass pushes the id onto `freeIds`, so firing an
+  // end here would hand back a handle naming whatever entity now holds it.
   a.Kill();
   registry.Update();
   system.Update();

@@ -60,10 +60,15 @@ public:
         int textureW = 0;
         int textureH = 0;
         SDL_QueryTexture(texture, nullptr, nullptr, &textureW, &textureH);
-        const bool outside =
-            srcRect.x < 0 || srcRect.y < 0 || srcRect.w <= 0 ||
-            srcRect.h <= 0 || srcRect.x + srcRect.w > textureW ||
-            srcRect.y + srcRect.h > textureH;
+        // Subtracted, not added. `srcRect.x + srcRect.w` is signed int
+        // arithmetic and overflows -- undefined behaviour -- on an absurd
+        // SpriteComponent width, which is exactly the case this diagnostic
+        // exists to report. The subtraction cannot overflow: both sides are
+        // already known non-negative by the time it runs.
+        const bool outside = srcRect.x < 0 || srcRect.y < 0 ||
+                             srcRect.w <= 0 || srcRect.h <= 0 ||
+                             srcRect.x > textureW - srcRect.w ||
+                             srcRect.y > textureH - srcRect.h;
         if (outside && EcsShouldReport(srcRectReports)) {
           EcsReportErr(
               "RenderSystem: srcRect {" + std::to_string(srcRect.x) + "," +

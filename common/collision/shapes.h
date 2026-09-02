@@ -245,6 +245,31 @@ inline ContactAABB BoundsOf(const ContactCircle &circle) {
   return box;
 }
 
+// ── Finiteness ──────────────────────────────────────────────────────────────
+//
+// Every solver here already rejects a NaN deliberately -- each one tests
+// `!(overlap > 0.0f)` rather than `<= 0.0f`, so a NaN falls out as "no
+// contact" instead of propagating into a normal. That makes the SHAPES safe.
+//
+// What is not safe is ordering them. A broadphase that sorts bodies along an
+// axis compares NaN against everything and gets `false` both ways, which reads
+// as "equivalent" while the finite values still order among themselves -- not a
+// strict weak ordering, and `std::sort` on one is undefined rather than merely
+// wrong. So a body has to be rejected BEFORE it reaches a comparator, and that
+// is what these are for.
+//
+// Infinity is included: an infinite extent orders fine but makes every overlap
+// test against it inf - inf, which is NaN again one step later.
+inline bool IsFinite(const ContactAABB &box) {
+  return std::isfinite(box.minX) && std::isfinite(box.minY) &&
+         std::isfinite(box.maxX) && std::isfinite(box.maxY);
+}
+
+inline bool IsFinite(const ContactCircle &circle) {
+  return std::isfinite(circle.x) && std::isfinite(circle.y) &&
+         std::isfinite(circle.radius);
+}
+
 // ── AABB vs AABB ────────────────────────────────────────────────────────────
 
 inline bool Overlaps(const ContactAABB &a, const ContactAABB &b) {

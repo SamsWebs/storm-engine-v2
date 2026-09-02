@@ -1,5 +1,115 @@
 # Changelog
 
+## [2.3.0] - 2026-09-02
+
+### Added
+
+- **A lighting overlay, with no shaders.**
+  `<stormengine2/lighting.h>` — `LightingOverlay::Build(renderer, Params)` once,
+  `Draw(renderer)` last over the finished frame.
+
+  Two quarter-resolution RGBA textures, built once and cached: a warm key layer
+  whose alpha follows a radial falloff, and a cool vignette layer whose alpha is
+  the **inverse** of the same falloff. `Draw` is two `SDL_RenderCopy` calls
+  regardless of screen size.
+
+  The pairing is the technique, not a detail. One warm layer is a colour filter;
+  the cool layer where the warm one is absent gives the frame two colour
+  temperatures with a boundary between them, and the eye reads that boundary as
+  illumination. Quarter resolution is why it is cheap and costs nothing
+  visually — the upscale's bilinear filter does the smoothing a full-resolution
+  falloff would have computed per pixel.
+
+  No shaders means the plain SDL2 renderer, so Switch and Android work as-is,
+  which is what makes this engine material rather than a desktop nicety. Like
+  `text.h` and `collision/shapes.h` it includes no engine header, so a game with
+  no `Registry` can use it.
+
+  It is an **overlay a state drives, not light entities in the ECS** — the
+  roadmap listed that as the design question to settle first, and it is settled.
+  The technique is one key light and its complement, so there is nothing
+  per-entity to store, and a `LightComponent` would imply a compositing pass the
+  engine does not have. Light entities stay available later as an additive layer
+  on top; the reverse would not have been.
+
+  Draw it last: anything drawn afterwards is unlit, which is right for a HUD and
+  wrong for the world. `Build` returns `false` on a null renderer or a
+  non-positive size, and `Draw` on an unbuilt overlay is a no-op, so a failure
+  costs the lighting rather than the frame.
+
+  It compiles on the **supported SDL2 baseline, 2.0.10** (Ubuntu 20.04 / Linux
+  Mint 20). `SDL_SetTextureScaleMode` arrived in 2.0.12, so it sits behind
+  `SDL_VERSION_ATLEAST`, with the renderer-wide `SDL_HINT_RENDER_SCALE_QUALITY`
+  as the fallback — saved and restored around the texture creation, since a
+  game's own textures are none of this header's business.
+
+### Changed
+
+- **`ContactSystem`'s broadphase is a uniform grid**, where it sorted bodies by
+  `minX` and stopped the inner loop at the first candidate past the current
+  right edge. That is fine when bodies are spread along X and degrades to
+  all-pairs when they are not — a column of platforms, a wall of bricks, a
+  hockey rink, anything stacked. The grid has no preferred axis.
+
+  Measured on a column of overlapping boxes, the case the sweep was worst at:
+  0.13 ms at 500 bodies, 0.27 at 1000, 0.58 at 2000, 1.26 at 4000 — a little
+  over 2x per doubling, where the sweep was quadratic on this input.
+
+  **The output is unchanged, and that is pinned rather than asserted.**
+  `GetContacts()` reports the same contacts in the same `(a.id, b.id)` order,
+  and `SetPairFilter` sees candidate pairs in the same sequence — the specs
+  compare a run at the derived cell size against runs at 0.5, 1, 7, 64 and
+  100000, and across the small-scene threshold where the grid is skipped for
+  all-pairs. A broadphase is an acceleration structure; if the answer depends on
+  it, it is wrong.
+
+- **`ContactSystem::SetCellSize(float)`** overrides the grid cell size. The
+  default, and any value at or below zero, derives it per frame from the bodies
+  present: twice their mean extent. Set it only with a measurement in hand — the
+  derived value adapts to a game whose body sizes change between states, and a
+  hand-picked one that was right for a level is silently wrong for the next.
+
+  A body far larger than the grid — a level-sized floor collider beside
+  player-sized bodies — is tested against everything rather than being written
+  into thousands of cells, so it costs O(n) for that one body instead of
+  degrading the whole frame.
+
+### Fixed
+
+- **A non-finite transform no longer makes the contact sweep undefined.** A NaN
+  in `transform.position`, or a scale that overflowed to infinity, produced
+  non-finite collider bounds, and `ContactSystem` sorted those in its
+  broadphase. A comparator involving a NaN returns `false` in both directions,
+  which reads as "equivalent" while the finite values still order among
+  themselves — not a strict weak ordering, and `std::sort` on one is undefined
+  behaviour rather than merely a wrong order. In practice it reads past the end
+  of the range.
+
+  A body whose resolved shape is not finite is now dropped before it reaches the
+  comparator, and every finite body around it pairs exactly as before. The drop
+  is per-frame, not a latch: a transform that goes bad and comes back collides
+  again, because one bad frame should not ghost an entity permanently.
+
+  It is reported once, throttled like every other ECS diagnostic, naming the
+  entity and the usual upstream causes — a zero or overflowed scale, a division
+  by a zero delta time, an uninitialised velocity. `RenderColliderSystem` drops
+  the same body **silently**, and that asymmetry is deliberate: the sweep
+  decides gameplay, so a body vanishing from it is worth a line, while the
+  overlay redraws every frame and would print the same line 60 times a second.
+
+  This predates circle colliders — the box path always had it — and no spec had
+  ever fed the sweep a NaN. The shapes themselves were never at risk: every
+  solver in `collision/shapes.h` tests `!(overlap > 0.0f)` rather than
+  `<= 0.0f`, so a NaN already fell out as "no contact" instead of propagating
+  into a normal. It was only the ordering step that was exposed.
+
+### Added
+
+- **`storm::IsFinite(const ContactAABB &)` and `storm::IsFinite(const ContactCircle &)`**
+  in `<stormengine2/collision/shapes.h>` — the predicate above, exposed for a
+  game running its own broadphase, which has the identical problem the moment it
+  sorts.
+
 ## [2.2.0] - 2026-09-02
 
 Circle colliders reach the ECS sweep, and the debug overlay draws them and takes

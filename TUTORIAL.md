@@ -436,8 +436,10 @@ manifold picks the axis of least penetration *per box*, so a character sliding
 along a floor made of adjacent tile colliders can pick up a sideways normal
 from a tile it barely overlaps and get shoved out of the wall - the classic
 ghost-vertex problem, and the reason Box2D has a dedicated chain shape for it.
-`ContactSystem` suits a modest number of distinct bodies: a puck and six
-boards, bullets and enemies, a player and a handful of triggers. For tiles,
+`ContactSystem` suits distinct bodies rather than terrain: a puck and the
+boards, bullets and enemies, a player and a handful of triggers. The broadphase
+is a uniform grid, so a column of bodies costs no more than a row, and the
+practical ceiling is the manifold work rather than the pairing. For tiles,
 snap to the grid instead the way `examples/platformer` does - it reads
 `IsSolid(col, row)` and resolves one axis at a time against tile boundaries
 (`src/states/playState.cpp:230-245`), which cannot catch on a seam because it
@@ -645,6 +647,49 @@ The destructor is then a harmless second call.
 
 `SetDeadzone()` overrides the default (8000, about 24% of the axis range) if
 that feels wrong for your game.
+
+## Lighting
+
+`<stormengine2/lighting.h>` gives a scene a lit pool and a dark surround without
+shaders, so it works on every target the engine builds for.
+
+```cpp
+#include <stormengine2/lighting.h>
+
+storm::LightingOverlay lighting;
+
+void PlayState::onEnter() {
+    storm::LightingOverlay::Params params;
+    params.width  = 1280;
+    params.height = 720;
+    params.centre = glm::vec2(640, 360);   // omit to centre on the screen
+    params.radius = 300.0f;                // omit for half the smaller side
+    params.keyOpacity = 72;                // the knob to reach for first
+    lighting.Build(renderer_, params);
+}
+
+void PlayState::render() {
+    registry.GetSystem<RenderSystem>().Update(renderer_, *assetStore_, &camera);
+    lighting.Draw(renderer_);   // LAST, over the finished frame
+    SDL_RenderPresent(renderer_);
+}
+```
+
+Two layers are built once and cached at quarter resolution: a warm key layer
+whose alpha follows a radial falloff, and a cool vignette whose alpha is the
+*inverse* of that same falloff. `Draw` is two `SDL_RenderCopy` calls no matter
+the screen size.
+
+The pairing is the technique. One warm layer is a colour filter; the cool layer
+where the warm one is absent gives the frame two colour temperatures with a
+boundary between them, and the eye reads that boundary as light.
+
+Draw it **last**. It is a post-pass over the finished frame, so anything drawn
+after it is unlit — right for a HUD, wrong for the world. `Build` returns `false`
+on a null renderer or a non-positive size and leaves the overlay unbuilt, and
+`Draw` on an unbuilt overlay is a no-op, so a failure costs you the lighting
+rather than the frame. Call `Build` again to change resolution; it releases the
+previous pair first.
 
 ## Logger
 

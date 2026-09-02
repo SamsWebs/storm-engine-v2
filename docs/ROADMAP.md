@@ -528,14 +528,13 @@ Settle two design questions before writing code: what identifies a body (an opaq
 `std::size_t`, or `void*` userdata), and whether the core owns the begin/end state
 or the caller does.
 
-**A third measured problem, ahead of the sweep extraction.** `contact.h` records
-that the broadphase sorts on the X axis only, so *"everything stacked in one
-column degrades to the old all-pairs cost"*. A hockey rink puts ten skaters and a
-puck in a tall narrow space, which is close to that degenerate case — so the
-consumer most likely to adopt the sweep is also the one it serves worst. A
-uniform grid is the fix, and it is worth having before the extraction rather than
-after, since the extraction would otherwise carry the one-axis assumption into a
-new public API.
+**A third measured problem, ahead of the sweep extraction — since fixed.**
+`contact.h` used to record that the broadphase sorted on the X axis only, so
+*"everything stacked in one column degrades to the old all-pairs cost"*. A hockey
+rink puts ten skaters and a puck in a tall narrow space, which is close to that
+degenerate case — so the consumer most likely to adopt the sweep was also the one
+it served worst. The uniform grid landed first, exactly so the extraction would
+not carry the one-axis assumption into a new public API.
 
 ### An example with sustained entity churn
 
@@ -578,9 +577,18 @@ lighting rather than a tint. No shaders, so it runs on the SDL2 renderer on ever
 target including Switch and Android. That portability is what makes it engine
 material rather than a desktop nicety.
 
-The design question to settle first: does the engine own light *entities* in the
-ECS, or is this a standalone overlay that a state drives? That choice is hard to
-reverse.
+**Done.** `<stormengine2/lighting.h>` — `LightingOverlay::Build` once, `Draw`
+last, over the finished frame.
+
+The design question this listed as needing to be settled first — does the engine
+own light *entities* in the ECS, or is this a standalone overlay a state drives?
+— was settled as the **standalone overlay**, and the reasoning is worth keeping
+because the choice is hard to reverse. The technique is one key light and its
+complement, not a set of lights: there is nothing per-entity to store, and a
+`LightComponent` would imply a compositing pass the engine does not have. It also
+keeps the header ECS-free, like `text.h` and `collision/shapes.h`, so a game
+using none of the entity machinery still gets it. Light entities remain
+available later as an additive layer on top; the reverse would not have been.
 
 ### A debug overlay
 
@@ -741,26 +749,42 @@ Reviewed, ruled on, deliberately deferred.
 - **`Makefile.win` has no `-pthread`/`-mthreads`** while two spec files now use `std::thread`. Untested — no
   MinGW toolchain available here. `Makefile.debian` has it.
 
+### Carried from the 2.3.0 wave
+
+- **The grid allocates per frame.** `CollectCandidates` builds a fresh
+  `unordered_map` of cells, each holding a `vector` of body indices, every time
+  `Update()` runs. The sweep it replaced allocated two vectors. Holding the map
+  as a member and clearing it would keep the bucket array but not the per-cell
+  vectors, which is half a fix; the whole one is a flat counting-sort layout —
+  count bodies per cell, prefix-sum, fill one array — which allocates once and
+  is reused. Not done here because the change already carries the output
+  guarantees, and this is a profile question nothing in-repo is near.
+- **`kMaxCellsPerBody` and `kBruteForceBelow` are reasoned, not measured.** 4096
+  cells and 6 bodies. Both are the right shape — a body thousands of times
+  larger than the grid should leave it, and all-pairs beats a hash table for a
+  handful — but the exact numbers came from argument. A game that sits near
+  either boundary would be the thing to measure against.
+
 ### Carried from the circle-collider wave
 
-- **A non-finite transform makes `ContactSystem`'s sweep undefined.** A NaN in
-  `transform.position`, or a scale that overflows to infinity, produces
-  non-finite bounds; the sweep sorts those by `minX`, and a comparator involving
-  a NaN returns `false` both ways, which is not a strict weak ordering. `std::sort`
-  on one reads past the end of the range. The shapes themselves are safe — every
-  solver in `collision/shapes.h` rejects NaN deliberately, testing
-  `!(overlap > 0.0f)` rather than `<= 0.0f` — so it is the ordering step alone
-  that is exposed. Pre-existing, and no spec has ever fed the sweep a NaN. The
-  fix is additive but the choice is not obvious: drop non-finite bodies
-  silently, drop them with a throttled diagnostic, or clamp them.
-  `RenderColliderSystem` already takes the first option for its own drawing, so
-  the two systems disagree today.
-- **The broadphase still sweeps one axis.** Sorting by `minX` and breaking on
-  the first candidate past the current right edge degrades to all-pairs for
-  anything stacked in a column, and circles do not change that. A uniform grid
-  would also remove the per-frame scan the widened membership requirement
-  introduced — the two are the same rework, which is the argument for doing
-  neither on its own.
+- ~~**A non-finite transform makes `ContactSystem`'s sweep undefined.**~~
+  **Fixed.** The body is dropped before it reaches the comparator, per-frame
+  rather than latched, and reported once through the usual throttled ECS
+  diagnostic. Of the three options this list left open — silent drop, drop with
+  a diagnostic, clamp — the middle one won on the grounds that the sweep decides
+  gameplay, so a body vanishing from it is worth a line; `RenderColliderSystem`
+  keeps its silent drop because it redraws every frame and would repeat that
+  line 60 times a second. `storm::IsFinite` is exposed for a game running its
+  own broadphase, which has the identical problem the moment it sorts.
+- ~~**The broadphase still sweeps one axis.**~~ **Fixed** — it is a uniform
+  grid now. **But this entry's other claim was wrong, and the correction is the
+  part worth keeping:** it said a grid "would also remove the per-frame scan the
+  widened membership requirement introduced — the two are the same rework". They
+  are not. The scan exists because nothing notifies a system when a component is
+  added, so the narrowing has to look every frame no matter what indexes the
+  bodies afterwards. Removing it needs a change to the ECS — membership that
+  re-evaluates, or a component-change hook — not a better broadphase. Bundling
+  the two made the scan look like it had an owner when it did not.
 - **`ContactSystem::BoundsOf(const Entity &)` and `CircleOf(const Entity &)` are
   public API the engine itself no longer calls.** `Update()` resolves components
   once and uses the `(transform, collider)` forms. Both `Entity` overloads read

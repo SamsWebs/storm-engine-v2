@@ -82,6 +82,7 @@ is no engine quit API.
 | **XML Loader** | `<stormengine2/xmlLoader.h>` | Parse XML asset/entity definitions via tinyxml2 |
 | **Logger** | `<stormengine2/logger.h>` | Timestamped, color-coded logging with callback hooks |
 | **Text** | `<stormengine2/text.h>` | Header-only one-line SDL_ttf drawing: `Draw` / `DrawCentred` / `Measure`. Null-safe, leak-free, opens no font |
+| **Lighting** | `<stormengine2/lighting.h>` | `LightingOverlay`: `Build(renderer, Params)` once, `Draw(renderer)` **last** over the finished frame, `Release()` to free. Two cached quarter-resolution layers — a warm key with a radial falloff, a cool vignette with its inverse; the pairing is what reads as light rather than as a tint. Reach for `keyOpacity`/`vignetteOpacity` first, then `radius`/`centre`. No shaders, so Switch and Android work as-is, and it includes no engine header. `Build` returns false on a null renderer or non-positive size and `Draw` on an unbuilt overlay is a no-op, so a failure costs the lighting, not the frame. Anything drawn after `Draw` is unlit — right for a HUD, wrong for the world |
 | **Networking** | `<stormengine2/net/net.h>` | UDP host/join: reliable chunks, snapshots, kick/ban |
 | **Gamepad** | `<stormengine2/input/gamepad.h>` | One physical `SDL_GameController`: `Down`/`Pressed`/`Released`, deadzone-rescaled sticks. Not the same file as `virtualGamepad.h` |
 | **Touch Input** | `<stormengine2/input/touchControls.h>`, `<stormengine2/input/virtualGamepad.h>` | SDL-free touch primitives and virtual gamepad layout. `MakeVPadLayout(w, h, style)` takes an optional `VPadStyle`, defaulting to `VPadStyle::Xbox` (Y top, X left, B right, A bottom); pass `VPadStyle::Snes` for the older arrangement. Touch-target positions are identical under both — only the lettering moves. |
@@ -292,8 +293,15 @@ Rules to know before you use it:
   keeps pre-2.2 entities behaving identically.
 - **`ContactSystem::BoundsOf` and `ContactSystem::CircleOf` are statics resolving a transform plus a collider to world space (each takes an `Entity` or a `(transform, collider)` pair); `Overlaps`, `Manifold`, `ClosestPointOn`, `MinimumTranslation` and `BoundsOf(const ContactCircle &)` are free functions in `<stormengine2/collision/shapes.h>` (the `ContactSystem::` spellings remain as forwarders), and they cover circles as well as boxes** -
   usable with no system registered.
-- **The broadphase sweeps X only.** Everything stacked in one column degrades to
-  all-pairs. Fine for a puck and six boards, or bullets and enemies.
+- **The broadphase is a uniform grid**, with no preferred axis — a column of
+  platforms costs the same as a row. Cell size is derived per frame from the
+  bodies present (twice their mean extent); `SetCellSize(float)` overrides it
+  and 0 restores the derived value. Set it only with a measurement in hand: the
+  derived value adapts when a game's body sizes change between states, and a
+  hand-picked one that suited a level is silently wrong for the next. A body far
+  larger than the grid — a level-sized floor collider — is tested against
+  everything instead of filling thousands of cells, so it costs O(n) for that
+  one body rather than degrading the whole frame.
 - **Do not build tilemap collision out of one collider entity per tile.** The
   manifold picks the axis of least penetration *per box*, so a character sliding
   along adjacent tile colliders picks up a sideways normal from a tile it barely
@@ -375,11 +383,11 @@ public:
 
 **Important:** `GameState` transitively pulls in `ecs.h`, `assetStore.h`,
 `logger.h`, `tilemapLoader.h`, every component in `common/components/` and every
-system in `common/systems/` (`ContactSystem` included, since `collision.h`
-includes `contact.h`). It does **not** include `common/input/`
-(`touchControls.h`, `virtualGamepad.h`, `gamepad.h`), `common/text.h` or
-`common/net/`; states using touch, either gamepad, `Text`, or networking must
-include those themselves.
+system in `common/systems/`, `ContactSystem` included. It does **not** include
+`common/input/` (`keyboard.h`, `gamepad.h`, `actionMap.h`, `touchControls.h`,
+`virtualGamepad.h`), `common/text.h`, `common/lighting.h` or `common/net/`;
+states using input, `Text`, `LightingOverlay` or networking must include those
+themselves.
 
 Do not *rely* on that transitive reach — include what you use. The breadth of
 this header is a documented defect (`KNOWN_ISSUES.md` §8: ~713 headers and ~145k

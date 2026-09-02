@@ -227,6 +227,11 @@ void Registry::ForEachMissedEntity(const System &system,
   }
 
   const Signature &required = system.GetComponentSignature();
+  // System exposes only a non-const GetSystemEntities(), because games mutate
+  // the vector they get back (RenderSystem sorts it in place). This scan reads
+  // it and nothing more, and binds the result to a const reference so it
+  // cannot do otherwise. Adding a const overload to System is the real fix and
+  // is an ABI change to a type games embed, so it waits for a major.
   const std::vector<Entity> &members =
       const_cast<System &>(system).GetSystemEntities();
 
@@ -344,12 +349,19 @@ Registry::SystemMissedByLateComponent(Entity entity,
       componentId >= MAX_COMPONENTS) {
     return nullptr;
   }
-  if (!IsAlive(entity)) {
-    return nullptr;
-  }
+  // Queued first, alive second, and the order is the point: IsAlive walks
+  // `freeIds`, which in a churn-heavy game is every id ever killed, while
+  // IsPendingAdmission is a set lookup. Both answers are nullptr, so swapping
+  // them changes nothing but the cost of the common case -- a component added
+  // to an entity created this frame, which is the overwhelmingly normal thing
+  // for a game to do and used to pay for the scan every time.
+  //
   // Still queued: Update() has not decided its membership yet, so adding a
   // component now is exactly the correct thing to do.
   if (IsPendingAdmission(entity)) {
+    return nullptr;
+  }
+  if (!IsAlive(entity)) {
     return nullptr;
   }
   // On its way out; its membership will never matter again.

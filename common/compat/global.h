@@ -28,6 +28,7 @@
 #include "../ecs.h"
 #include "../gameStateMachine.h"
 #include "../logger.h"
+#include "../lighting.h"
 #include "../text.h"
 #include "../tilemapLoader.h"
 #include "../xmlLoader.h"
@@ -88,6 +89,7 @@ using storm::AssetStore;
 using storm::AssetStore_Ptr;
 using storm::LoadTexturesFromXml;
 using storm::Map;
+using storm::LightingOverlay;
 using storm::Text;
 using storm::Tile;
 using storm::TileMapLoader;
@@ -123,6 +125,7 @@ using storm::TransformComponent;
 // is reached through the class, so the two never compete for this name.
 using storm::BoundsOf;
 using storm::ClosestPointOn;
+using storm::IsFinite;
 using storm::ContactCircle;
 using storm::Manifold;
 using storm::MinimumTranslation;

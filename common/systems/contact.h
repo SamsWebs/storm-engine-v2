@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstddef>
 #include <functional>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -93,14 +94,20 @@ public:
       // the box is what leaves every pre-existing entity behaving identically.
       if (const BoxColliderComponent *box =
               member.TryGetComponent<BoxColliderComponent>()) {
+        const ContactAABB bounds = BoundsOf(*transform, *box);
+        if (!Admit(member, storm::IsFinite(bounds)))
+          continue;
         entities.push_back(member);
-        shapes.push_back(Collider::FromBox(BoundsOf(*transform, *box)));
+        shapes.push_back(Collider::FromBox(bounds));
         continue;
       }
       if (const CircleColliderComponent *circle =
               member.TryGetComponent<CircleColliderComponent>()) {
+        const ContactCircle world = CircleOf(*transform, *circle);
+        if (!Admit(member, storm::IsFinite(world)))
+          continue;
         entities.push_back(member);
-        shapes.push_back(Collider::FromCircle(CircleOf(*transform, *circle)));
+        shapes.push_back(Collider::FromCircle(world));
       }
     }
 
@@ -319,6 +326,46 @@ public:
   }
 
 private:
+  // Gate on the resolved shape being finite, and say so once when it is not.
+  //
+  // This is not defensive tidying. A NaN in transform.position -- or a scale
+  // that overflows to infinity -- produces non-finite bounds, and the sweep
+  // below SORTS those. A comparator involving a NaN returns false in both
+  // directions, which reads as "equivalent" while the finite values still
+  // order among themselves; that is not a strict weak ordering, and
+  // std::sort on one is undefined behaviour, not merely a wrong order. In
+  // practice it reads past the end of the range. So the body has to be
+  // dropped here, before it reaches the comparator.
+  //
+  // Dropped WITH a diagnostic, unlike RenderColliderSystem, which drops the
+  // same body silently. The asymmetry is deliberate: this system decides
+  // whether things collide, so a body vanishing from it is a gameplay bug
+  // somebody will chase for hours, and the cause is always upstream -- a
+  // zero or overflowed scale, a division by a zero delta time, an
+  // uninitialised velocity. The overlay redraws every frame and would print
+  // the same line 60 times a second to say what this already said once.
+  //
+  // Throttled the same way every other ECS diagnostic is, and gated on the
+  // budget before the string is built so an exhausted one costs a comparison.
+  static bool Admit(const Entity &entity, bool finite) {
+    if (finite)
+      return true;
+
+    static thread_local unsigned int nonFiniteReports = 0;
+    if (nonFiniteReports < ECS_MAX_DIAGNOSTIC_REPORTS &&
+        EcsShouldReport(nonFiniteReports)) {
+      EcsReportErr(
+          "ContactSystem: entity " + std::to_string(entity.GetId()) +
+          " resolves to a non-finite collider (NaN or infinity in "
+          "transform.position, transform.scale, or the collider itself) and is "
+          "excluded from this frame's contacts. Fix it upstream: a non-finite "
+          "transform usually comes from a zero or overflowed scale, a division "
+          "by a zero delta time, or an uninitialised velocity." +
+          EcsSuppressionNote(nonFiniteReports));
+    }
+    return false;
+  }
+
   // One collider resolved to world space for this frame, alongside the
   // broadphase box the sweep sorts and prunes on. For a box shape `bounds` IS
   // the shape -- which is why a box/box pair's broadphase test is already

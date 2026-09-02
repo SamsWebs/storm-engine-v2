@@ -1,5 +1,43 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- **A non-finite transform no longer makes the contact sweep undefined.** A NaN
+  in `transform.position`, or a scale that overflowed to infinity, produced
+  non-finite collider bounds, and `ContactSystem` sorted those in its
+  broadphase. A comparator involving a NaN returns `false` in both directions,
+  which reads as "equivalent" while the finite values still order among
+  themselves — not a strict weak ordering, and `std::sort` on one is undefined
+  behaviour rather than merely a wrong order. In practice it reads past the end
+  of the range.
+
+  A body whose resolved shape is not finite is now dropped before it reaches the
+  comparator, and every finite body around it pairs exactly as before. The drop
+  is per-frame, not a latch: a transform that goes bad and comes back collides
+  again, because one bad frame should not ghost an entity permanently.
+
+  It is reported once, throttled like every other ECS diagnostic, naming the
+  entity and the usual upstream causes — a zero or overflowed scale, a division
+  by a zero delta time, an uninitialised velocity. `RenderColliderSystem` drops
+  the same body **silently**, and that asymmetry is deliberate: the sweep
+  decides gameplay, so a body vanishing from it is worth a line, while the
+  overlay redraws every frame and would print the same line 60 times a second.
+
+  This predates circle colliders — the box path always had it — and no spec had
+  ever fed the sweep a NaN. The shapes themselves were never at risk: every
+  solver in `collision/shapes.h` tests `!(overlap > 0.0f)` rather than
+  `<= 0.0f`, so a NaN already fell out as "no contact" instead of propagating
+  into a normal. It was only the ordering step that was exposed.
+
+### Added
+
+- **`storm::IsFinite(const ContactAABB &)` and `storm::IsFinite(const ContactCircle &)`**
+  in `<stormengine2/collision/shapes.h>` — the predicate above, exposed for a
+  game running its own broadphase, which has the identical problem the moment it
+  sorts.
+
 ## [2.2.0] - 2026-09-02
 
 Circle colliders reach the ECS sweep, and the debug overlay draws them and takes

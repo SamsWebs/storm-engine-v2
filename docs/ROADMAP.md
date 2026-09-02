@@ -743,18 +743,15 @@ Reviewed, ruled on, deliberately deferred.
 
 ### Carried from the circle-collider wave
 
-- **A non-finite transform makes `ContactSystem`'s sweep undefined.** A NaN in
-  `transform.position`, or a scale that overflows to infinity, produces
-  non-finite bounds; the sweep sorts those by `minX`, and a comparator involving
-  a NaN returns `false` both ways, which is not a strict weak ordering. `std::sort`
-  on one reads past the end of the range. The shapes themselves are safe — every
-  solver in `collision/shapes.h` rejects NaN deliberately, testing
-  `!(overlap > 0.0f)` rather than `<= 0.0f` — so it is the ordering step alone
-  that is exposed. Pre-existing, and no spec has ever fed the sweep a NaN. The
-  fix is additive but the choice is not obvious: drop non-finite bodies
-  silently, drop them with a throttled diagnostic, or clamp them.
-  `RenderColliderSystem` already takes the first option for its own drawing, so
-  the two systems disagree today.
+- ~~**A non-finite transform makes `ContactSystem`'s sweep undefined.**~~
+  **Fixed.** The body is dropped before it reaches the comparator, per-frame
+  rather than latched, and reported once through the usual throttled ECS
+  diagnostic. Of the three options this list left open — silent drop, drop with
+  a diagnostic, clamp — the middle one won on the grounds that the sweep decides
+  gameplay, so a body vanishing from it is worth a line; `RenderColliderSystem`
+  keeps its silent drop because it redraws every frame and would repeat that
+  line 60 times a second. `storm::IsFinite` is exposed for a game running its
+  own broadphase, which has the identical problem the moment it sorts.
 - **The broadphase still sweeps one axis.** Sorting by `minX` and breaking on
   the first candidate past the current right edge degrades to all-pairs for
   anything stacked in a column, and circles do not change that. A uniform grid

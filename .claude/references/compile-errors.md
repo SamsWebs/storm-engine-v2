@@ -64,9 +64,12 @@ against the current one. Confirm what you have with `ldconfig -p | grep tinyxml2
 
 ### `no matching function for call to 'RenderColliderSystem::Update(SDL_Renderer*&, std::nullptr_t)'` **(observed)**
 
-Not a stale install — `RenderColliderSystem::Update` genuinely takes **only**
-the renderer. The debug collider overlay is not camera-aware, unlike
-`RenderSystem::Update`. Drop the camera argument.
+A stale install. `RenderColliderSystem::Update` takes
+`(SDL_Renderer *, const SDL_Rect *camera = nullptr)` — the overlay pans like
+`RenderSystem`. It genuinely took only the renderer up to 2.1.x, so this error
+against a current source tree means the installed headers are older than the
+tree; reinstall the engine. Against an engine that really is 2.1.x or earlier,
+drop the camera argument.
 
 ### `undefined reference to 'Registry::AddEntityToSystem(Entity)'`
 
@@ -285,10 +288,10 @@ that expected an edge touch to count (the old `CollisionSystem`, removed in
 2.0.0, was inclusive there), treat this as the correct behaviour to design
 around rather than a bug.
 
-The other silent cause is membership: system membership is computed once, when
-`Registry::Update()` admits the entity, so a `BoxColliderComponent` added to an
-already-live entity never gets it into `ContactSystem`. Create the entity with
-its collider.
+The other silent cause is membership - but check the entity's *transform*, not
+its collider. `ContactSystem` requires `TransformComponent` alone and re-reads
+the collider every frame, so a collider added to a live entity does register. An
+entity admitted with no transform is not a member and never becomes one.
 
 ### `./bin/tests` fails on missing files
 
@@ -305,6 +308,10 @@ Under the Switch build's `-fno-exceptions`, the ECS paths that use `std::map::at
 By design. System membership is computed exactly once, when `Registry::Update()`
 flushes the entity. `AddComponent` and `RemoveComponent` only flip signature
 bits and never re-evaluate membership. Kill and recreate the entity, or use the
-`RemoveEntityFromSystems` / `AddEntityToSystems` pair above. This bites
-`ContactSystem` in particular: a collider added after the flush is invisible to
-it, with no error anywhere.
+`RemoveEntityFromSystems` / `AddEntityToSystems` pair above.
+
+`ContactSystem` and `RenderColliderSystem` are the exceptions, and only
+incidentally: both require `TransformComponent` alone and pick the collider up
+inside their own `Update()`, so a box or circle collider added after the flush
+does take effect. Every other system, and a transform added after the flush,
+behaves as described above.

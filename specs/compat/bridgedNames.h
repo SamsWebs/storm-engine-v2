@@ -8,7 +8,7 @@
 // third of the exports, so a name missing from the bridge was missing
 // from the spec too.
 //
-// 138 names.
+// 140 names.
 #pragma once
 
 namespace storm_compat_probe {
@@ -19,7 +19,9 @@ using ::AnimationComponent;
 using ::AnimationSystem;
 using ::AssetStore;
 using ::AssetStore_Ptr;
+using ::BoundsOf;
 using ::BoxColliderComponent;
+using ::CircleColliderComponent;
 using ::ClosestPointOn;
 using ::Component;
 using ::ComponentMiss;

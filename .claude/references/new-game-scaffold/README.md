@@ -171,7 +171,7 @@ Each of these is a rule from SKILL.md that the code obeys, in place:
 | `onExit()` is safe to run twice | It can fire from the machine and again from the destructor. |
 | `isRunning_` is a `bool&` | There is no engine quit API. A state stops the loop by writing to the flag the Game handed it. |
 | `GetTexture` result is null-checked | It returns `nullptr` for a missing id rather than throwing. |
-| `RenderColliderSystem::Update(renderer_)` | It takes only the renderer — unlike `RenderSystem::Update`, the debug overlay is not camera-aware. |
+| `RenderColliderSystem::Update(renderer_)` | The camera is optional and defaults to `nullptr`, so this draws in world coordinates. Pass `&camera` alongside `RenderSystem`'s to keep the outlines on the sprites in a scrolling game. |
 | `std::optional<Entity>` rather than a bare member | `Entity` has no default constructor at all, only `Entity(std::size_t)`, so a bare `Entity player_;` member does not even compile. (Its `registry` pointer *is* null-initialised, and since v1.2.2 a hand-built `Entity(88)` is inert rather than UB: every forwarder null-checks and no-ops.) |
 
 ## Verification status

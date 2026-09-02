@@ -1,5 +1,137 @@
 # Changelog
 
+## [2.2.0] - 2026-09-02
+
+Circle colliders reach the ECS sweep, and the debug overlay draws them and takes
+a camera.
+
+**One behaviour changed for code that already exists.** `ContactSystem` and
+`RenderColliderSystem` now require `TransformComponent` alone, so
+`GetSystemEntities()` on either reports every entity carrying a transform rather
+than the bodies carrying a collider. Nothing else in the public surface moved —
+no signature changed, no type's layout changed, and `GetContacts()` is unchanged
+— but a game that walked either system's entity vector expecting bodies has to
+read `GetContacts()` instead. Both systems also scan their whole membership each
+frame to narrow it back down, which is new per-frame work in a game with
+thousands of sprites and a handful of bodies.
+
+### Added
+
+- **Circle colliders reach the ECS sweep.** 2.1.0 added the circle *math* —
+  `ContactCircle`, and `Overlaps`/`Manifold` for every shape pairing — but left
+  it unreachable from the entity side: `ContactSystem` required
+  `BoxColliderComponent`, so a game wanting round bodies had to run its own
+  broadphase. `CircleColliderComponent`
+  (`<stormengine2/components/circleCollider.h>`) is the missing half, and
+  `ContactSystem` now sweeps boxes and circles together and pairs them against
+  each other. A round puck against square boards is one system again.
+
+  ```cpp
+  entity.AddComponent<CircleColliderComponent>(16.0f, glm::vec2(16, 16));
+  //                                           radius, offset to the CENTRE
+  ```
+
+  Two conventions differ from `BoxColliderComponent`, both on purpose. The
+  offset places the **centre**: a box has a natural top-left to anchor at
+  `transform.position` and a circle does not, and anchoring its bounding box's
+  corner instead would make the offset that centres a collider on a sprite
+  depend on the radius. And the radius is a `float` where a box's extents are
+  `int`, because a radius is usually half a sprite cell and rounding 3.5 px to 3
+  or 4 is visible on a small body.
+
+  `transform.scale` scales the radius by its larger absolute axis. A circle
+  cannot be an ellipse, so a non-uniform scale has no correct answer; taking the
+  larger axis never leaves a body quietly smaller than the sprite it stands for,
+  where taking `x` would silently discard a deliberate `y` scale. The absolute
+  value matters too — a mirrored sprite (`scale.x = -1`) keeps the collider it
+  had rather than handing the solvers a negative radius. The offset, like a
+  box's, is world pixels and is not scaled.
+
+  An entity carrying **both** collider components is a game bug — the two shapes
+  disagree about where the body is — but it resolves deterministically: the box
+  wins, which is what leaves every pre-existing entity behaving identically.
+
+  The broadphase sweeps a circle's bounding box and then runs the exact solver
+  on whatever survives. That proxy is wrong at the corners, deliberately and
+  conservatively: a circle contact always implies its bounding box overlaps, so
+  nothing real is rejected before the real test runs.
+
+- **`RenderColliderSystem::Update` takes a camera.**
+  `Update(SDL_Renderer *, const SDL_Rect *camera = nullptr)` pans the outlines
+  the way `RenderSystem` pans a non-fixed sprite. The overlay was world-space
+  only, so a scrolling game drew every outline at the raw world position,
+  nowhere near the sprite it belonged to — the debug tool was unusable in
+  exactly the games that most need it. The parameter defaults to `nullptr`, so
+  every existing `Update(renderer)` call keeps compiling and keeps its current
+  behaviour.
+
+  There is no `isFixed` equivalent, unlike `RenderSystem`: a collider is a body
+  in the world, never a HUD element, so every outline pans.
+
+- **`RenderColliderSystem` draws circles too.** The debug overlay traces a
+  circle collider with a midpoint rasteriser — SDL2 has no circle primitive, and
+  a debug outline is not worth a new dependency in the `.deb`. It resolves every
+  shape through `ContactSystem::BoundsOf` / `ContactSystem::CircleOf` rather
+  than repeating the offset and scale arithmetic, so the overlay and the sweep
+  cannot drift: same box-wins rule, same larger-absolute-axis scaling, same
+  centre-placing offset. A radius that truncates to zero — including a negative
+  one — draws the centre pixel, so a body never vanishes from the overlay turned
+  on to explain it.
+
+  Outlines beyond 16384 px of radius, or 1e7 px from the origin, and any that
+  are not finite, draw nothing. `static_cast<int>` of a NaN or of a float past
+  `INT_MAX` is undefined behaviour, and the rasteriser costs one iteration per
+  pixel of radius, so an absurd radius was a per-frame hang rather than a wrong
+  picture. Both bounds are far past any window, so no drawable outline is lost —
+  a shape past them is a `transform.scale` bug, and the overlay is how you find
+  that, not something it can usefully draw. The box path is bounded the same
+  way, which it was not before.
+
+### Changed
+
+- **`ContactSystem` now requires `TransformComponent` alone**, where it required
+  `Transform + BoxCollider`. This is what makes mixed shapes possible at all: a
+  signature is an AND of required components, so it cannot say "transform, plus
+  a box collider OR a circle collider", and a system requiring both collider
+  types would match neither kind of body. Splitting circles into a second system
+  does not work either — a box/circle pair has one side in each, and neither
+  system can see the other's entities.
+
+  Three consequences:
+
+  * **`GetSystemEntities()` reports transform entities, not colliders.** That is
+    the one observable break. Nothing in the repo read it, and `GetContacts()`
+    is unchanged, but a game that walked the system's entity vector expecting
+    bodies now gets every entity with a transform.
+  * **`Update()` scans every transform entity to narrow to the ones carrying a
+    collider.** For a game with thousands of sprites and a handful of bodies,
+    that scan is new per-frame work 2.1.x did not do. The *output* is unchanged:
+    an entity with no collider produces no contact, exactly as when it was not a
+    member at all.
+  * **A collider added to a live entity now works**, where 2.1.x silently
+    ignored it (KNOWN_ISSUES #5). Membership is decided once, but it is decided
+    on the transform, and the narrowing re-reads the collider every frame — so
+    an entity admitted with a transform can gain or lose a box or circle
+    collider afterwards. This falls out of the widened requirement rather than
+    fixing #5: an entity admitted with no transform still never joins, and every
+    other system is unchanged.
+
+  `BoundsOf`, `Overlaps`, `Manifold` and `MinimumTranslation` keep their
+  existing signatures. `BoundsOf` gains a `(transform, collider)` overload
+  alongside the `Entity` one, and `CircleOf` is its circle counterpart in both
+  forms.
+
+- **`storm::BoundsOf(const ContactCircle &)`** in
+  `<stormengine2/collision/shapes.h>` returns the tight AABB around a circle —
+  the broadphase proxy the sweep uses, exposed for a game running its own.
+
+- **`RenderColliderSystem` now requires `TransformComponent` alone** as well,
+  for the same reason and with the same two consequences: `GetSystemEntities()`
+  reports transform entities rather than bodies, and `Update()` scans them to
+  narrow to the ones carrying a collider. A collider added to a live entity is
+  drawn from the next frame. The overlay is a debug tool that redraws every
+  frame anyway, so the scan is the cheaper half of what it already costs.
+
 ## [2.1.2] - 2026-09-01
 
 Packaging again, and for the same underlying reason as 2.1.1: **the package was

@@ -141,9 +141,9 @@ void PlayState::render() {
     // where Update took only two arguments. Pass &camera here to scroll.
     registry_.GetSystem<RenderSystem>().Update(renderer_, *assetStore_);
 
-    // Note the asymmetry: RenderSystem::Update takes a camera, but
-    // RenderColliderSystem::Update takes only the renderer -- the debug
-    // overlay is not camera-aware.
+    // Both take a camera, and both default to world coordinates without one.
+    // Pass &camera to each together, or the outlines drift away from the
+    // sprites the moment the view scrolls.
     if (isDebugging_) {
         registry_.GetSystem<RenderColliderSystem>().Update(renderer_);
     }

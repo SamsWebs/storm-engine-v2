@@ -57,7 +57,13 @@ Overlap is **strict** throughout, by one rule: a contact exists when the shapes 
 
 `ContactSystem` (`<stormengine2/systems/contact.h>`) is the ECS-facing layer on top: it builds bounds from components, sweeps for pairs, and reports begin/end contacts through callbacks. Using it means adopting the ECS - but that is a choice about the broadphase, not a precondition for using the math.
 
-**Circles are available through the free functions only.** `ContactSystem` requires `BoxColliderComponent` and there is no circle collider component, so no circle contact can come out of the ECS sweep. A game that wants round bodies calls `Overlaps`/`Manifold` itself and does its own broadphase.
+Circles reach the ECS sweep too. `CircleColliderComponent` (`<stormengine2/components/circleCollider.h>`) is the round counterpart to `BoxColliderComponent`, and `ContactSystem` pairs the two shapes against each other, so a round puck can ride against square boards without the game running its own broadphase. Give a body one collider or the other; carrying both is a bug, and the box wins.
+
+Two things about `ContactSystem` changed to make that possible. Its `offset` for a circle places the **centre**, not a corner — a circle has no natural corner to anchor, and anchoring its bounding box would make the offset that centres a collider depend on the radius. And its membership requirement is now `TransformComponent` **alone**: a signature is an AND, so it cannot say "box or circle", and splitting circles into a second system would leave a box/circle pair with one side in each and neither system able to see the other's. `Update()` narrows to the entities that actually carry a collider, which costs a per-frame scan over every transform entity, and means `GetSystemEntities()` now reports transform entities rather than colliders. Read `GetContacts()` instead.
+
+One thing falls out of that requirement: a collider added to a live entity now takes effect, where it used to be ignored. Membership is still decided once, but it is decided on the transform, and the narrowing re-reads the collider every frame. An entity admitted with no transform still never joins, and no system other than these two changed.
+
+`RenderColliderSystem` draws both shapes, and resolves them through `ContactSystem`'s own statics — so the debug overlay cannot disagree with the sweep about where a body is or which of two colliders won. It requires `TransformComponent` alone for the same reason `ContactSystem` does, and `Update(renderer, &camera)` pans the outlines the way `RenderSystem` pans a non-fixed sprite. The camera defaults to `nullptr`, so an existing `Update(renderer)` call is unchanged.
 
 ## Namespace
 

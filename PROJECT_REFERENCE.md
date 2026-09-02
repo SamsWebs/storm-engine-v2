@@ -193,11 +193,11 @@ registry.AddSystem<MoveSystem>();
 ### Systems (systems/)
 | File | Purpose |
 |------|---------|
-| `contact.h` | `ContactSystem`: AABB contact reporting, begin/end callbacks, pair filter |
+| `contact.h` | `ContactSystem`: contact reporting for box and circle colliders, including box/circle pairs, with begin/end callbacks and a pair filter |
 | `movement.h` | `MovementSystem`: integrates `RigidBodyComponent` velocity by delta time |
 | `render.h` | `RenderSystem`: z-sorted sprite drawing with optional camera offset |
 | `animation.h` | `AnimationSystem`: advances the sprite source rect, looped or one-shot |
-| `renderCollider.h` | `RenderColliderSystem`: debug collider outlines |
+| `renderCollider.h` | `RenderColliderSystem`: debug collider outlines, box and circle, resolved through `ContactSystem`'s statics so the overlay cannot disagree with the sweep. Takes an optional camera |
 
 ### Input (input/)
 | File | Purpose |
@@ -308,25 +308,25 @@ The project uses a comprehensive test suite organized by feature:
 | `xmlLoader.spec.cpp` | 15 | XML texture and object definitions |
 | `tilemapLoaderEditor.spec.cpp` | 12 | Editor map format, including the animation and collider-offset fields |
 | `systems/render.spec.cpp` | 12 | Source-rect bounds, z-ordering, camera offset |
-| `systems/contact.spec.cpp` + `contactEvents` + `contactFiltering` | 26 | Manifolds and ordering, begin/end events, pair filtering |
+| `systems/contact.spec.cpp` + `contactEvents` + `contactFiltering` + `contactCircle` | 40 | Manifolds and ordering, begin/end events, pair filtering, and mixed box/circle sweeps |
 | `input/gamepad.spec.cpp` | 11 | Button edges, deadzone and stick normalisation |
 | `systemMembership.spec.cpp` | 10 | Membership at admission, and the retrofit for a late system |
 | `input/virtualGamepad.spec.cpp` + `touchControls` | 15 | Touch zone hit-testing, d-pad sectors, action diamond |
-| `components/*.spec.cpp` | 22 | Component construction and defaults |
+| `components/*.spec.cpp` | 25 | Component construction and defaults |
 | `assetStore.spec.cpp` | 8 | Texture, font and sound caching, and clearing |
 | `compat/global.spec.cpp` | 8 | The 1.x compatibility bridge, checked against a generated probe |
 | `logger.spec.cpp` | 7 | Log routing and per-instance callbacks |
 | `text.spec.cpp` | 6 | Null-safe measure and draw |
 | `tilemapLoader.spec.cpp` | 6 | CSV map parsing |
-| `systems/renderCollider.spec.cpp` | 6 | Debug collider rendering |
+| `systems/renderCollider.spec.cpp` | 18 | Debug collider rendering, box and circle, camera panning and the drawable bounds, against a real software renderer |
 | `systems/movement.spec.cpp` | 7 | Velocity integration |
 | `systems/animation.spec.cpp` | 5 | Frame advance and looping |
 | `states/gameState.spec.cpp` + `gameStateBase` | 8 | `CapFrameRate` pacing, delta clamping, the slim interface |
 | `layout.spec.cpp` | 1 | The ABI sizes, and the value of `MAX_COMPONENTS` |
 | `gameStateMachineSlim.spec.cpp` + `gameStateMachineNonCopyable` | 3 | The slim header stays slim; the machine is not copyable |
 
-**Total**: 501 specs on `main` after 2.0.0, plus whatever the working branch
-adds; all passing. Counts are `It(` tallies per file, and they rot — run
+**Total**: 531 specs on `main` after the circle-collider branch, plus whatever
+the working branch adds; all passing. Counts are `It(` tallies per file, and they rot — run
 `make -f Makefile.debian test` for the authoritative figure. (This table
 previously listed `systems/collision.spec.cpp`, which went away with
 `CollisionSystem` in 2.0.0, and totalled 369 "as of v1.3.0".)
@@ -348,9 +348,24 @@ entity.AddComponent<SpriteComponent>("player-sprite", 48, 48, 1);  // id, w, h, 
 entity.AddComponent<BoxColliderComponent>(48, 48);                 // w, h
 ```
 
+A round body takes `CircleColliderComponent` instead - one collider or the
+other, never both:
+
+```cpp
+entity.AddComponent<CircleColliderComponent>(24.0f, glm::vec2(24, 24));
+//                                           radius, offset to the CENTRE
+```
+
+The offset places the centre, not a corner, so centring a circle on a 48x48
+sprite drawn from `transform.position` wants `{24, 24}`. `ContactSystem` sweeps
+both shapes together and pairs them against each other.
+
 Add every component the entity will ever need before the `registry.Update()`
 that admits it: system membership is computed once, and a component added later
-will not move the entity into a matching system.
+will not move the entity into a matching system. `ContactSystem` and
+`RenderColliderSystem` are the exceptions — both require `TransformComponent`
+alone and re-read the collider each frame, so a box or circle collider can be
+added or removed after admission.
 
 ### Adding a System
 ```cpp

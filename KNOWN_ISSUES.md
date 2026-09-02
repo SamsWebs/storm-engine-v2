@@ -89,6 +89,8 @@ This is the single largest correctness trap in the ECS, and it is not obvious fr
 
 **Meanwhile.** Add every component an entity will ever need *before* the `Registry::Update()` that admits it. To change an entity's component set afterwards, kill it and create a replacement.
 
+**Two systems sidestep it.** `ContactSystem` and `RenderColliderSystem` require `TransformComponent` alone and narrow to the entities carrying a collider inside their own `Update()`, so a box or circle collider added to (or removed from) a live entity does take effect. That was not a fix for this issue - it is what mixed box/circle shapes needed - and it applies to no other system.
+
 ## 6. Networking objects are copyable and must not be copied
 
 `NetServer`, `NetClient`, `NetConnection` and `NetSocket` all have implicit copy constructors and assignment operators — none are `= delete`d. Each installs send callbacks capturing `this`, and each owns a socket file descriptor.
@@ -198,7 +200,7 @@ Not defects exactly — design decisions worth revisiting when compatibility is 
 - ~~**`GameStateMachine` owns raw pointers** with implicitly generated copy operations, so copying one double-frees every state.~~ **Fixed in 2.0.0** — the copy constructor and copy assignment are `= delete`d, the same treatment the networking types got under item 6. It still owns raw pointers; what is gone is the way to duplicate them silently.
 - **Frame pacing lives in game code**, not the engine — every state re-implements the same `SDL_Delay` budget against `MILLISECS_PER_FRAME`.
 - **Three member-naming schemes** across the engine (bare, `m_`, trailing underscore) and two method casings (PascalCase in the ECS, camelCase in the state machine).
-- **The collider offset is not scaled by the transform.** `ContactSystem::BoundsOf` and `RenderColliderSystem::Update` (`common/systems/renderCollider.h:22-26`) both compute `position + offset` while scaling the extents by `transform.scale`. So a collider with `offset = {4, 0}` on an entity at `scale = {2, 2}` starts 4 px from the origin, not 8. The two agree, so nothing is visibly broken today; scaling the offset would be more consistent but silently moves every collider a game has ever authored with a non-unit scale.
+- **The collider offset is not scaled by the transform.** `ContactSystem::BoundsOf` and `ContactSystem::CircleOf` compute `position + offset` while scaling the extents (or the radius) by `transform.scale`. So a collider with `offset = {4, 0}` on an entity at `scale = {2, 2}` starts 4 px from the origin, not 8. `RenderColliderSystem` calls both rather than repeating them, so the overlay cannot disagree with the sweep; nothing is visibly broken today. Scaling the offset would be more consistent but silently moves every collider a game has ever authored with a non-unit scale.
 - **`ContactSystem`'s broadphase sweeps one axis.** It sorts by `minX` and breaks the inner loop on the first candidate starting past the current right edge, which degrades back to all-pairs for anything stacked in a single column. A uniform grid is the upgrade, and nothing in-repo is near the entity count where it would matter.
 
 *Items that can be fixed without breaking compatibility are tracked separately and are not listed here.*

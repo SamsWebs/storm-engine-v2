@@ -37,6 +37,12 @@
   non-positive size, and `Draw` on an unbuilt overlay is a no-op, so a failure
   costs the lighting rather than the frame.
 
+  It compiles on the **supported SDL2 baseline, 2.0.10** (Ubuntu 20.04 / Linux
+  Mint 20). `SDL_SetTextureScaleMode` arrived in 2.0.12, so it sits behind
+  `SDL_VERSION_ATLEAST`, with the renderer-wide `SDL_HINT_RENDER_SCALE_QUALITY`
+  as the fallback — saved and restored around the texture creation, since a
+  game's own textures are none of this header's business.
+
 ### Changed
 
 - **`ContactSystem`'s broadphase is a uniform grid**, where it sorted bodies by

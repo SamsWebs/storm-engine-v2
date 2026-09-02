@@ -196,6 +196,13 @@ Describe(LightingOverlaySpec) {
     params.height = -10;
     Assert::That(lighting.Build(target.renderer, params), Equals(false));
     Assert::That(lighting.IsBuilt(), Equals(false));
+
+    // The ceiling division inside Build is `width + kScale - 1`, which is
+    // signed int arithmetic and undefined near INT_MAX. Refused, not attempted.
+    params.width = std::numeric_limits<int>::max();
+    params.height = 64;
+    Assert::That(lighting.Build(target.renderer, params), Equals(false));
+    Assert::That(lighting.IsBuilt(), Equals(false));
   }
 
   // A resolution change rebuilds. The previous pair has to go, and the overlay

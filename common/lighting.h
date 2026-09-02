@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstdint>
 #include <limits>
+#include <string>
 
 #include <SDL2/SDL.h>
 #include <glm/glm.hpp>
@@ -104,7 +105,12 @@ public:
   bool Build(SDL_Renderer *renderer, const Params &params) {
     Release();
 
-    if (renderer == nullptr || params.width <= 0 || params.height <= 0)
+    // The upper bound is not tidiness: the ceiling division below is
+    // `width + kScale - 1`, which is signed int arithmetic and undefined on a
+    // width near INT_MAX. kMaxDimension is far past any display and far past
+    // what SDL will allocate a texture for, so nothing drawable is refused.
+    if (renderer == nullptr || params.width <= 0 || params.height <= 0 ||
+        params.width > kMaxDimension || params.height > kMaxDimension)
       return false;
 
     // Ceiling division, so a 3px screen still gets a 1px texture rather than a
@@ -185,6 +191,10 @@ private:
   // Quarter resolution on each axis, so a sixteenth of the pixels.
   static constexpr int kScale = 4;
 
+  // Largest screen dimension Build will accept. See the guard in Build for why
+  // an upper bound has to exist at all.
+  static constexpr int kMaxDimension = 65536;
+
   // The shared falloff: 1 at the centre, 0 at `radius` and beyond.
   static float Falloff(float x, float y, const glm::vec2 &centre, float radius,
                        float exponent) {
@@ -236,16 +246,44 @@ private:
       }
     }
 
+    // Linear on the upscale is not a nicety here -- it is what stands in for
+    // the per-pixel falloff that was never computed. Nearest would show the
+    // quarter-resolution grid as banding.
+    //
+    // SDL_SetTextureScaleMode arrived in SDL 2.0.12 and THE SUPPORTED BASELINE
+    // IS 2.0.10 -- Ubuntu 20.04 and Linux Mint 20, restored deliberately in
+    // 2.1.1 after the .deb refused to install there. This header is compiled by
+    // the GAME, not into the .so, so an unguarded call would not change one
+    // symbol in the shipped library and would simply fail to compile for anyone
+    // on the baseline. Hence the version guard.
+    //
+    // Before 2.0.12 the only lever is the renderer-wide hint, which has to be
+    // set before the texture is created and applies to every texture created
+    // while it is set. It is saved and restored around the call rather than
+    // left changed, because a game's own textures are none of this header's
+    // business.
+#if !SDL_VERSION_ATLEAST(2, 0, 12)
+    const char *previousHint = SDL_GetHint(SDL_HINT_RENDER_SCALE_QUALITY);
+    // Copied: SDL_SetHint may invalidate the pointer SDL_GetHint returned.
+    const std::string restoreHint = previousHint != nullptr ? previousHint : "";
+    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "1");
+#endif
+
     SDL_Texture *texture = SDL_CreateTextureFromSurface(renderer, surface);
+
+#if !SDL_VERSION_ATLEAST(2, 0, 12)
+    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY,
+                restoreHint.empty() ? "0" : restoreHint.c_str());
+#endif
+
     SDL_FreeSurface(surface);
     if (texture == nullptr)
       return nullptr;
 
     SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
-    // Linear on the upscale is not a nicety here -- it is what stands in for
-    // the per-pixel falloff that was never computed. Nearest would show the
-    // quarter-resolution grid as banding.
+#if SDL_VERSION_ATLEAST(2, 0, 12)
     SDL_SetTextureScaleMode(texture, SDL_ScaleModeLinear);
+#endif
     return texture;
   }
 

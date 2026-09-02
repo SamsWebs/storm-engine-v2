@@ -9,7 +9,8 @@ using namespace storm;
 
 namespace {
 
-// common/systems/renderCollider.h:49 — the debug outline colour.
+// The colour RenderColliderSystem::Update sets before it draws. Named, not
+// cited by line: see the ROADMAP item on line citations rotting.
 constexpr Uint32 kGreen = 0x00FF00;
 
 // The furthest any drawn pixel sits from the circle it is meant to trace. A

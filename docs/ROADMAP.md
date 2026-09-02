@@ -386,9 +386,11 @@ in `docs/` says the collision math is usable standalone, which is why a consumer
 had to discover it by experiment.
 
 **The real dependency is shape, not coupling.** A game reaching for this is
-reaching for collision, and the engine has **box colliders only** — a grep for
-`radius` or `Circle` across `common/components/` and `common/systems/` returns
-nothing. Center Ice Hockey's physics is round throughout: puck-vs-boards keeps a
+reaching for collision, and at the time this was written the engine had **box
+colliders only** — a grep for `radius` or `Circle` across `common/components/`
+and `common/systems/` returned nothing. (Both halves have since landed; see
+**Done** and **Also done** below. The paragraph is kept as the case that was
+made, not as a description of the tree.) Center Ice Hockey's physics is round throughout: puck-vs-boards keeps a
 `radius` off the boards, skater separation takes a `radius`, and the net posts
 are `postRadius = 3.f`. So `Overlaps`/`Manifold` are square math applied to round
 bodies, which is *approximately* usable and quietly wrong at the edges — a puck
@@ -428,6 +430,37 @@ ECS sweep and pairs against boxes. Two consequences worth carrying forward:
   `GetSystemEntities()`. The older gap there went with it: `Update` now takes an
   optional camera, so a scrolling game's outlines land on its sprites instead of
   at the raw world position.
+
+### What the adversarial review of the follow-up found
+
+Nothing that blocked the merge, and four things worth fixing, all in the debug
+overlay or its surroundings rather than in the collision math — which is the
+half that had already been reviewed hard.
+
+- **`static_cast<int>` of a NaN, or of a float past `INT_MAX`, is undefined
+  behaviour**, and the circle rasteriser costs one loop iteration per pixel of
+  radius. So a `transform.scale` bug did not produce a wrong picture, it
+  produced a per-frame hang or UB. Fixed by bounding what the overlay will draw
+  — 16384 px of radius, 1e7 px from the origin, finite only — with the box path
+  bounded the same way, which it had never been.
+- **The draw colour was set per entity.** Harmless when membership was
+  collider-carrying entities; wasteful and state-clobbering once it became every
+  transform entity. Hoisted out of the loop.
+- **`ContactSystem::CircleOf(const Entity &)` shipped with no spec.** It is
+  public API the sweep itself does not use, carrying the same footgun as
+  `BoundsOf`'s `Entity` overload: `GetComponent` hands back a shared zeroed
+  fallback on a miss rather than reporting one. Specced.
+- **Four line citations had rotted**, pointing at arithmetic that no longer
+  lived where they said. Converted to function names, per the item below.
+
+**Carried, not fixed.** A NaN in `transform.position` produces NaN bounds, and
+`ContactSystem`'s sweep then sorts on a comparator that returns false both ways
+for a NaN — which is not a strict weak ordering, so `std::sort` is undefined.
+This predates circles: the box path always had it, and no spec has ever fed the
+sweep a NaN. The overlay now guards itself against exactly this and the sweep
+does not, which is the asymmetry to close. Carried below rather than filed in
+`KNOWN_ISSUES.md`, which is for defects whose fix needs a compatibility break —
+dropping a non-finite body from the sweep needs none.
 
 ### What the adversarial review of that branch found
 
@@ -602,6 +635,12 @@ The fix is not to correct the numbers. Cite function names instead — `grep -n`
 drift. This is worth doing as a sweep rather than opportunistically, because a half-swept file is exactly
 the state that makes the remaining citations look trustworthy.
 
+The circle-collider branch converted four of them — three citing
+`renderCollider.h:22-26` for offset-and-scale arithmetic that had moved into
+`ContactSystem::BoundsOf`, and one the branch had introduced itself. That is not
+the sweep; the `common/ecs.cpp:439` citation this item names is still wrong, and
+the point about half-swept files stands.
+
 ### `editor/` does not build under GCC 13 — **DONE**
 
 There were two breakages, not one, the second only visible once the first was
@@ -701,3 +740,31 @@ Reviewed, ruled on, deliberately deferred.
   dies. Pre-existing; the new scan now also walks those empty entries.
 - **`Makefile.win` has no `-pthread`/`-mthreads`** while two spec files now use `std::thread`. Untested — no
   MinGW toolchain available here. `Makefile.debian` has it.
+
+### Carried from the circle-collider wave
+
+- **A non-finite transform makes `ContactSystem`'s sweep undefined.** A NaN in
+  `transform.position`, or a scale that overflows to infinity, produces
+  non-finite bounds; the sweep sorts those by `minX`, and a comparator involving
+  a NaN returns `false` both ways, which is not a strict weak ordering. `std::sort`
+  on one reads past the end of the range. The shapes themselves are safe — every
+  solver in `collision/shapes.h` rejects NaN deliberately, testing
+  `!(overlap > 0.0f)` rather than `<= 0.0f` — so it is the ordering step alone
+  that is exposed. Pre-existing, and no spec has ever fed the sweep a NaN. The
+  fix is additive but the choice is not obvious: drop non-finite bodies
+  silently, drop them with a throttled diagnostic, or clamp them.
+  `RenderColliderSystem` already takes the first option for its own drawing, so
+  the two systems disagree today.
+- **The broadphase still sweeps one axis.** Sorting by `minX` and breaking on
+  the first candidate past the current right edge degrades to all-pairs for
+  anything stacked in a column, and circles do not change that. A uniform grid
+  would also remove the per-frame scan the widened membership requirement
+  introduced — the two are the same rework, which is the argument for doing
+  neither on its own.
+- **`ContactSystem::BoundsOf(const Entity &)` and `CircleOf(const Entity &)` are
+  public API the engine itself no longer calls.** `Update()` resolves components
+  once and uses the `(transform, collider)` forms. Both `Entity` overloads read
+  through `GetComponent`, which hands back a shared zeroed fallback on a miss
+  rather than reporting one, so a caller passing an entity without the collider
+  gets a silent degenerate shape. They are specced and documented as
+  precondition-carrying, not deprecated.

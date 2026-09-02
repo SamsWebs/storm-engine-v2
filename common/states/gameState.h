@@ -9,6 +9,7 @@
 #include "../assetStore.h"
 #include "../components/animation.h"
 #include "../components/boxCollider.h"
+#include "../components/circleCollider.h"
 #include "../components/rigidBody.h"
 #include "../components/sprite.h"
 #include "../components/transform.h"

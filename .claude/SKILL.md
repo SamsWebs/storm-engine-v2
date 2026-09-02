@@ -220,6 +220,7 @@ These are the biggest correctness traps — understand them before writing ECS c
 | `SpriteComponent` | `components/sprite.h` | `assetId`, `width`, `height`, `zIndex`, `isFixed`, `flip`, `srcRect`, `offset` | **`width`/`height` are the source rect** — the ctor builds `srcRect{srcRectX, srcRectY, width, height}`, so they must match the sheet cell; resize with `TransformComponent.scale`, not by passing on-screen dimensions. `srcRectX` defaults to `0`, so a transparent cell 0 makes a sprite silently invisible.
 | `AnimationComponent` | `components/animation.h` | ctor args: `numFrames`, `frameSpeedRate`, `vertical` (default `true`), `isLooped` (default `true`), `frameOffset`; also public: `currentFrame`, `startTime` (set to `SDL_GetTicks()` in the ctor), `lastFrame` (non-looped stop frame, 0 = use `numFrames - 1`) |
 | `BoxColliderComponent` | `components/boxCollider.h` | `width`, `height`, `offset` (glm::vec2) |
+| `CircleColliderComponent` | `components/circleCollider.h` | `radius` (float), `offset` (glm::vec2) | **`offset` places the CENTRE, not a corner** — unlike `BoxColliderComponent`, so centring a circle on a 32x32 sprite drawn from `transform.position` wants `{16, 16}`. `radius` is a float because it is usually half a sprite cell. `transform.scale` scales it by the larger absolute axis (a circle cannot be an ellipse); the offset is world pixels and is not scaled. Give a body this **or** a box, never both — both is a bug, and the box wins.
 
 ### Built-in Systems
 
@@ -228,8 +229,8 @@ These are the biggest correctness traps — understand them before writing ECS c
 | `MovementSystem` | Transform + RigidBody | Moves entities by `velocity * deltaTime` |
 | `RenderSystem` | Transform + Sprite | Draws sprites sorted by `zIndex`; applies the camera offset except to sprites with `isFixed` (HUD/screen-space), and honours `sprite.offset`, `transform.scale`, `transform.rotation` and `sprite.flip` |
 | `AnimationSystem` | Sprite + Animation | Advances sprite sheet frames. **`vertical == true` (the default) advances `srcRect.y`; `false` advances `srcRect.x`.** Mismatching the flag against the sheet's layout is silent — the sprite samples outside the texture and draws nothing, or sits on frame 0. `examples/platformer`'s `rabbit.png` is a vertical strip (37x1026) and passes `true`; the scaffold's sheet is horizontal and passes `false`. |
-| `ContactSystem` | Transform + BoxCollider | The engine's only collision system as of 2.0.0. Reports AABB overlaps with a normal and a penetration depth, plus begin/end callbacks and a pair filter. Never kills, moves or writes anything |
-| `RenderColliderSystem` | Transform + BoxCollider | Debug overlay: draws collider outlines in green |
+| `ContactSystem` | Transform (plus a box **or** circle collider) | The engine's only collision system as of 2.0.0. Reports overlaps with a normal and a penetration depth, plus begin/end callbacks and a pair filter. Boxes and circles are swept together and pair against each other. Never kills, moves or writes anything. Requiring the transform alone is deliberate — a signature is an AND, so it cannot say "box or circle" — and `Update()` narrows to the entities actually carrying a collider, which means `GetSystemEntities()` reports transform entities, not bodies |
+| `RenderColliderSystem` | Transform (plus a box **or** circle collider) | Debug overlay: draws collider outlines in green — rectangles for boxes, midpoint-traced circles for circle colliders. Resolves both through `ContactSystem`'s statics, so it shows the shape actually being swept, box-wins rule included. Same widened requirement as `ContactSystem`, so `GetSystemEntities()` reports transform entities. `Update(renderer, &camera)` pans the outlines like `RenderSystem`; the camera defaults to `nullptr`. No `isFixed` equivalent — a collider is always a world body |
 
 `CollisionSystem` - the kill-both-entities-on-contact system deprecated in
 1.3.0 - was deleted in 2.0.0. Code still calling `AddSystem<CollisionSystem>()`
@@ -280,10 +281,16 @@ Rules to know before you use it:
 - **`SetOnEndContact` silently drops a pair whose entity died.**
   `Registry::Update()` returns a killed id to the free list in the same pass
   that removes it from the system, so handing it back would be KNOWN_ISSUES #1.
-- **Membership is still computed once.** Adding a `BoxColliderComponent` to a
-  live entity never gets it into `ContactSystem`; create the entity with its
-  collider.
-- **`BoundsOf` is static on `ContactSystem`; `Overlaps`, `Manifold`, `ClosestPointOn` and `MinimumTranslation` are free functions in `<stormengine2/collision/shapes.h>` (the `ContactSystem::` spellings remain as forwarders), and they cover circles as well as boxes** -
+- **`ContactSystem` and `RenderColliderSystem` are the two systems a late
+  component reaches.** Both require `TransformComponent` alone and re-read the
+  collider every frame, so a box or circle collider added to (or removed from) a
+  live entity does take effect. Membership itself is still computed once, so an
+  entity admitted with no transform never joins — and every other system still
+  needs its full component set before the admitting `Registry::Update()`.
+- **A body carries a box collider or a circle collider, never both.** Both is a
+  game bug; it resolves deterministically with the box winning, which is what
+  keeps pre-2.2 entities behaving identically.
+- **`ContactSystem::BoundsOf` and `ContactSystem::CircleOf` are statics resolving a transform plus a collider to world space (each takes an `Entity` or a `(transform, collider)` pair); `Overlaps`, `Manifold`, `ClosestPointOn`, `MinimumTranslation` and `BoundsOf(const ContactCircle &)` are free functions in `<stormengine2/collision/shapes.h>` (the `ContactSystem::` spellings remain as forwarders), and they cover circles as well as boxes** -
   usable with no system registered.
 - **The broadphase sweeps X only.** Everything stacked in one column degrades to
   all-pairs. Fine for a puck and six boards, or bullets and enemies.
@@ -999,7 +1006,7 @@ networking builds there.
 5. **Deferred state deletion** — discarded states survive the `changeState`/`popState` call that removes them, preventing use-after-free.
 6. **No main loop, no Game class** — the engine ships `GameStateMachine` only; the game writes the loop, window, and renderer setup.
 7. **SDL-free testable logic** — touch input, virtual gamepad, and net message packing are pure C++ with no SDL dependency.
-8. **Camera-aware rendering** — `RenderSystem` accepts an optional `SDL_Rect*` camera; `isFixed` sprites ignore it (for HUD/UI).
+8. **Camera-aware rendering** — `RenderSystem` and `RenderColliderSystem` both accept an optional `SDL_Rect*` camera; `isFixed` sprites ignore it (for HUD/UI), and colliders have no such opt-out because a collider is always a world body.
 9. **Geometric pool growth** — component pools grow 2x to avoid O(n²) reallocation.
 10. **Two consumption modes** — installed `.so` (desktop) or compile `common/` directly (Switch, Android, submodules). Editing `common/` changes desktop builds only after `make install`.
 11. **No throw on a game data path** — component ids are range-checked before any `bitset` access (`set`/`test` carry an `out_of_range` throw that would be emitted into a `-fno-exceptions` game TU, e.g. the Switch build), a miss returns a default/`nullptr` instead of aborting, and every diagnostic is throttled to its first 4 occurrences per call site (`ECS_MAX_DIAGNOSTIC_REPORTS`). `GetEntitiesByGroup` returns an empty vector on a miss; `AssetStore::GetTexture` returns `nullptr`. The two reachable throws left on a data path are `TileMapLoader`'s `std::stoi` and `GetEntityByTag`'s `.at()`.

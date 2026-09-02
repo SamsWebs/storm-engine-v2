@@ -223,6 +223,28 @@ inline bool SolveCircleBox(const ContactCircle &circle, const ContactAABB &box,
 
 } // namespace detail
 
+// ── Bounds ──────────────────────────────────────────────────────────────────
+
+// The tight AABB around a circle.
+//
+// This is a broadphase proxy, not a shape you should test against: a circle
+// and its bounding box disagree at all four corners, which is exactly the
+// difference a round body exists to express. `ContactSystem` sweeps these and
+// then runs the real circle solver on whatever survives.
+//
+// A negative radius is clamped the same way the solvers clamp it, so the box
+// around a nonsense circle is a degenerate point rather than an inverted AABB
+// the box solver would then reject for a second, unrelated reason.
+inline ContactAABB BoundsOf(const ContactCircle &circle) {
+  const float radius = detail::SaneRadius(circle.radius);
+  ContactAABB box;
+  box.minX = circle.x - radius;
+  box.minY = circle.y - radius;
+  box.maxX = circle.x + radius;
+  box.maxY = circle.y + radius;
+  return box;
+}
+
 // ── AABB vs AABB ────────────────────────────────────────────────────────────
 
 inline bool Overlaps(const ContactAABB &a, const ContactAABB &b) {

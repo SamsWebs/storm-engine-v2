@@ -344,6 +344,34 @@ An axis-aligned bounding box, read by `ContactSystem`.
 entity.AddComponent<BoxColliderComponent>(64, 64); // width, height
 ```
 
+### CircleColliderComponent
+A round collider, also read by `ContactSystem`. Give an entity one *or* the
+other — a body carrying both is a bug, and the box wins.
+
+```cpp
+#include <stormengine2/components/circleCollider.h>
+
+entity.AddComponent<CircleColliderComponent>(16.0f, glm::vec2(16, 16));
+//                                           radius, offset to the CENTRE
+```
+
+Two differences from `BoxColliderComponent`, both deliberate. The offset places
+the **centre**, not a corner, so centring a circle on a 32x32 sprite drawn from
+`transform.position` wants `offset = {16, 16}` rather than `{0, 0}`. And the
+radius is a `float`, because a radius is usually half a sprite cell and rounding
+3.5 px to 3 or 4 is visible on a small body.
+
+Use a circle for anything round: a puck riding the boards, characters pushed
+apart by a separation radius, a shot glancing off a post. Against a box corner a
+circle reports a diagonal normal, where a box snaps that to an axis — the
+difference is how the game feels, not just how it computes.
+
+`transform.scale` scales the radius by its **larger absolute axis**. A circle
+cannot be an ellipse, so a non-uniform scale has no right answer; the larger axis
+at least never leaves a body quietly smaller than the sprite it stands for, and
+the absolute value keeps a mirrored sprite (`scale.x = -1`) from inverting its
+collider. The offset, like a box's, is world pixels and is *not* scaled.
+
 ## Built-in Systems
 
 All built-in systems are in `<stormengine2/systems/>`. Register them with `registry.AddSystem<T>()` before creating any entities that need them.
@@ -361,8 +389,8 @@ registry.AddSystem<RenderColliderSystem>(); // debug: draws collider outlines
 | `MovementSystem` | Transform + RigidBody | Moves entities by `velocity * deltaTime` each frame |
 | `RenderSystem` | Transform + Sprite | Draws all sprites sorted by `zIndex` |
 | `AnimationSystem` | Sprite + Animation | Advances the sprite sheet frame |
-| `ContactSystem` | Transform + BoxCollider | Reports AABB overlaps with a normal and depth, plus begin/end callbacks. Never kills or moves anything |
-| `RenderColliderSystem` | Transform + BoxCollider | Draws collider rectangles (debug) |
+| `ContactSystem` | Transform (plus a box **or** circle collider) | Reports overlaps with a normal and depth, plus begin/end callbacks. Boxes and circles pair against each other. Never kills or moves anything |
+| `RenderColliderSystem` | Transform (plus a box **or** circle collider) | Draws collider outlines (debug): rectangles for boxes, traced circles for circle colliders. Takes an optional camera, like `RenderSystem` |
 
 `ContactSystem` reports; it never acts. Read `GetContacts()` and decide what a
 contact means, or install `SetOnBeginContact` / `SetOnEndContact` for the
@@ -396,8 +424,12 @@ A shared edge is *not* a contact - the overlap test is strict, unlike an
 inclusive test that would count a shared edge as a contact.
 
 System membership is computed once, when `Registry::Update()` admits an
-entity. Adding a `BoxColliderComponent` to an entity that is already live will
-never get it into `ContactSystem`; create the entity with its collider.
+entity - but `ContactSystem` and `RenderColliderSystem` are not bound by it,
+because they require `TransformComponent` alone and re-read the collider every
+frame. A live entity that already had a transform when it was admitted can gain
+or lose a box or circle collider and both will pick the change up on the next
+`Update()`. An entity admitted with *no* transform is still not a member, and
+adding one later will not make it one.
 
 **Do not build tilemap collision out of one collider entity per tile.** The
 manifold picks the axis of least penetration *per box*, so a character sliding

@@ -34,6 +34,7 @@
 
 #include "../components/animation.h"
 #include "../components/boxCollider.h"
+#include "../components/circleCollider.h"
 #include "../components/rigidBody.h"
 #include "../components/sprite.h"
 #include "../components/transform.h"
@@ -108,6 +109,7 @@ using storm::LOG_WARNING;
 // ── Components ──────────────────────────────────────────────────────────────
 using storm::AnimationComponent;
 using storm::BoxColliderComponent;
+using storm::CircleColliderComponent;
 using storm::RigidBodyComponent;
 using storm::SpriteComponent;
 using storm::TransformComponent;
@@ -115,6 +117,11 @@ using storm::TransformComponent;
 // ── Collision math ──────────────────────────────────────────────────────────
 // Overlaps, Manifold and MinimumTranslation are overloaded free functions; one
 // using-declaration each brings every overload across.
+//
+// BoundsOf here is the free function taking a ContactCircle, which is the whole
+// of storm::BoundsOf; ContactSystem's box-taking BoundsOf is a static member and
+// is reached through the class, so the two never compete for this name.
+using storm::BoundsOf;
 using storm::ClosestPointOn;
 using storm::ContactCircle;
 using storm::Manifold;

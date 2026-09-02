@@ -57,9 +57,10 @@ It(scales_collider_extents_but_not_the_offset) {
 
   Entity entity = MakeCollider(registry, {0, 0}, 10, 10, {2, 2}, {4, 0});
 
-  // Matches RenderColliderSystem (common/systems/renderCollider.h:22-26)
-  // and CollisionSystem: the offset is world pixels, the extents are local
-  // units scaled by the transform. Changing that is a 2.0.0 item.
+  // The offset is world pixels, the extents are local units scaled by the
+  // transform. RenderColliderSystem draws exactly this, by calling this
+  // function rather than keeping its own copy of the arithmetic. Changing the
+  // convention is a 2.0.0 item.
   const auto bounds = ContactSystem::BoundsOf(entity);
   Assert::That(bounds.minX, EqualsWithDelta(4.0, 0.001));
   Assert::That(bounds.maxX, EqualsWithDelta(24.0, 0.001));

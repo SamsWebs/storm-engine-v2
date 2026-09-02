@@ -403,10 +403,31 @@ are overloaded for all three pairings, and `MinimumTranslation` gained a
 `(normal, depth)` form a game with no ECS can call. `systems/contact.h`
 forwards, so `ContactSystem::Overlaps(a, b)` is unchanged.
 
-**Circles are reachable through the free functions only.** `ContactSystem`
-requires `BoxColliderComponent` and there is no circle collider component, so no
-circle contact comes out of the ECS sweep. A circle collider component, and a
-sweep that can produce circle contacts, is a separate item.
+**Also done, in a follow-up.** `CircleColliderComponent` exists and
+`ContactSystem` sweeps mixed shapes, so a circle contact now comes out of the
+ECS sweep and pairs against boxes. Two consequences worth carrying forward:
+
+* `ContactSystem` requires `TransformComponent` **alone**. A signature is an AND
+  of required components, so it cannot express "box OR circle", and a second
+  system for circles cannot see the box side of a mixed pair. The narrowing to
+  actual colliders happens inside `Update()`, which is a per-frame scan over
+  every transform entity — new work for a game with thousands of sprites and a
+  handful of bodies. A component the ECS could match as a union, or a broadphase
+  that indexes colliders once instead of rescanning, would remove that scan; it
+  is not worth a break on its own.
+* A collider added to a live entity now takes effect in both collider systems,
+  because membership is decided on the transform and the collider is re-read
+  each frame. That is a side effect of the widened requirement, not a fix for
+  KNOWN_ISSUES #5 — every other system still freezes its component set at
+  admission — but it is now observable behaviour with specs on it, so a later
+  broadphase rework has to keep it.
+* `RenderColliderSystem` draws both shapes now, through `ContactSystem`'s own
+  statics rather than its own copy of the arithmetic — the overlay and the sweep
+  agree by construction, including the box-wins rule. It took the same widened
+  requirement, so both systems now report transform entities from
+  `GetSystemEntities()`. The older gap there went with it: `Update` now takes an
+  optional camera, so a scrolling game's outlines land on its sprites instead of
+  at the raw world position.
 
 ### What the adversarial review of that branch found
 

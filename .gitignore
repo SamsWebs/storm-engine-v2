@@ -70,3 +70,5 @@ examples/strategy/assets/gfx/
 
 # windows-platformer unpacks the release zip here to build against it.
 examples/windows-platformer/bin/
+compile_commands.json
+.cache/

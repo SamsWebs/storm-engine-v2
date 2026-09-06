@@ -12,10 +12,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Storm! Engine v2</title>
-<meta name="description" content="Learn game programming in real C++. Storm! Engine v2 is a small ECS-based 2D engine on SDL2, with nine complete games to read and change.">
+<meta name="description" content="Learn game programming in real C++. Storm! Engine v2 is a small ECS-based 2D engine on SDL2, with 12 games to own and change.">
 <meta property="og:type" content="website">
 <meta property="og:title" content="Storm! Engine v2">
-<meta property="og:description" content="Learn game programming in real C++. A small ECS-based 2D engine on SDL2, with nine complete games to read and change.">
+<meta property="og:description" content="Learn game programming in real C++. A small ECS-based 2D engine on SDL2, with 12 games to own and change.">
 <meta property="og:image" content="assets/og.png">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
@@ -291,6 +291,7 @@ p { margin: 0; }
   background: var(--code-bg); image-rendering: pixelated;
   border-bottom: 1px solid var(--rule);
 }
+
 .card-body { padding: .9rem 1rem 1.1rem; }
 .card h3 {
   font-family: "Anton", Impact, sans-serif; font-weight: 400; text-transform: uppercase;
@@ -301,6 +302,8 @@ p { margin: 0; }
   letter-spacing: .1em; text-transform: uppercase; color: var(--storm); display: block; margin-bottom: .15rem;
 }
 .card p { font-size: .9rem; color: var(--slate); margin-top: .4rem; }
+
+.card a { color: inherit; text-decoration: none; }
 
 /* --- code --------------------------------------------------------------- */
 .code {
@@ -447,13 +450,14 @@ p { margin: 0; }
     <div class="hero-grid">
       <div class="hero-copy">
         <h1 class="tagline">Learn game programming in real C++.</h1>
-        <p class="sub">Inspired by <a href='https://pikuma.com/courses/cpp-2d-game-engine-development' target='_blank'>Gustavo Pezzi's C++ Game Engine Programming course</a>, Storm! Engine v2 is a small, ECS-based 2D engine on SDL2. Nine complete games ship with it - read them, change them, break them, and keep what you learn when you move on. You download, you own it.</p>
+        <p class="sub">Inspired by <a href='https://pikuma.com/courses/cpp-2d-game-engine-development' target='_blank'>Gustavo Pezzi's C++ Game Engine Programming course</a>, Storm! Engine v2 is a small, ECS-based 2D engine on SDL2. Twelve games ship with it: eight in the repo plus four standalone. Own them, change them, break them - that's how you learn real C++. You download it, you own it.</p>
 
         <div class="hero-meta">
           <span class="chip chip-v" data-ver>v2.3.0</span>
           <span class="chip">C++ / SDL2</span>
           <span class="chip">Linux · Windows · Switch · Android</span>
-          <span class="chip">WTFPL</span>
+          <span class="chip">531 specs</span>
+          <span class="chip">FREE</span>
         </div>
 
         <div class="cta-row">
@@ -475,7 +479,7 @@ p { margin: 0; }
           <img src="assets/img/center-ice-hockey.png" width="1920" height="1080" alt="Center Ice Hockey: a top-down pixel-art hockey game, Calgary against Toronto, 13:05 left in the first period, players contesting the puck at centre ice.">
         </div>
         <figcaption>
-          Built with Storm! Engine v2, customizable <strong>Center Ice Hockey</strong> is set for release in late September 2026.
+          Built with Storm! Engine v2, <strong>Center Ice Hockey</strong> drops late September 2026.
           <span class="reveal-note">Graphics subject to change.</span>
         </figcaption>
       </figure>
@@ -530,7 +534,7 @@ p { margin: 0; }
         <p>UDP host and join with reliable and unreliable chunks, kick, ban and timeout, and snapshot replication with per-client deltas and a prediction cache. Three networking demos come with it: netchat, netrepl and a playable netplay-checkers.</p>
       </div>
       <div class="feature-media">
-        <img class="shot" src="assets/img/shooter.png" width="800" height="600" loading="lazy" alt="1945, a vertically scrolling shoot-'em-up with HUD and score display.">
+        <img class="shot" src="assets/img/lamplight.png" width="800" height="600" loading="lazy" alt="1945, a vertically scrolling shoot-'em-up with HUD and score display.">
       </div>
     </div>
 
@@ -578,49 +582,94 @@ p { margin: 0; }
 <section class="section" id="examples">
   <div class="wrap">
     <p class="eyebrow">Worked examples</p>
-    <h2 class="h2">Nine complete games to read</h2>
-    <p class="lede">Not fragments - nine games you can build, run and take apart. Each is written against the same public API you get, with no engine forks and no private headers, so anything you see in an example you can do in your own project. Start with the platformer, then read the one closest to the game you want to make.</p>
+    <h2 class="h2">Twelve games to own</h2>
+    <p class="lede">Twelve games to own, build, run and take apart. Eight ship in the repo; four live as standalone repos against the same public API, with no engine forks and no private headers, so anything you see in an example you can do in your own project. Start with the platformer, then read the one closest to the game you want to make.</p>
 
     <div class="gallery">
       <article class="card">
+        <a href="https://github.com/WillSams/lamplight" target="_blank">
+        <img src="assets/img/lamplight.png" loading="lazy" alt="Lamplight: two-player co-op dungeon crawl over LAN, one shared lamp against the dark.">
+        <div class="card-body"><span class="kind">Co-op &middot; LAN</span><h3>Lamplight</h3>
+        <p>Two-player co-op dungeon crawl over LAN with NetSnapshot deltas. One shared lamp, screen-space lighting as a mechanic.</p></div>
+        </a>
+      </article>
+      <article class="card">
+        <a href="https://github.com/WillSams/nightshift" target="_blank">
+        <img src="assets/img/nightshift.png" loading="lazy" alt="Nightshift: top-down stealth in a dark office, guard vision cones and patrol routes.">
+        <div class="card-body"><span class="kind">Stealth</span><h3>Nightshift</h3>
+        <p>Top-down stealth with honest vision cones and a five-state guard brain. Darkness triples the time guards need to notice you.</p></div>
+        </a>
+      </article>
+      <article class="card">
+        <a href="https://github.com/WillSams/salvagerun" target="_blank">
+        <img src="assets/img/salvagerun.png" loading="lazy" alt="Salvage Run: asteroid-field roguelite, thrust and drift among splitting rocks.">
+        <div class="card-body"><span class="kind">Asteroids roguelite</span><h3>Salvage Run</h3>
+        <p>Circle colliders, pure-velocity drift, damped-spring tether. Blast rocks, tow the loot back before the 2-minute shift ends.</p></div>
+        </a>
+      </article>
+      <article class="card">
+    
+        <a href="https://github.com/WillSams/laststand" target="_blank">
+        <img src="assets/img/laststand.png" loading="lazy" alt="Last Stand: top-down arena survival, kiting a climbing horde.">
+        <div class="card-body"><span class="kind">Arena survival</span><h3>Last Stand</h3>
+        <p>Kite the horde while the spawn ramp climbs. Pooled bullets, pair-filtered broadphase, regen that costs you time.</p></div>
+        </a>
+      </article>
+      <article class="card">        
+        <a href="https://github.com/SamsWebs/storm-engine-v2/tree/main/examples/platformer" target="_blank">
         <img src="assets/img/platformer.png" loading="lazy" alt="Scrolling platformer with tilemap terrain.">
         <div class="card-body"><span class="kind">Platformer</span><h3>Platformer</h3>
         <p>Tilemap loading, tile-based physics with gravity and AABB resolution, and a scrolling camera.</p></div>
+        </a>
       </article>
-      <article class="card">
+      <article class="card">        
+        <a href="https://github.com/SamsWebs/storm-engine-v2/tree/main/examples/shooter" target="_blank">
         <img src="assets/img/shooter.png" loading="lazy" alt="Vertical shoot-'em-up in the style of 1942.">
         <div class="card-body"><span class="kind">Shoot-'em-up</span><h3>1945</h3>
         <p>A three-state stack, high entity churn with deferred lifecycle, one-shot animations and an immediate-mode HUD.</p></div>
+        </a>
       </article>
-      <article class="card">
+      <article class="card">        
+        <a href="https://github.com/SamsWebs/storm-engine-v2/tree/main/examples/strategy" target="_blank">
         <img src="assets/img/strategy.png" loading="lazy" alt="Dragon Force-style campaign map with castles and generals.">
         <div class="card-body"><span class="kind">Strategy</span><h3>Realms</h3>
         <p>A campaign map with a pushed side-on massbattle, a shared campaign model and a 64px tilemap.</p></div>
+        </a>
       </article>
-      <article class="card">
+      <article class="card">        
+        <a href="https://github.com/SamsWebs/storm-engine-v2/tree/main/examples/puzzle" target="_blank">
         <img src="assets/img/puzzle.png" loading="lazy" alt="Tetris-style falling block puzzle game.">
         <div class="card-body"><span class="kind">Puzzle</span><h3>Puzzle</h3>
         <p>Custom components and systems, entity reuse, deferred lifecycle and text from the engine's cached fonts.</p></div>
+        </a>
       </article>
-      <article class="card">
+      <article class="card">        
+        <a href="https://github.com/SamsWebs/storm-engine-v2/tree/main/examples/jrpg" target="_blank">
         <img src="assets/img/jrpg.png" loading="lazy" alt="Top-down role-playing game with dialogue box.">
         <div class="card-body"><span class="kind">RPG</span><h3>JRPG</h3>
-        <p>Tile-based world loading, NPC interaction and Final Fantasy-style typewriter dialogue.</p></div>
+        <p>Roam a tile-based world, talk to NPCs, and read Final Fantasy-style typewriter dialogue - the state-stack and interaction pattern for any story-driven game.</p></div>
+        </a>
       </article>
-      <article class="card">
+      <article class="card">        
+        <a href="https://github.com/SamsWebs/storm-engine-v2/tree/main/examples/sports" target="_blank">
         <img src="assets/img/sports.png" loading="lazy" alt="Top-down ice hockey game.">
         <div class="card-body"><span class="kind">Sports</span><h3>Hockey</h3>
-        <p>AI behaviour, puck physics and custom systems - the case the circle colliders were built for.</p></div>
+        <p>Back-and-forth hockey with AI teammates, a puck that glances off posts on true circle physics - the case the circle colliders were built for.</p></div>
+        </a>
       </article>
-      <article class="card">
+      <article class="card">        
+        <a href="https://github.com/SamsWebs/storm-engine-v2/tree/main/examples/android-platformer" target="_blank">
         <img src="assets/img/android-platformer.png" loading="lazy" alt="The platformer running on an Android device with on-screen controls.">
         <div class="card-body"><span class="kind">Android</span><h3>Android platformer</h3>
         <p>Engine and game compiled to a single JNI library via the NDK, with the virtual gamepad replacing the keyboard.</p></div>
+        </a>
       </article>
-      <article class="card">
+      <article class="card">        
+        <a href="https://github.com/SamsWebs/storm-engine-v2/tree/main/examples/nx-platformer" target="_blank">
         <img src="assets/img/nx-platformer.png" loading="lazy" alt="The platformer running as Nintendo Switch homebrew.">
         <div class="card-body"><span class="kind">Switch</span><h3>Switch homebrew</h3>
         <p>Builds with devkitPro and produces an <code>.nro</code> that runs on a homebrew-enabled console or an emulator.</p></div>
+        </a>
       </article>
     </div>
   </div>
@@ -672,7 +721,7 @@ p { margin: 0; }
         <span class="plat"><b>Linux</b> - amd64 and arm64, prebuilt <code>.deb</code></span>
         <span class="plat"><b>Windows</b> - MinGW-w64 cross-build from Linux</span>
         <span class="plat"><b>Nintendo Switch</b> - source builds, devkitPro</span>
-        <span class="plat"><b>Android</b> - source builds, verified on hardware</span>
+        <span class="plat"><b>Android</b> - source builds via the NDK</span>
         <span class="plat">iOS - possible via the same SDL layer</span>
       </div>
       <p style="margin-top:1rem;font-size:.92rem;color:var(--slate);max-width:var(--measure)">Windows is cross-compiled from Linux with <code>mingw-w64</code> - no Windows toolchain needed, and SDL2 is built from the same vendored sources the Android build uses, so nothing is downloaded. The library, the spec suite and seven of the examples cross-build today, and every release attaches a Windows SDK zip. A native toolchain that runs in cmd or PowerShell is not supported - the import library and the C++ ABI are GCC's, so MSVC cannot link it. WSL2 runs the plain Linux build.</p>

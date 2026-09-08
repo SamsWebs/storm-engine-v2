@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [2.3.1] - 2026-09-08
 
 ### Added
 
@@ -13,6 +13,43 @@
   is that there is no assets folder to browse or edit, not DRM. Every failure
   is a `bool`, so the Switch build's `-fno-exceptions` is respected, and both
   structs are pure C++ spec'd headless through `std::stringstream`.
+
+  Format v1: `"SPAK"` magic, u32 version, u32 count, per entry {u16 nameLen,
+  name, u64 offset, u64 size}, then blobs, all little-endian. Open
+  bounds-checks every index entry against the file length (by subtraction, so
+  u64 offset+size cannot overflow the check) and refuses a truncated header,
+  so no corrupt pack can make `Read` resize to an attacker's number.
+
+- **AssetStore can load from the pack.**
+  `AddTexture` / `AddFont` / `AddSound` gain `PackReader` overloads with the
+  same error contract as the path loads: a missing entry, an empty blob, an
+  oversized one or undecodable bytes log and store nothing. The load was not
+  the hard part — the lifetime was. SDL_ttf retains the RWops a font was
+  opened with and reads glyphs lazily at render time, closing it only in
+  `TTF_CloseFont`, so the store keeps a pack-loaded font's blob alive in a
+  new `fontBlobs` map for the font's lifetime (which grows `AssetStore`
+  208 → 256 bytes; `layout.spec.cpp` pins the new size). The texture and
+  sound loaders decode synchronously, so their blobs can die with the call —
+  verified against the vendored SDL sources. The triplicated
+  "re-adding an id replaces and frees the old asset" branch is now one
+  private `ReplaceOrStore`; pack guards live in one `OpenPackEntry`.
+  `assetStore.h` forward-declares `PackReader`, so the pack header's include
+  cost on every state TU is zero. 591 specs green; the whole suite run under
+  valgrind: 0 invalid reads, 0 definitely lost.
+
+### Fixed
+
+- **The compat probe and the pre-commit hook no longer fight.** The hook
+  reformatted the GENERATED `specs/compat/bridgedNames.h` when it was
+  committed, but CI byte-compares that file against
+  `scripts/generate-compat-probes.py --check` — main failed the check as a
+  result. The generated file is restored to the generator's canonical bytes
+  and excluded from the hook.
+
+### Web
+
+- Site updated before Labor Day, GitHub links repaired, and the pages
+  workflow bumped to `actions/deploy-pages` v5.
 
 ## [2.3.0] - 2026-09-02
 

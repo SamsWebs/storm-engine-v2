@@ -5,12 +5,15 @@ FROM storminator16/igloo-testing:latest
 # `dpkg-dev` provides dpkg-shlibdeps, which the release workflow runs in here
 # to derive the .deb's Depends: field from the built library.
 #
-# Check-Valid-Until=false: the base image is Debian bullseye, whose LTS
-# security support ENDED 2026-08-31 - the bullseye-security InRelease now
-# reads expired and a plain `apt-get update` aborts with exit 100 before any
-# package installs. Nothing in the build comes from the security suite, so
-# reading the stale metadata is fine; the check is what kills the update.
-# Retire this workaround when the base image moves off bullseye.
+# The security suite is REMOVED from the sources, not just date-bypassed:
+# the base image is Debian bullseye, whose LTS security support ENDED
+# 2026-08-31. The suite was retired and its pool swept, so its stale index
+# advertises versions that 404 on fetch (dpkg-dev_1.20.14, icu-devtools
+# 67.1-7+deb11u1 were the two that bit the v2.3.1 release). Every package
+# this build needs exists in bullseye main at the pre-update versions.
+# Check-Valid-Until=false stays as a belt: bullseye's other suites will
+# expire the same way as the archive ages. Retire both when the base image
+# moves off bullseye.
 #
 # The two symlinks put Lua where base.mk expects it. Debian versions both the
 # library and the header directory (/usr/include/lua5.4), but base.mk only ever
@@ -18,7 +21,8 @@ FROM storminator16/igloo-testing:latest
 # Lua install lands, and how the README tells you to set the host up. Without
 # the header link, vendor/sol/sol.hpp fails on <lua.h> and the editor does not
 # compile.
-RUN apt-get -o Acquire::Check-Valid-Until=false update && apt-get install -y --no-install-recommends \
+RUN sed -i '/bullseye-security/d' /etc/apt/sources.list /etc/apt/sources.list.d/* 2>/dev/null || true \
+    && apt-get -o Acquire::Check-Valid-Until=false update && apt-get install -y --no-install-recommends \
     dpkg-dev \
     libglm-dev \
     libgtk-3-dev \

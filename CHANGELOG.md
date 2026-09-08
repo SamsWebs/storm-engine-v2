@@ -1,5 +1,19 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- **A pack file: the game's assets in one opaque file.**
+  `<stormengine2/packFile.h>` — header-only, SDL-free, exception-free.
+  `PackWriter` (build-tool side) assembles named blobs into a single file;
+  `PackReader` (game side) opens it once and reads blobs back by name with a
+  seek and a read. No compression — bytes go in and come out pixel-exact, so
+  palette-exact sprite recolouring keeps working — and no encryption: the goal
+  is that there is no assets folder to browse or edit, not DRM. Every failure
+  is a `bool`, so the Switch build's `-fno-exceptions` is respected, and both
+  structs are pure C++ spec'd headless through `std::stringstream`.
+
 ## [2.3.0] - 2026-09-02
 
 ### Added

@@ -26,7 +26,12 @@ Describe(LayoutSpec) {
     // the game's call site: 1.3.0 took it 112 -> 208 and every game built
     // against 1.2.x headers allocated the smaller one and ran a constructor
     // that initialised past it.
-    Assert::That(sizeof(AssetStore), Equals(static_cast<std::size_t>(208)));
+    // 208 -> 256: the store gained a fontBlobs map. SDL_ttf reads glyphs
+    // lazily out of the RWops a pack-loaded font was opened with, so the
+    // blob behind such a font must outlive it; the store now owns it. Games
+    // rebuild against the new headers (make clean on the installed tree),
+    // which is the rule for any size change.
+    Assert::That(sizeof(AssetStore), Equals(static_cast<std::size_t>(256)));
     Assert::That(sizeof(Entity), Equals(static_cast<std::size_t>(24)));
     Assert::That(sizeof(System), Equals(static_cast<std::size_t>(40)));
     Assert::That(sizeof(Signature), Equals(static_cast<std::size_t>(8)));

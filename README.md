@@ -14,6 +14,7 @@ A lightweight, ECS-based 2D game engine built on SDL2 - made for game jams and p
 - **Box collider** components with debug overlay
 - **Contact detection** - AABB overlaps reported as `Contact{a, b, normal, depth}`, with begin/end callbacks and a pair filter that is where layers, masks and sensors live (`<stormengine2/systems/contact.h>`)
 - **Asset store** for textures, fonts and sounds
+- **Pack file** - one-file asset container: `PackWriter` assembles blobs (a build tool), `PackReader` reads them back by name; no compression, no encryption, header-only and SDL-free (`<stormengine2/packFile.h>`)
 - **Text drawing** - `Text::Draw` / `DrawCentred` / `Measure` over SDL_ttf, header-only and null-safe (`<stormengine2/text.h>`)
 - **Game state machine** for managing scenes, with frame pacing built in (`GameState::CapFrameRate()`)
 - **Logger** utility

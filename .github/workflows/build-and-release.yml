@@ -392,7 +392,16 @@ jobs:
             echo "::group::${image}"
             docker run --rm -v "$PWD:/w" -w /w "${image}" sh -c '
               set -e
-              apt-get update -qq
+              # EOL-archive survival: bullseye's security suite was retired
+              # when its LTS ended 2026-08-31, so its InRelease reads expired
+              # and the update aborts before anything installs. Same two-part
+              # workaround as Dockerfile.debian: drop the dead source, and
+              # date-bypass the remaining suites (idempotent on the non-EOL
+              # images in this loop, which have no bullseye-security line and
+              # unexpired metadata).
+              sed -i "/bullseye-security/d" /etc/apt/sources.list \
+                /etc/apt/sources.list.d/* 2>/dev/null || true
+              apt-get -o Acquire::Check-Valid-Until=false update -qq
 
               # THE COMMAND THE DOCS TELL PEOPLE TO RUN, on an image that has no
               # SDL2 runtime -- which is the whole point. This step used to run

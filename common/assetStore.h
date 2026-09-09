@@ -70,6 +70,18 @@ public:
   // NOT freed by ClearAssets (it holds no asset instances).
   bool LoadPack(const std::string &pakPath);
 
+  // Raw blob access for callers that need a SURFACE or another loader the
+  // store does not cache - pixel-processing pipelines, the window icon, a
+  // locally-opened font. True fills `bytes` from the pack (same
+  // PackEntryName convention as the Adds); false means "read the file" -
+  // the same fallback rule, and automatic for anything the pack cannot
+  // hold (e.g. the player's data/ cache, which a built pack never
+  // contains). The bytes are a COPY: safe to hand to SDL_RWFromMem and to
+  // outlive however the caller uses them, subject to the caller keeping
+  // them alive as long as an RWops-derived TTF_Font stays open (the lazy-
+  // glyph rule - decode synchronously or keep the vector alive).
+  bool ReadBlob(const std::string &filePath, std::vector<uint8_t> *bytes) const;
+
   // Pack-file variants: the blob comes from a storm::PackReader instead of
   // a file path. Same error contract - a missing entry, an empty blob, an
   // oversized one or undecodable bytes log and store nothing. The texture

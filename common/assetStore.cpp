@@ -78,6 +78,14 @@ bool AssetStore::LoadPack(const std::string &pakPath) {
   return true;
 }
 
+bool AssetStore::ReadBlob(const std::string &filePath,
+                          std::vector<uint8_t> *bytes) const {
+  if (pack_ == nullptr) {
+    return false; // `bytes` left alone - the caller reads the file
+  }
+  return pack_->Read(PackEntryName(filePath), *bytes);
+}
+
 bool AssetStore::InPack(const std::string &filePath) const {
   if (pack_ == nullptr) {
     return false;

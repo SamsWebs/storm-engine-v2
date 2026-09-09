@@ -302,10 +302,7 @@ jobs:
           IMPORTED=$(objdump -T deb/usr/local/lib/libstormenginev2.so \
             | awk '/\*UND\*/ {print $NF}' \
             | grep -E '^(SDL_|IMG_|TTF_|Mix_)' | sort -u | tr '\n' ' ')
-          EXPECTED="IMG_Load IMG_Load_RW Mix_FreeChunk Mix_LoadWAV \
-Mix_LoadWAV_RW SDL_CreateTextureFromSurface SDL_DestroyTexture \
-SDL_FreeSurface SDL_GetError SDL_RWFromMem TTF_CloseFont TTF_OpenFont \
-TTF_OpenFontRW "
+          EXPECTED="IMG_Load IMG_Load_RW Mix_FreeChunk Mix_LoadWAV Mix_LoadWAV_RW SDL_CreateTextureFromSurface SDL_DestroyTexture SDL_FreeSurface SDL_GetError SDL_RWFromMem TTF_CloseFont TTF_OpenFont TTF_OpenFontRW "
           if [ "${IMPORTED}" != "${EXPECTED}" ]; then
             echo "::error::the library imports SDL-family symbols outside the known ABI -- the floor rewrite below is refused until a human reads them"
             echo "::error::imported: ${IMPORTED}"

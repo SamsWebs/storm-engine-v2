@@ -1,5 +1,6 @@
 #include <igloo/igloo_alt.h>
 
+#include <cstdio>
 #include <fstream>
 #include <sstream>
 #include <vector>
@@ -246,5 +247,106 @@ Describe(AssetStorePackSpec) {
 
     store.AddTexture(target.renderer, "tex", pack, "no/such.png");
     Assert::That(store.GetTexture("tex") == first, Equals(true));
+  };
+
+  // ── LoadPack: one choke point for the whole game ────────────────────────
+  //
+  // The wiring contract (the consuming game's item): LoadPack once at
+  // startup, and every path-based Add whose blob is IN the pack loads from
+  // it, with the entry name being the path minus its leading "assets/".
+  // Paths that the pack does not hold fall back to the loose file, so a
+  // development tree with a partial pack still works and call sites never
+  // change.
+
+  static std::string WriteTestPack(const char *name) {
+    std::ifstream bmp("./specs/assets/images/white8.bmp", std::ios::binary);
+    std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(bmp)),
+                               std::istreambuf_iterator<char>());
+    PackWriter writer;
+    writer.Add("gfx/white8.bmp", bytes);
+    std::ostringstream out;
+    writer.Save(out);
+    std::string path = std::string("./specs/assets/") + name;
+    std::ofstream file(path, std::ios::binary);
+    file << out.str();
+    return path;
+  }
+
+  It(should_load_from_the_pack_when_loadpack_holds_the_entry) {
+    const std::string packPath = WriteTestPack("loadpack-test.pak");
+
+    AssetStore store;
+    Assert::That(store.LoadPack(packPath), Equals(true));
+    SpecSurfaceTarget target(8, 8);
+    store.AddTexture(target.renderer, "tex", "assets/gfx/white8.bmp");
+    SDL_Texture *texture = store.GetTexture("tex");
+    Assert::That(texture != nullptr, Equals(true));
+    store.ClearAssets();
+    std::remove(packPath.c_str());
+  };
+
+  It(should_fall_back_to_the_loose_file_when_the_pack_misses) {
+    const std::string packPath = WriteTestPack("loadpack-test.pak");
+
+    AssetStore store;
+    Assert::That(store.LoadPack(packPath), Equals(true));
+    SpecSurfaceTarget target(8, 8);
+    // In the pack, but under a name the strip rule does not produce.
+    store.AddTexture(target.renderer, "tex", "specs/assets/images/white8.bmp");
+    SDL_Texture *texture = store.GetTexture("tex");
+    Assert::That(texture != nullptr, Equals(true));
+    store.ClearAssets();
+    std::remove(packPath.c_str());
+  };
+
+  It(should_keep_the_loose_contract_when_loadpack_fails) {
+    AssetStore store;
+    Assert::That(store.LoadPack("./specs/assets/no-such-pack.pak"),
+                 Equals(false));
+    SpecSurfaceTarget target(8, 8);
+    store.AddTexture(target.renderer, "tex",
+                     "./specs/assets/images/white8.bmp");
+    Assert::That(store.GetTexture("tex") != nullptr, Equals(true));
+    store.ClearAssets();
+  };
+
+  It(should_replace_the_pack_when_loadpack_is_called_again) {
+    const std::string packPath = WriteTestPack("loadpack-test.pak");
+    AssetStore store;
+    Assert::That(store.LoadPack(packPath), Equals(true));
+    Assert::That(store.LoadPack(packPath), Equals(true));
+    SpecSurfaceTarget target(8, 8);
+    store.AddTexture(target.renderer, "tex", "assets/gfx/white8.bmp");
+    Assert::That(store.GetTexture("tex") != nullptr, Equals(true));
+    store.ClearAssets();
+    std::remove(packPath.c_str());
+  };
+
+  It(should_load_fonts_from_the_pack_through_loadpack) {
+    std::ifstream ttf("./specs/assets/fonts/font.ttf", std::ios::binary);
+    std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(ttf)),
+                               std::istreambuf_iterator<char>());
+    PackWriter writer;
+    writer.Add("fonts/font.ttf", bytes);
+    std::ostringstream out;
+    writer.Save(out);
+    const std::string packPath = "./specs/assets/loadpack-font.pak";
+    std::ofstream file(packPath, std::ios::binary);
+    file << out.str();
+
+    Assert::That(TTF_Init() == 0, Equals(true));
+    AssetStore store;
+    Assert::That(store.LoadPack(packPath), Equals(true));
+    store.AddFont("font", "assets/fonts/font.ttf", 16);
+    TTF_Font *font = store.GetFont("font");
+    Assert::That(font != nullptr, Equals(true));
+    // The lazy-read proof, through the pack this time: Measure reads glyphs
+    // long after AddFont returned, from the blob the store kept alive.
+    const SDL_Point size = Text::Measure(font, "AJ");
+    Assert::That(size.x > 0, Equals(true));
+    Assert::That(size.y > 0, Equals(true));
+    store.ClearAssets(); // frees the font (and its RWops) before TTF_Quit
+    TTF_Quit();
+    std::remove(packPath.c_str());
   };
 };

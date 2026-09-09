@@ -285,6 +285,18 @@ Describe(AssetStorePackSpec) {
     std::remove(packPath.c_str());
   };
 
+  It(should_match_the_dot_slash_assets_prefix_the_game_writes) {
+    // The consuming game's paths carry a CWD-relative "./" ("./assets/...").
+    const std::string packPath = WriteTestPack("loadpack-test.pak");
+    AssetStore store;
+    Assert::That(store.LoadPack(packPath), Equals(true));
+    SpecSurfaceTarget target(8, 8);
+    store.AddTexture(target.renderer, "tex", "./assets/gfx/white8.bmp");
+    Assert::That(store.GetTexture("tex") != nullptr, Equals(true));
+    store.ClearAssets();
+    std::remove(packPath.c_str());
+  };
+
   It(should_fall_back_to_the_loose_file_when_the_pack_misses) {
     const std::string packPath = WriteTestPack("loadpack-test.pak");
 

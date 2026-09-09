@@ -88,11 +88,18 @@ bool AssetStore::InPack(const std::string &filePath) const {
 std::string AssetStore::PackEntryName(const std::string &filePath) const {
   // The convention, in one place: the path as the game writes it minus its
   // leading "assets/" (the pack's entries are relative to the assets root).
-  static const std::string kPrefix = "assets/";
-  if (filePath.rfind(kPrefix, 0) == 0) {
-    return filePath.substr(kPrefix.size());
+  // The optional "./" comes first - the consuming game writes
+  // "./assets/gfx/x.png", and CWD-relative paths commonly carry it.
+  std::string path = filePath;
+  static const std::string kDot = "./";
+  if (path.rfind(kDot, 0) == 0) {
+    path.erase(0, kDot.size());
   }
-  return filePath;
+  static const std::string kPrefix = "assets/";
+  if (path.rfind(kPrefix, 0) == 0) {
+    return path.substr(kPrefix.size());
+  }
+  return path;
 }
 
 SDL_RWops *AssetStore::OpenPackEntry(const PackReader &pack,

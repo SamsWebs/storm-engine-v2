@@ -51,6 +51,30 @@
 - Site updated before Labor Day, GitHub links repaired, and the pages
   workflow bumped to `actions/deploy-pages` v5.
 
+### Changed
+
+- **The CI base image is bookworm, owned by this repo, and the binary floor
+  moved with it.**
+  The old base (`storminator16/igloo-testing:latest`, Debian bullseye,
+  provenance unknown) died mid-release when bullseye's LTS ended 2026-08-31:
+  its security suite was retired and swept, and `apt-get update` aborted
+  three release runs before anything compiled (expired metadata, then 404s
+  on the swept pool, then the same in the `.deb` install gate's container).
+  The replacement is built from `docker/igloo-testing/Dockerfile` in this
+  repo — Debian 12, every build dependency baked in, igloo + snowhouse pinned
+  — and published per-arch as `storminator16/igloo-testing:bookworm`.
+
+  The binary floor rises to **Ubuntu 22.04 / Debian 12**: bookworm's
+  toolchain emits `GLIBCXX_3.4.29` and `GLIBC_2.32` version refs into the
+  `.so` (compiler artifacts, not engine calls), so it cannot load on 20.04's
+  glibc 2.31 no matter what `Depends:` says. Ubuntu 20.04 and bullseye leave
+  the install gate with it. **Source consumers are unaffected** — the engine
+  still compiles and runs against SDL 2.0.10 headers. With a 22.04+ floor the
+  derived floors resolve as-is, so the old `2.0.12 → 2.0.10` symbols-file
+  rewrite in the release workflow is deleted rather than grown: it existed to
+  keep 20.04 installable, and its proof gate left with 20.04. `README`
+  states the split plainly: 2.0.10 headers for source, 22.04 binaries.
+
 ## [2.3.0] - 2026-09-02
 
 ### Added

@@ -322,6 +322,26 @@ Describe(AssetStorePackSpec) {
     store.ClearAssets();
   };
 
+  It(should_readblobs_from_the_pack_and_fall_back_like_the_adds) {
+    const std::string packPath = WriteTestPack("loadpack-test.pak");
+    AssetStore store;
+    Assert::That(store.LoadPack(packPath), Equals(true));
+
+    // Pack hit: the bytes come out exactly as written.
+    std::vector<uint8_t> bytes{1};
+    Assert::That(store.ReadBlob("assets/gfx/white8.bmp", &bytes), Equals(true));
+    Assert::That(bytes.size() > 0u, Equals(true));
+
+    // Pack miss: false and untouched - the caller reads the file.
+    std::vector<uint8_t> keep{42};
+    Assert::That(store.ReadBlob("assets/gfx/no-such.png", &keep),
+                 Equals(false));
+    Assert::That(keep.size(), Equals(1u));
+
+    store.ClearAssets();
+    std::remove(packPath.c_str());
+  };
+
   It(should_replace_the_pack_when_loadpack_is_called_again) {
     const std::string packPath = WriteTestPack("loadpack-test.pak");
     AssetStore store;

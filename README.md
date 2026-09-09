@@ -147,12 +147,14 @@ Each is throttled independently and stays silent afterward, so it will not flood
 
 Pre-built `.deb` packages are available on the [Releases](https://github.com/WillSams/storm-engine-v2/releases) page.
 
-**Supported baseline: SDL2 2.0.10 or newer**, which means Ubuntu 20.04 / Linux
-Mint 20 and up, and Debian 11 (bullseye) and up. Both architectures are checked
-against `ubuntu:20.04`, `debian:bullseye`, `debian:bookworm`, `ubuntu:22.04` and
-`ubuntu:24.04` on every release -- the package is installed in each and its
-library checked for unresolved libraries, so this is a tested claim rather than
-an intention.
+**Supported baseline: SDL2 2.0.10 or newer for source consumers** — the engine
+still compiles and runs against Ubuntu 20.04 / Linux Mint 20's SDL headers.
+The **binary** `.deb` floor is higher: Ubuntu 22.04 / Debian 12 (bookworm) and
+up, because the release is built on a bookworm toolchain whose libc and
+libstdc++ the older distros cannot load. Both architectures are checked
+against `debian:bookworm`, `ubuntu:22.04` and `ubuntu:24.04` on every release
+-- the package is installed in each and its library checked for unresolved
+libraries, so this is a tested claim rather than an intention.
 
 ### Debian / Ubuntu / Linux Mint (amd64)
 

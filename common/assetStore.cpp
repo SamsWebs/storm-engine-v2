@@ -48,6 +48,10 @@ void AssetStore::StoreTexture(SDL_Renderer *renderer,
 
 void AssetStore::AddTexture(SDL_Renderer *renderer, const std::string &assetId,
                             const std::string &filePath) {
+  if (InPack(filePath)) {
+    AddTexture(renderer, assetId, *pack_, PackEntryName(filePath));
+    return;
+  }
   SDL_Surface *surface = IMG_Load(filePath.c_str());
   if (!surface) {
     logger.Err("AssetStore: failed to load '" + filePath + "' — " +
@@ -55,6 +59,40 @@ void AssetStore::AddTexture(SDL_Renderer *renderer, const std::string &assetId,
     return;
   }
   StoreTexture(renderer, assetId, surface);
+}
+
+bool AssetStore::LoadPack(const std::string &pakPath) {
+  auto stream = std::make_unique<std::ifstream>(pakPath, std::ios::binary);
+  auto reader = std::make_unique<PackReader>();
+  if (!*stream || !reader->Open(*stream)) {
+    logger.Err("AssetStore: no usable pack at '" + pakPath +
+               "' - the loose-file contract stands");
+    packStream_.reset();
+    pack_.reset();
+    return false;
+  }
+  packStream_ = std::move(stream);
+  pack_ = std::move(reader);
+  logger.Log("AssetStore: asset pack loaded from '" + pakPath + "' (" +
+             std::to_string(pack_->Count()) + " entries)");
+  return true;
+}
+
+bool AssetStore::InPack(const std::string &filePath) const {
+  if (pack_ == nullptr) {
+    return false;
+  }
+  return pack_->Has(PackEntryName(filePath));
+}
+
+std::string AssetStore::PackEntryName(const std::string &filePath) const {
+  // The convention, in one place: the path as the game writes it minus its
+  // leading "assets/" (the pack's entries are relative to the assets root).
+  static const std::string kPrefix = "assets/";
+  if (filePath.rfind(kPrefix, 0) == 0) {
+    return filePath.substr(kPrefix.size());
+  }
+  return filePath;
 }
 
 SDL_RWops *AssetStore::OpenPackEntry(const PackReader &pack,
@@ -128,6 +166,10 @@ void AssetStore::StoreFont(const std::string &assetId, TTF_Font *font,
 
 void AssetStore::AddFont(const std::string &assetId,
                          const std::string &filePath, int ptSize) {
+  if (InPack(filePath)) {
+    AddFont(assetId, *pack_, PackEntryName(filePath), ptSize);
+    return;
+  }
   // TTF_OpenFont on a live font is the whole reason this cache exists: it
   // reads the file and builds a rasteriser every call, and a game that opened
   // one per DrawText paid that on every line of every frame.
@@ -175,6 +217,10 @@ void AssetStore::StoreSound(const std::string &assetId, Mix_Chunk *chunk) {
 
 void AssetStore::AddSound(const std::string &assetId,
                           const std::string &filePath) {
+  if (InPack(filePath)) {
+    AddSound(assetId, *pack_, PackEntryName(filePath));
+    return;
+  }
   Mix_Chunk *chunk = Mix_LoadWAV(filePath.c_str());
   if (!chunk) {
     logger.Err("AssetStore: failed to load sound '" + filePath + "' - " +

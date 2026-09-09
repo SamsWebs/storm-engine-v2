@@ -1,5 +1,21 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- **`AssetStore::LoadPack` — the one-choke-point pack wiring.**
+  A game calls `LoadPack("assets.pak")` once at startup; afterwards every
+  path-based `AddTexture`/`AddFont`/`AddSound` whose blob is in the pack
+  loads from it, with the entry name being the path minus its leading
+  `assets/`. Paths the pack does not hold fall back to the loose file, so a
+  development tree with a partial pack still works and no call site
+  changes. A missing or corrupt pack file is logged and simply leaves the
+  loose-file contract standing. The store owns the pack's stream for its
+  lifetime — the same lazy-read rule that keeps pack-font blobs alive.
+  `sizeof(AssetStore)` 256 → 272 (two `unique_ptr`s); `layout.spec.cpp`
+  updated with the reason.
+
 ## [2.3.1] - 2026-09-08
 
 ### Added

@@ -11,6 +11,9 @@
 
 #include "logger.h"
 
+#include <fstream>
+#include <memory>
+
 namespace storm {
 
 struct PackReader; // packFile.h — the pack overloads take it by reference
@@ -54,6 +57,18 @@ public:
   void AddTexture(SDL_Renderer *renderer, const std::string &assetId,
                   const std::string &filePath);
   SDL_Texture *GetTexture(const std::string &assetId) const;
+
+  // THE WIRING CHOKE POINT. Loads the game's asset pack once; afterwards
+  // every path-based Add whose blob is IN the pack loads from it, with the
+  // entry name being the path minus its leading "assets/" (the game writes
+  // paths as "assets/gfx/x.png", the pack's entries are relative to the
+  // assets root). Paths the pack does not hold fall back to the loose file,
+  // so a development tree with a partial pack still works and no call site
+  // changes. False for a missing or corrupt pack file: logged, the pack is
+  // simply inactive, the loose contract stands. Loading again replaces the
+  // pack. The store owns the stream for the store's lifetime; the pack is
+  // NOT freed by ClearAssets (it holds no asset instances).
+  bool LoadPack(const std::string &pakPath);
 
   // Pack-file variants: the blob comes from a storm::PackReader instead of
   // a file path. Same error contract - a missing entry, an empty blob, an
@@ -114,6 +129,19 @@ private:
   SDL_RWops *OpenPackEntry(const PackReader &pack, const std::string &entryName,
                            const std::string &assetId, const char *kind,
                            std::vector<uint8_t> &bytes);
+
+  // One decision for all three path-based Adds (CODING.md tenet 1): is this
+  // blob in the loaded pack? The entry-name convention lives here — the
+  // path minus its leading "assets/" — so a game that names its pack
+  // entries differently can never half-match.
+  bool InPack(const std::string &filePath) const;
+  std::string PackEntryName(const std::string &filePath) const;
+
+  // The pack stream and reader, owned for the store's lifetime. The font
+  // lazy-read rule makes the STREAM outlive every pack-loaded font, which
+  // is why these are members and not locals in LoadPack.
+  std::unique_ptr<std::ifstream> packStream_;
+  std::unique_ptr<PackReader> pack_;
 };
 
 typedef std::unique_ptr<AssetStore> AssetStore_Ptr;

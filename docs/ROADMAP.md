@@ -678,6 +678,17 @@ Two lessons worth keeping:
   rather than after it. It also surfaced that Dear ImGui is pinned at 1.79 WIP
   from around 2020 — now a decision someone can make on evidence.
 
+  **There are two recorded divergences from upstream imgui now, not one.** The
+  cleanup pass dropped `imgui_demo.cpp`, which was being compiled by
+  `editor/Makefile`'s `$(wildcard ../vendor/imgui/*.cpp)` and called by nothing,
+  and then had to remove six declarations from `imgui.h` — `ShowDemoWindow`,
+  `ShowAboutWindow`, `ShowStyleEditor`, `ShowStyleSelector`, `ShowFontSelector`,
+  `ShowUserGuide` — because leaving them declared let a call compile and fail at
+  link. `IMGUI_DISABLE_DEMO_WINDOWS` looks like the supported answer and is not:
+  the empty stubs it selects lived in the deleted file. Both deltas are in
+  `vendor/MANIFEST.md`; anyone taking the pin off 1.79 has to reapply or discard
+  them deliberately.
+
 Editor warnings that remain (narrowing, sign-compare, a duplicate `clean`
 recipe between `editor/Makefile` and `base.mk`) are pre-existing and untouched.
 

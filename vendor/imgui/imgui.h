@@ -255,13 +255,21 @@ namespace ImGui
     IMGUI_API ImDrawData*   GetDrawData();                              // valid after Render() and until the next call to NewFrame(). this is what you have to render.
 
     // Demo, Debug, Information
-    IMGUI_API void          ShowDemoWindow(bool* p_open = NULL);        // create Demo window (previously called ShowTestWindow). demonstrate most ImGui features. call this to learn about the library! try to make it always available in your application!
-    IMGUI_API void          ShowAboutWindow(bool* p_open = NULL);       // create About window. display Dear ImGui version, credits and build/system information.
+    //
+    // LOCAL DIVERGENCE FROM UPSTREAM. imgui_demo.cpp is not vendored here, so
+    // ShowDemoWindow, ShowAboutWindow, ShowStyleEditor, ShowStyleSelector,
+    // ShowFontSelector and ShowUserGuide have no definition in this tree and
+    // their declarations are removed. Leaving them declared would let a call
+    // compile and then fail at link with an undefined reference, which is a
+    // worse answer than not offering them.
+    //
+    // IMGUI_DISABLE_DEMO_WINDOWS does NOT substitute for this: the empty stubs
+    // that macro selects live in imgui_demo.cpp too. To get any of them back,
+    // restore imgui_demo.cpp from upstream at the version in vendor/MANIFEST.md
+    // and restore these declarations with it.
+    //
+    // ShowMetricsWindow stays -- it is defined in imgui.cpp, not in the demo.
     IMGUI_API void          ShowMetricsWindow(bool* p_open = NULL);     // create Debug/Metrics window. display Dear ImGui internals: draw commands (with individual draw calls and vertices), window list, basic internal state, etc.
-    IMGUI_API void          ShowStyleEditor(ImGuiStyle* ref = NULL);    // add style editor block (not a window). you can pass in a reference ImGuiStyle structure to compare to, revert to and save to (else it uses the default style)
-    IMGUI_API bool          ShowStyleSelector(const char* label);       // add style selector block (not a window), essentially a combo listing the default styles.
-    IMGUI_API void          ShowFontSelector(const char* label);        // add font selector block (not a window), essentially a combo listing the loaded fonts.
-    IMGUI_API void          ShowUserGuide();                            // add basic help/info block (not a window): how to manipulate ImGui as a end-user (mouse/keyboard controls).
     IMGUI_API const char*   GetVersion();                               // get the compiled version string e.g. "1.23" (essentially the compiled value for IMGUI_VERSION)
 
     // Styles

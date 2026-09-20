@@ -7,6 +7,429 @@ The point of this file is the *reasoning*. Anyone can re-derive a task list; wha
 gets lost between sessions is why the order is what it is, and which decisions
 were already argued and settled.
 
+**Current release:** 2.3.1. **Next:** 2.4.0. The forward-looking section is
+[What's next — the 2.4 → 3.0 line](#whats-next--the-24--30-line), added
+2026-09-17; everything below it is history and stays as it is.
+
+---
+
+## What's next — the 2.4 → 3.0 line
+
+Added 2026-09-17. This is the first forward-looking section in this file. It was
+written against the tree at 2.3.1-6-g2430bf9 plus an audit of Center Ice Hockey's
+consumption of the engine.
+
+### The audience decides the order
+
+This phase is not ordered by risk to existing consumers, which is how 2.0.0 was
+ordered. It is ordered by what a game that has not been written yet hits first,
+because that is who it is for.
+
+A new game hits, in its first week: a way to finish a frame, a way to scale its
+UI, a way to draw and measure text, a way to play sound, and a way to read input.
+It does not hit component-membership re-evaluation, storage layout or system
+ordering until it is large enough to spawn entities mid-frame — by which point its
+own code has accumulated enough that a breaking change is expensive for it. So the
+additive work goes first and the ECS wave goes last, in a major, deliberately.
+
+That is the complement of 2.0.0's own lesson, not a contradiction of it. 2.0.0's
+rule was *spend the whole breaking budget at once*, and the same file records
+taking `GameStateMachine`'s copy operations late "because the alternative was
+spending a whole major on a one-line fix". Both hold at once: batch the breaks,
+and do not smuggle an additive feature into a major because a major happens to be
+coming.
+
+### Why this list, and not a list someone preferred
+
+Three sources, and an item has to come from one of them:
+
+1. **The engine already knows it is wrong.** `KNOWN_ISSUES.md` and the carried
+   lists in this file — the ECS membership trap, the `gameState.h` include cost,
+   the unversioned `.map`, the Switch networking halves.
+2. **A shipping game built it by hand because the engine had nothing.** Measured
+   below. This is the strongest evidence available, because the cost has already
+   been paid once by someone who had no choice.
+3. **A release already fell through it.** The verification gaps, the dead source
+   list, a stale plan read as a work queue.
+
+What is deliberately *not* a source: what would be pleasant to have. A wish is
+not a roadmap item, and the promotion test in "What we will not do" is what keeps
+that honest.
+
+### The evidence: one consumer, measured
+
+Center Ice Hockey is the only consumer tracking the 2.x line. The other two games
+on this engine (`Conan-the-Caveman-Android`, `etw2kxx`) are pinned at **v1.2.1**,
+so the sample for "what a future game wants" is currently one game — stated here
+as the section's main risk, not buried.
+
+Measured on 2026-09-17:
+
+```sh
+# Which engine headers the game actually includes
+grep -rhno "stormengine2/[a-zA-Z0-9_/.]*" src/ | sed 's/.*\(stormengine2[^"]*\)/\1/' \
+  | sort | uniq -c | sort -rn
+```
+
+**Ten of the engine's 38 headers.** `assetStore.h`, `states/gameStateBase.h`,
+`gameStateMachine.h`, `logger.h`, the net trio, `collision/shapes.h`,
+`input/virtualGamepad.h`, `input/touchControls.h`. Zero ECS, zero components,
+zero systems.
+
+That number is not automatically a defect — a large game may legitimately use a
+third of its library — but four of the ten findings below are places where the
+*game wrote something the engine also ships*, and that is a defect whichever way
+the usage number is read:
+
+| # | The engine ships | The game wrote | Measured |
+|---|---|---|---|
+| 1 | A `GameState` with no way to finish a frame | `CihState::Present()` | **0** `SDL_RenderPresent` in `common/`, **36** across 18 example source files |
+| 2 | `input/actionMap.h`, spec'd and bridged | 627-line `inputReader.h` | `actionMap.h` has **zero consumers** outside its own spec — no example, no game, nothing |
+| 3 | `text.h` (`Text::Draw`/`Measure`) | 596-line `ui/text.h` with its own `DrawText`/`TextWidth`, which does not include the engine's | `text.h`'s own comment records four examples writing their own copy, and the copies diverging |
+| 4 | Nothing at all for layout scale | `ui/scale.h` — `UiScale`/`Px`/`FontPt`, pure and SDL-free | 9,367 lines under the game's `src/ui/`, of which the scale pair is the plainly generic part |
+
+And three more where the engine has no counterpart at all, each describable
+without naming hockey, which is the test for engine-shaped:
+
+- **Audio.** `AssetStore` caches a `Mix_Chunk`; there is no music, no channel
+  owner, no volume model and no way to turn engine-side sound off. The game has
+  607 lines of SDL_mixer glue over a pure volume header.
+- **Host address enumeration.** The engine has a whole UDP net layer and nothing
+  that answers "what is my LAN address", which is the first question the host of
+  a LAN match has to answer in the UI. The game wrote it per platform
+  (`getifaddrs` / `getaddrinfo` / a Switch guard), then split the *ranking* rule
+  into a pure spec'd header.
+- **Unversioned `.map`.** The editor format carries no version field, has two
+  hand-rolled parsers, and no round-trip spec. 2.0.0 already had to change
+  `sizeof(Tile)` once for data the editor had been writing all along.
+
+### How an item here is read
+
+Every item carries three things a bare task list drops: **effort**, **what a
+consumer has to do**, and **how you know it landed**. The middle one is the cost
+nobody prices — an engine change that forces every game to rebuild is not free
+because it was additive.
+
+**An item is done when a spec fails without it, or when an in-tree example uses
+it** — never because the build is green and the header exists. This repo has the
+scar for that: `actionMap.h` shipped spec'd, bridged into `compat/global.h` and
+used by nobody, and nothing anywhere said so.
+
+| Item | Effort | What a consumer must do |
+|---|---|---|
+| Track 0, all six | S each | nothing |
+| 2.4.1 `GameState::Present()` | M | call it where `SDL_RenderPresent` is called today |
+| 2.4.2 `ui/scale.h` | S | nothing — new header, opt in |
+| 2.4.3 `text.h` verbs | S | nothing — additive statics |
+| 2.4.4 `version.h` | S | nothing; examples adopt `--version` |
+| 2.4.5 debug overlay | S | nothing — opt in |
+| 2.5.1 version the `.map` | M | rebuild; **the editor must write the new version too** |
+| 2.5.2 asset path seam | M | nothing, unless the game wants a writable base |
+| 2.5.3 blob lifetime rules | S | nothing — documentation |
+| 2.6.1 engine mixer | M | nothing |
+| 2.6.2 `input/inputHub.h` | L | opt in; `ActionMap` unchanged |
+| 2.6.3 an example adopts it | S | nothing |
+| 2.7.1 host address enumeration | S | nothing |
+| 2.7.2 the Switch halves | S | Switch consumers rebuild |
+| 3.0.0 the ECS wave | L | rebuild + an `UPGRADING.md` entry per break |
+
+**Effort is a band, not an estimate:** S is under a day, M is one to two, L is a
+week or more of the kind of work this repo actually does — the 2.0.0 entries
+carried "Hours" and "About a day" for the same reason, and one of them was wrong
+in the optimistic direction. Treat the column as sequencing input, not as a
+promise.
+
+### Track 0 — the repo, not the library (continuous, unversioned)
+
+These are not features and should not wait for a release. Each is a hole a
+release already fell through.
+
+1. **Finish retiring the guardrails plan.**
+   `docs/superpowers/plans/2026-08-30-engine-guardrails.md` is 2,344 lines
+targeting **1.4.0** across eleven usage traps, and it now reads as a work queue
+for work that is mostly done. Measured trap by trap on 2026-09-17 — **nine of the
+eleven are resolved**, and none of them by the plan:
+
+   | Trap | State |
+   |---|---|
+   | 1 `CollisionSystem` kills | ✅ Class deleted in 2.0.0 |
+   | 2 component added after admission | ✅ Throttled diagnostic in `ecs.h` (`SystemMissedByLateComponent`) |
+   | 2b system registered late | ✅ Diagnostic in `AddSystem`, plus `AdmitExistingEntitiesTo` |
+   | 3 `Update()` never called | ✅ Diagnostic in `ecs.cpp` |
+   | 4 `AddSystem<T>(5)` unbuildable | ✅ `AddSystem(Targs &&...)`, perfect-forwarding |
+   | 5 `GetSystem<T>()` throws | ✅ `TryGetSystem` added |
+   | 6 recycled ids | ✅ Generation counter, 2.0.0 |
+   | 7 `GetComponent` alias on miss | ✅ Per-thread reset + `TryGetComponent` |
+   | 8 no keyboard abstraction | 🟡 `keyboard.h` and `actionMap.h` exist; the main loop is still the game's |
+   | 9 no namespaces | ✅ `namespace storm`, 2.0.0 |
+   | 10 `SpriteComponent::width/height` are the source rect | ⬜ Still undocumented, and it is still the trap |
+   | 11 `AnimationComponent::vertical` wrong draws nothing | ⬜ Still silent |
+
+   So the disposition is: nine done elsewhere, one half done, two still open —
+   and the two that remain are documentation and a diagnostic, not the plan's
+   architecture. Write that table at the head of the file and leave the body as
+   history.
+2. **`docs/TECH_DEBT.md` is gitignored** — it is listed in `.gitignore`, so a
+   fresh clone has no ledger, CI cannot check it, and its "last reviewed" line is
+   the only freshness signal. It reads 2026-08-23, and its number one item is
+   not what it says it is: `TileMapLoader`'s three silent-failure modes are now
+   **two**, because `5758dfc` added the missing unopenable-file report and
+   replaced `std::stoi` with `strtol`. **The third mode is still open** —
+   `loadFilemapEditor` ends its read loop with no `fail()`/`eof()` check and no
+   diagnostic, so a malformed record mid-file still truncates the level silently
+   (`grep -n 'eof()\|malformed' common/tilemapLoader.cpp` finds only a comment).
+   A gitignored ledger that is three weeks stale and whose top item is
+   mis-described is worse than no ledger, because it is read as current.
+   Keep the file as the working notebook it declares itself to be, but **move the
+   durable half into this file**: an open item that matters belongs here, where
+   it is tracked and reviewed, and the notebook is where the reasoning lands. A
+   rule written at the head of an untracked file is not a record — that rule
+   disappears with the clone.
+3. **Fix this file's own stale statuses.** The "After 2.0.0 ships" entries for
+   the lighting overlay, circle colliders and the non-ECS collision entry are all
+   **done** and their headings do not say so. See the status block added there.
+4. **One canonical source list.** `examples/nx-platformer/Makefile` and the
+   Android CMake glob have both been non-recursive before, and the recurring fix
+   written down twice was "emit the canonical source list once and have every
+   build path read it". Nothing has. That is one file, and it retires a whole
+   class of defect rather than an instance.
+5. **State the verification matrix.** Done for this file — see "What CI
+   actually verifies, and what ships green" under [Build and CI](#build-and-ci).
+   The remaining half is the release checklist, so "all targets build" can never
+   again be written from intent.
+6. **A layout/measurement harness for the examples.** The engine ships 14
+   examples with UI and no way to look at one without playing to it. The flagship
+   game's `tools/layout_shot.cpp` renders the real font at the positions the
+   layout code computes and writes a PNG under Xvfb. One tool serves every
+   example, and the rule it enforces — *look at a screen you changed* — has caught
+   four layout defects in one session in the game that adopted it.
+
+### 2.4.0 — frame and presentation seams (additive)
+
+Nothing here changes a public signature, a struct layout or a member. The layout
+pins in `specs/layout.spec.cpp` are the gate: a size that moves in a minor is a
+bug in this plan, not a licence.
+
+1. **`GameState::Present()`.** A non-virtual method with no new member, which is
+exactly the trick `CapFrameRate` already uses in that header — "Non-virtual and
+adds no member, so it changes neither `GameState`'s layout nor its vtable." It
+draws the registered overlays and then calls `SDL_RenderPresent` once. The
+motivation is specific: on Android the touch overlay must be drawn *before* the
+present, and a state that calls `SDL_RenderPresent` itself ships a menu with
+invisible controls that looks perfect on every other platform. That defect
+shipped once in the flagship game; the fix there was a base class rather than a
+convention, and the engine is where it belongs.
+
+   **Who owns the overlay list is a design decision this file deliberately does
+   not make** — it belongs in the implementation plan, with two constraints
+   already settled by the reasoning above: one call draws overlays *and*
+   presents, so the ordering cannot be got wrong by a caller, and the ordering
+   itself is spec'd rather than implied. What it must not become is a second
+   convention a game can bypass by calling `SDL_RenderPresent` directly, because
+   a convention is what failed the first time.
+2. **`stormengine2/ui/scale.h`.** `UiScale(windowHeight)` / `Px(v, h)` /
+`FontPt(basePt, h)` — pure, SDL-free, spec'd. A game that scales its fonts but
+not its literal offsets gets a 4K layout whose halves drift apart; a game that
+scales both by different factors gets the same thing more slowly. One function is
+what makes them agree by construction.
+3. **`text.h` grows the drawing verbs it is missing.** Centre and right
+alignment, a measured fit that *marks* a truncated string rather than clipping it
+silently, and a footer built from a list of parts so it can wrap between verbs.
+All additive statics; the existing four keep their signatures. The engine's own
+`text.h` comment already documents why this matters — three example copies
+diverged until one of them re-opened the font per call.
+4. **`stormengine2/version.h`.** A compile-time `kEngineVersion` and
+`VersionString()`, so a binary can answer for itself which engine it was built
+against, and the release number gets **one source** instead of a hand-bump in
+`Makefile.debian`, `Makefile.win` and eight places in `web/index.html`. A compile
+flag is not a property of the artifact; this is the smallest fix for that. Being
+a library, the engine cannot print — the header is the answer, and the examples
+adopt it in a `--version` switch so at least one built binary in the tree does.
+The mechanism is a generated header, not a second hand-edited copy of the
+number, or it has moved the problem rather than fixed it.
+5. **A debug overlay.** The cheapest item on the previous list and still the
+right one: FPS, frame time, entity count, per-system timings and the last few
+`Err` lines, toggled with a key. It is also the only diagnostic surface a game
+ships to a player, which the logger is not.
+
+### 2.5.0 — data and asset seams (additive, plus one format change)
+
+1. **Version the `.map`.** A header line carrying a format version, one parser
+instead of two, and a round-trip spec. The rule being adopted is the flagship
+game's config contract: *unknown keys are ignored* covers a key being added or
+removed, and does **not** cover a key that still parses and now means something
+else. A `.map` with no version cannot tell a reader which of those it is, and
+2.0.0's `Tile` change is the proof that this format does move.
+
+   Two consumers, and the second is the one that gets forgotten: the engine's
+   `TileMapLoader`, and `editor/src/utilities/FileLoader.cpp`, which writes the
+   format with its own stream of `<<` and is a separate binary that has to be
+   rebuilt and repackaged in the same release. **A map written before the version
+   existed must keep loading** — the absent header reads as version 1 — and a map
+   declaring a version the build does not know must be refused with a
+   diagnostic, which is the half that costs anything. Neither parser bounds the
+   record it is reading beyond the stream's own conversions, so the version line
+   is also the place to state what a malformed record does.
+2. **The asset path seam, written down and completed.** `AssetPath` (the game
+path a pack-aware loader consumes) and `AssetFilePath` (the path a real file is
+opened at) are already two functions and already the source of a shipped defect —
+`PackEntryName` gained a `./` strip because a game handed the second one's shape
+to the first and the pack was skipped. Add the third piece: a writable base and a
+readable-override resolver, so "shipped content is read-only, the player's
+replacement lives beside the save" is one call rather than a per-game convention.
+Document all three together in `docs/assets.md`, including the pack-vs-loose
+fallback.
+3. **Raw bytes for the loads the store does not cache.** `ReadBlob` is on the
+branch and **unreleased** (`68b3940`, after the `v2.3.1` tag), and it is **absent
+from `CHANGELOG.md` altogether** — zero hits, while `LoadPack` from the commit
+before it has an entry. That is the repo's own rule broken in the commit that
+added the API: "a public API change is documented in the same branch that makes
+it." Add the entry, and add the second half this item is about: the statement of
+which loads are synchronous and which are lazy, because the two have different
+lifetime rules. A font opened over memory reads its bytes at render time; an
+image decoded through `IMG_Load` does not. That rule currently lives in a game's
+header comment. It belongs next to `ReadBlob`.
+
+### 2.6.0 — audio and input (additive)
+
+1. **An engine mixer.** Music versus sfx channel ownership, a pure volume model,
+pack-aware loads, and a seam for a game to hold its own music. The engine already
+links `SDL2_mixer` and already caches `Mix_Chunk`, so this adds a policy layer,
+not a dependency.
+2. **Make the input layer usable — add, do not rewrite.** `actionMap.h` has no
+consumer anywhere in the repo, and it is not because nobody found it: the three
+defects the flagship game's own reader documents are the reason a game wrote its
+own 627 lines.
+   - the event queue is drained only by the state on top, so a state pushed under
+     freezes — a pad plugged in while a child screen is up is never enumerated;
+   - hot-plug state must be process-wide, not per-state;
+   - edges must be per-state, so a new screen does not inherit the previous
+     screen's "was down".
+
+   All three are **additive fixes** if the answer is a new header rather than a
+   change to `ActionMap`: an `input/inputHub.h` that owns the device list and the
+   poll, hands each state its own edge trackers, and leaves `ActionMap` as the
+   binding table it already is. The repo rule applies — correct or extend the
+   existing mechanism before adding one — and here extending it means putting the
+   `ActionMap` per state *inside* a hub that owns what must be process-wide. That
+   is why this item stays in a minor instead of drifting into 3.0, which the first
+   draft of this section let it do by conflating "the abstraction is unused" with
+   "the abstraction must break".
+3. **Then make an example adopt it.** `examples/shooter` or `examples/sports`,
+   whichever is smaller, moves to the hub and drops its hand-rolled polling
+   (`grep -rn SDL_PollEvent examples/ --include=*.cpp` is **16 sites across nine
+   examples**). This is the step that is easy to skip and is the whole point: an
+   abstraction proven only by its own spec is not proven, which is exactly what
+   happened to `actionMap.h`, and nothing anywhere said so, because an uncalled
+   function is warning-free and the build is clean.
+
+### 2.7.0 — net polish
+
+1. **Host address enumeration**, engine-side and per platform, with the ranking
+rule split into a pure header the way the flagship game already did it. A net
+layer that cannot tell the host its own LAN address leaves every game to solve
+it.
+2. **The Switch halves.** `NetSocketsInit()` needs a `socketInitializeDefault()`
+arm, and `examples/nx-platformer/Makefile` needs a recursive source glob
+(`SOURCES := src src/states src/components include/stormengine2`, where
+`include/stormengine2` is a symlink to `common/` and therefore reaches the six
+top-level `.cpp` files and none of the seven under `common/net/`). These must land
+together: the first is masked by the second and surfaces the moment it is fixed.
+**Neither has been built here** — devkitPro is not on this machine — so both are
+ledger claims verified only as *still present in the source*, which is a weaker
+thing than verified as *broken*, and should be repeated to whoever builds it next
+rather than asserted.
+
+### 3.0.0 — the ECS wave (breaking, reserved, unscheduled)
+
+Reserved, not dated. It happens when a game is large enough that one of these is
+a measured cost, and the measurement is named at each item so "it felt slow" is
+not the trigger.
+
+1. **Component changes re-evaluate system membership.** `KNOWN_ISSUES.md` §5
+calls this "the single largest correctness trap in the ECS": membership is
+computed once per entity, so a component added after admission is invisible to
+that system forever. The workaround is "kill it and create a replacement", which
+is a workaround a game should not have to know. Trigger: any consumer that wants
+it.
+2. **A component-change hook, or membership the ECS can match as a union.** This
+is what removes `ContactSystem`'s per-frame narrowing scan — and the previous
+list's correction stands: a better broadphase does **not** remove it, because the
+scan exists because nothing notifies a system when a component is added. Trigger:
+a game with thousands of transform entities and a handful of bodies.
+3. **Trim `gameState.h`'s includes.** `KNOWN_ISSUES.md` §8 — 145,947
+preprocessed lines for a 23-line interface. `gameStateBase.h` took the 45% that
+was free in 1.3.0; the remaining trim is a source break for anything leaning on
+the transitive path. Trigger: scheduled with the wave, since it is free once a
+major is already happening.
+4. **Sparse-set component storage, and a system scheduler.** Both are on the
+"also on the 2.0.0 list" in `KNOWN_ISSUES.md`. Storage is O(highest id ever
+used) today and requires every component to be default-constructible; ordering is
+the caller's problem with no way to declare it. Neither is a defect; both are
+the shape of thing a mature game asks for.
+
+### Versioning policy
+
+Written down because "you pick the versioning" should not have to be asked
+again.
+
+| Change | Release |
+|---|---|
+| New header, new statics, new free function, new non-virtual method body | **Minor** (2.4, 2.5, 2.6, 2.7) |
+| `= delete` of a copy operation on a type that cannot usefully be copied | **Minor**, with a CHANGELOG note |
+| Public signature change, struct layout change, member deletion, include trim | **Major** (3.0) |
+| `.map` or other on-disk format change | **Minor**, with a version field and a refusal path |
+
+Three rules that go with the table:
+
+- **A layout pin moves in the same commit that moves the layout**, and
+  `specs/layout.spec.cpp` is the only place the number is allowed to change. A
+  size that moves without a pin edit fails the suite, which is the point.
+- **`~dev` sorts below the release; `-dev` does not.** A development version
+  stays `2.4.0~dev`. The 2.0.0 entry explains why the tilde is not a hyphen: a
+  game gating on `--atleast-version=2.4.0` would otherwise pass against a
+development build missing most of the release.
+- **Releases come from a pushed tag**, never from a merge. Already true; keep it.
+  It stopped being true once and published a set of breaking changes as a patch.
+
+### What we will not do, and why
+
+This is the part that keeps the list a roadmap rather than a wish list.
+
+**The promotion test.** Something moves into the engine when a second game wants
+it, *or* when it is plainly engine-shaped — describable without naming a game.
+Center Ice Hockey is one game, so the second test is doing most of the work here,
+and it is stated as such rather than dressed up as demand.
+
+**Stays in the game, deliberately:**
+
+- **The hockey domain.** Rink geometry, 639 clubs across 16 tiers, the season
+  and franchise simulations, trades, awards, the database and its migration
+  contract. None of it is describable without naming hockey.
+- **The screen models.** 30 per-screen column headers (`ls src/ui/*Columns.h`
+  in the flagship game), the menu row lists, the draft board. A table model is a
+  per-screen decision; the engine shipping one would be the engine shipping an
+  opinion. `dataTable`-style *measurement* primitives are a different question and
+  are in 2.4.0; the *content* is not.
+- **The database contract.** A player's own rows never destroyed, a schema
+  change migrated rather than discarded. The engine has no persistence and
+  should not grow one to host this.
+- **Anything whose only argument is that a dozen screens would use it.** That
+  was the argument for `actionMap.h` too.
+
+**Carried, and named so they are not rediscovered as new:**
+
+- `Makefile.win` has no `-pthread` while two spec files use `std::thread`.
+- `examples/examples.mk` links `-lstormenginev2` with no `-I` at the source tree,
+  so an example build resolves the *installed* headers. Documented, not enforced;
+  an automated tree-vs-install check was written and reverted because CI builds
+  from a separate tree.
+- Comments in `common/` cite line numbers and the line numbers rot. Cite
+  function names instead; this is a sweep, and a half-swept file is worse than an
+  unswept one.
+- `editor/` links only where `libnfd` exists, which Debian and Ubuntu do not
+  package.
+
 ---
 
 ## 2.0.0, second wave
@@ -359,6 +782,18 @@ author's memory of it.
 
 ## After 2.0.0 ships
 
+**Status re-checked 2026-09-17, because three of these headings did not say they
+were done and one of them reads as a queue it is not.**
+
+| Item | State |
+|---|---|
+| A non-ECS collision entry point | ✅ **Done** — `common/collision/shapes.h`; its own entry says so further down. |
+| A lighting overlay | ✅ **Done** — `common/lighting.h`, 2.3.0. |
+| Circle colliders and mixed-shape sweeps | ✅ **Done** — `CircleColliderComponent`, uniform grid broadphase. |
+| Extract the broadphase sweep | ⬜ **Open** — `common/collision/` holds `shapes.h` only; the sweep is still inside `ContactSystem`. |
+| An example with sustained entity churn | ⬜ **Open** — nothing in `examples/` creates and destroys entities continuously. |
+| A debug overlay | ⬜ **Open** — and moved into 2.4.0 above. |
+
 ### A non-ECS collision entry point
 
 The contact math is already ECS-free and does not know it. `ContactAABB` is four
@@ -601,6 +1036,32 @@ which currently only reach a log nobody reads during play.
 ---
 
 ## Build and CI
+
+### What CI actually verifies, and what ships green
+
+The matrix, so that "all targets build" is never again written from intent. Read
+off the three workflow files on 2026-09-17:
+
+| Target | Verified by | Covered |
+|---|---|---|
+| Engine library, specs, amd64 + arm64 `.deb` | `build-and-release.yml` (on a pushed tag) | ✅ |
+| Nine desktop examples linked, `editor/` compiled to objects | `pr-validate.yml`, in the Docker image | ✅ |
+| Seven examples built for Windows, plus `windows-platformer` against the packaged SDK zip | `build-and-release.yml` | ✅ |
+| `examples/nx-platformer` (devkitPro, `-fno-exceptions`) | nothing | ❌ **ships green** |
+| `examples/android-platformer` (NDK + six submodules) | nothing | ❌ **ships green** |
+
+The editor is compiled and never linked because `libnfd` has no Debian package;
+the two uncovered trees are uncovered because neither toolchain is in the image
+and `.dockerignore` keeps both out of the build context. Both facts are recorded
+in `.github/scripts/ci-build-examples.sh`, which is the file to read before
+changing this table.
+
+The consequence is the one that matters: **a change to a header every target
+compiles is unverified on two of the three platforms until a release is built.**
+That is exactly how a `getifaddrs` call reached the flagship game's shared header
+and passed 5.5k specs on Linux while Switch, Android and Windows could not build
+at all. When a change touches `common/`, say which targets were built and which
+were not; item 5 of Track 0 is to make that a checklist rather than a habit.
 
 ### `examples/examples.mk` silently compiles against the installed engine
 

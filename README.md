@@ -2,7 +2,7 @@
 
 A lightweight, ECS-based 2D game engine built on SDL2 - made for game jams and personal projects.
 
-> **"v2" is the second-generation engine.** The current release is **v2.1.0**, which adds circle colliders and pulls the collision math into a header with no ECS behind it - additive, no break. Before it, **v2.0.0** reset the 1.x API freeze: ten breaking changes land together so the traps they fix are gone for good rather than arriving one per release. **Upgrading from 1.x requires a rebuild, not a relink** - four structs changed size in 2.0.0 and `MAX_COMPONENTS` changed meaning without changing any size at all. Moving from 2.0.0 to 2.1.0 changes no layout and needs no rebuild. See [docs/UPGRADING.md](docs/UPGRADING.md) to migrate, [CHANGELOG.md](CHANGELOG.md) for what changed, and [KNOWN_ISSUES.md](KNOWN_ISSUES.md) for what remains.
+> **"v2" is the second-generation engine.** The current release is **v2.3.1**, which adds the pack file — a game's assets in one opaque file, `PackWriter` on the build-tool side, `PackReader` plus `AssetStore` pack overloads in the game, header-only, SDL-free, exception-free — and the shaderless `LightingOverlay` from 2.3.0, both additive, no break. Before those, **2.0.0** reset the 1.x API freeze: ten breaking changes land together so the traps they fix are gone for good rather than arriving one per release. **Upgrading from 1.x requires a rebuild, not a relink** - four structs changed size in 2.0.0 and `MAX_COMPONENTS` changed meaning without changing any size at all. Moving from 2.0.0 to 2.3.1 changes `AssetStore`'s size (pack-loaded fonts now carry their blob), so games rebuild against the new headers; nothing else in the 2.x line changes layout. See [docs/UPGRADING.md](docs/UPGRADING.md) to migrate, [CHANGELOG.md](CHANGELOG.md) for what changed, and [KNOWN_ISSUES.md](KNOWN_ISSUES.md) for what remains.
 
 ![Storm Engine v2 platformer example](examples/platformer/screenshot.png)
 
@@ -14,6 +14,7 @@ A lightweight, ECS-based 2D game engine built on SDL2 - made for game jams and p
 - **Box collider** components with debug overlay
 - **Contact detection** - AABB overlaps reported as `Contact{a, b, normal, depth}`, with begin/end callbacks and a pair filter that is where layers, masks and sensors live (`<stormengine2/systems/contact.h>`)
 - **Asset store** for textures, fonts and sounds
+- **Pack file** - one-file asset container: `PackWriter` assembles blobs (a build tool), `PackReader` reads them back by name; no compression, no encryption, header-only and SDL-free (`<stormengine2/packFile.h>`)
 - **Text drawing** - `Text::Draw` / `DrawCentred` / `Measure` over SDL_ttf, header-only and null-safe (`<stormengine2/text.h>`)
 - **Game state machine** for managing scenes, with frame pacing built in (`GameState::CapFrameRate()`)
 - **Logger** utility
@@ -146,12 +147,14 @@ Each is throttled independently and stays silent afterward, so it will not flood
 
 Pre-built `.deb` packages are available on the [Releases](https://github.com/WillSams/storm-engine-v2/releases) page.
 
-**Supported baseline: SDL2 2.0.10 or newer**, which means Ubuntu 20.04 / Linux
-Mint 20 and up, and Debian 11 (bullseye) and up. Both architectures are checked
-against `ubuntu:20.04`, `debian:bullseye`, `debian:bookworm`, `ubuntu:22.04` and
-`ubuntu:24.04` on every release -- the package is installed in each and its
-library checked for unresolved libraries, so this is a tested claim rather than
-an intention.
+**Supported baseline: SDL2 2.0.10 or newer for source consumers** — the engine
+still compiles and runs against Ubuntu 20.04 / Linux Mint 20's SDL headers.
+The **binary** `.deb` floor is higher: Ubuntu 22.04 / Debian 12 (bookworm) and
+up, because the release is built on a bookworm toolchain whose libc and
+libstdc++ the older distros cannot load. Both architectures are checked
+against `debian:bookworm`, `ubuntu:22.04` and `ubuntu:24.04` on every release
+-- the package is installed in each and its library checked for unresolved
+libraries, so this is a tested claim rather than an intention.
 
 ### Debian / Ubuntu / Linux Mint (amd64)
 

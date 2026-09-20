@@ -1,5 +1,96 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- **`AssetStore::LoadPack` — the one-choke-point pack wiring.**
+  A game calls `LoadPack("assets.pak")` once at startup; afterwards every
+  path-based `AddTexture`/`AddFont`/`AddSound` whose blob is in the pack
+  loads from it, with the entry name being the path minus its leading
+  `assets/`. Paths the pack does not hold fall back to the loose file, so a
+  development tree with a partial pack still works and no call site
+  changes. A missing or corrupt pack file is logged and simply leaves the
+  loose-file contract standing. The store owns the pack's stream for its
+  lifetime — the same lazy-read rule that keeps pack-font blobs alive.
+  `sizeof(AssetStore)` 256 → 272 (two `unique_ptr`s); `layout.spec.cpp`
+  updated with the reason.
+
+## [2.3.1] - 2026-09-08
+
+### Added
+
+- **A pack file: the game's assets in one opaque file.**
+  `<stormengine2/packFile.h>` — header-only, SDL-free, exception-free.
+  `PackWriter` (build-tool side) assembles named blobs into a single file;
+  `PackReader` (game side) opens it once and reads blobs back by name with a
+  seek and a read. No compression — bytes go in and come out pixel-exact, so
+  palette-exact sprite recolouring keeps working — and no encryption: the goal
+  is that there is no assets folder to browse or edit, not DRM. Every failure
+  is a `bool`, so the Switch build's `-fno-exceptions` is respected, and both
+  structs are pure C++ spec'd headless through `std::stringstream`.
+
+  Format v1: `"SPAK"` magic, u32 version, u32 count, per entry {u16 nameLen,
+  name, u64 offset, u64 size}, then blobs, all little-endian. Open
+  bounds-checks every index entry against the file length (by subtraction, so
+  u64 offset+size cannot overflow the check) and refuses a truncated header,
+  so no corrupt pack can make `Read` resize to an attacker's number.
+
+- **AssetStore can load from the pack.**
+  `AddTexture` / `AddFont` / `AddSound` gain `PackReader` overloads with the
+  same error contract as the path loads: a missing entry, an empty blob, an
+  oversized one or undecodable bytes log and store nothing. The load was not
+  the hard part — the lifetime was. SDL_ttf retains the RWops a font was
+  opened with and reads glyphs lazily at render time, closing it only in
+  `TTF_CloseFont`, so the store keeps a pack-loaded font's blob alive in a
+  new `fontBlobs` map for the font's lifetime (which grows `AssetStore`
+  208 → 256 bytes; `layout.spec.cpp` pins the new size). The texture and
+  sound loaders decode synchronously, so their blobs can die with the call —
+  verified against the vendored SDL sources. The triplicated
+  "re-adding an id replaces and frees the old asset" branch is now one
+  private `ReplaceOrStore`; pack guards live in one `OpenPackEntry`.
+  `assetStore.h` forward-declares `PackReader`, so the pack header's include
+  cost on every state TU is zero. 591 specs green; the whole suite run under
+  valgrind: 0 invalid reads, 0 definitely lost.
+
+### Fixed
+
+- **The compat probe and the pre-commit hook no longer fight.** The hook
+  reformatted the GENERATED `specs/compat/bridgedNames.h` when it was
+  committed, but CI byte-compares that file against
+  `scripts/generate-compat-probes.py --check` — main failed the check as a
+  result. The generated file is restored to the generator's canonical bytes
+  and excluded from the hook.
+
+### Web
+
+- Site updated before Labor Day, GitHub links repaired, and the pages
+  workflow bumped to `actions/deploy-pages` v5.
+
+### Changed
+
+- **The CI base image is bookworm, owned by this repo, and the binary floor
+  moved with it.**
+  The old base (`storminator16/igloo-testing:latest`, Debian bullseye,
+  provenance unknown) died mid-release when bullseye's LTS ended 2026-08-31:
+  its security suite was retired and swept, and `apt-get update` aborted
+  three release runs before anything compiled (expired metadata, then 404s
+  on the swept pool, then the same in the `.deb` install gate's container).
+  The replacement is built from `docker/igloo-testing/Dockerfile` in this
+  repo — Debian 12, every build dependency baked in, igloo + snowhouse pinned
+  — and published per-arch as `storminator16/igloo-testing:bookworm`.
+
+  The binary floor rises to **Ubuntu 22.04 / Debian 12**: bookworm's
+  toolchain emits `GLIBCXX_3.4.29` and `GLIBC_2.32` version refs into the
+  `.so` (compiler artifacts, not engine calls), so it cannot load on 20.04's
+  glibc 2.31 no matter what `Depends:` says. Ubuntu 20.04 and bullseye leave
+  the install gate with it. **Source consumers are unaffected** — the engine
+  still compiles and runs against SDL 2.0.10 headers. With a 22.04+ floor the
+  derived floors resolve as-is, so the old `2.0.12 → 2.0.10` symbols-file
+  rewrite in the release workflow is deleted rather than grown: it existed to
+  keep 20.04 installable, and its proof gate left with 20.04. `README`
+  states the split plainly: 2.0.10 headers for source, 22.04 binaries.
+
 ## [2.3.0] - 2026-09-02
 
 ### Added

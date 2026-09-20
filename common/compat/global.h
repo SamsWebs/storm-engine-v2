@@ -27,8 +27,9 @@
 #include "../collision/shapes.h"
 #include "../ecs.h"
 #include "../gameStateMachine.h"
-#include "../logger.h"
 #include "../lighting.h"
+#include "../logger.h"
+#include "../packFile.h"
 #include "../text.h"
 #include "../tilemapLoader.h"
 #include "../xmlLoader.h"
@@ -67,8 +68,8 @@
 // ── ECS ─────────────────────────────────────────────────────────────────────
 using storm::Component;
 using storm::ComponentMiss;
-using storm::ECS_MAX_DIAGNOSTIC_REPORTS;
 using storm::ComponentMissDescription;
+using storm::ECS_MAX_DIAGNOSTIC_REPORTS;
 using storm::EcsComponentIdIsValid;
 using storm::EcsFallbackComponent;
 using storm::EcsReportErr;
@@ -87,9 +88,9 @@ using storm::System;
 // ── Assets, text, loaders ───────────────────────────────────────────────────
 using storm::AssetStore;
 using storm::AssetStore_Ptr;
+using storm::LightingOverlay;
 using storm::LoadTexturesFromXml;
 using storm::Map;
-using storm::LightingOverlay;
 using storm::Text;
 using storm::Tile;
 using storm::TileMapLoader;
@@ -100,13 +101,19 @@ using storm::XmlTextureDef;
 // ── Logging ─────────────────────────────────────────────────────────────────
 // LogType is an unscoped enum, so its enumerators are members of namespace
 // storm in their own right: pulling in the type does not pull in the names.
+using storm::LOG_ERROR;
+using storm::LOG_INFO;
+using storm::LOG_WARNING;
 using storm::LogEntry;
 using storm::Logger;
 using storm::Logger_Ptr;
 using storm::LogType;
-using storm::LOG_ERROR;
-using storm::LOG_INFO;
-using storm::LOG_WARNING;
+
+// ── Pack file ───────────────────────────────────────────────────────────────
+// One-file asset container: PackWriter on the build-tool side, PackReader in
+// the game. Header-only and SDL-free.
+using storm::PackReader;
+using storm::PackWriter;
 
 // ── Components ──────────────────────────────────────────────────────────────
 using storm::AnimationComponent;
@@ -121,12 +128,12 @@ using storm::TransformComponent;
 // using-declaration each brings every overload across.
 //
 // BoundsOf here is the free function taking a ContactCircle, which is the whole
-// of storm::BoundsOf; ContactSystem's box-taking BoundsOf is a static member and
-// is reached through the class, so the two never compete for this name.
+// of storm::BoundsOf; ContactSystem's box-taking BoundsOf is a static member
+// and is reached through the class, so the two never compete for this name.
 using storm::BoundsOf;
 using storm::ClosestPointOn;
-using storm::IsFinite;
 using storm::ContactCircle;
+using storm::IsFinite;
 using storm::Manifold;
 using storm::MinimumTranslation;
 using storm::Overlaps;
@@ -205,16 +212,16 @@ using storm::NonceToToken;
 using storm::TokenToNonce;
 
 // Unscoped net enums: the type and its enumerators are separate names.
-using storm::NetChunkFlag;
 using storm::kNetChunkResend;
 using storm::kNetChunkVital;
-using storm::NetPacketFlag;
-using storm::kNetPacketResend;
 using storm::kNetControlAccept;
 using storm::kNetControlClose;
 using storm::kNetControlConnect;
 using storm::kNetControlConnectAccept;
 using storm::kNetControlConnectReady;
+using storm::kNetPacketResend;
+using storm::NetChunkFlag;
+using storm::NetPacketFlag;
 
 // Net constants.
 using storm::kNetControlMagic;

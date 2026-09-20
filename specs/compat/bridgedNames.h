@@ -8,7 +8,7 @@
 // third of the exports, so a name missing from the bridge was missing
 // from the spec too.
 //
-// 142 names.
+// 144 names.
 #pragma once
 
 namespace storm_compat_probe {
@@ -103,6 +103,8 @@ using ::NetVarIntPack;
 using ::NetVarIntUnpack;
 using ::NonceToToken;
 using ::Overlaps;
+using ::PackReader;
+using ::PackWriter;
 using ::Pool;
 using ::Registry;
 using ::RenderColliderSystem;

@@ -144,50 +144,29 @@ promise.
 These are not features and should not wait for a release. Each is a hole a
 release already fell through.
 
-1. **Finish retiring the guardrails plan.**
-   `docs/superpowers/plans/2026-08-30-engine-guardrails.md` is 2,344 lines
-targeting **1.4.0** across eleven usage traps, and it now reads as a work queue
-for work that is mostly done. Measured trap by trap on 2026-09-17 — **nine of the
-eleven are resolved**, and none of them by the plan:
-
-   | Trap | State |
-   |---|---|
-   | 1 `CollisionSystem` kills | ✅ Class deleted in 2.0.0 |
-   | 2 component added after admission | ✅ Throttled diagnostic in `ecs.h` (`SystemMissedByLateComponent`) |
-   | 2b system registered late | ✅ Diagnostic in `AddSystem`, plus `AdmitExistingEntitiesTo` |
-   | 3 `Update()` never called | ✅ Diagnostic in `ecs.cpp` |
-   | 4 `AddSystem<T>(5)` unbuildable | ✅ `AddSystem(Targs &&...)`, perfect-forwarding |
-   | 5 `GetSystem<T>()` throws | ✅ `TryGetSystem` added |
-   | 6 recycled ids | ✅ Generation counter, 2.0.0 |
-   | 7 `GetComponent` alias on miss | ✅ Per-thread reset + `TryGetComponent` |
-   | 8 no keyboard abstraction | 🟡 `keyboard.h` and `actionMap.h` exist; the main loop is still the game's |
-   | 9 no namespaces | ✅ `namespace storm`, 2.0.0 |
-   | 10 `SpriteComponent::width/height` are the source rect | ⬜ Still undocumented, and it is still the trap |
-   | 11 `AnimationComponent::vertical` wrong draws nothing | ⬜ Still silent |
-
-   So the disposition is: nine done elsewhere, one half done, two still open —
-   and the two that remain are documentation and a diagnostic, not the plan's
-   architecture. Write that table at the head of the file and leave the body as
-   history.
-2. **`docs/TECH_DEBT.md` is gitignored** — it is listed in `.gitignore`, so a
-   fresh clone has no ledger, CI cannot check it, and its "last reviewed" line is
-   the only freshness signal. It reads 2026-08-23, and its number one item is
-   not what it says it is: `TileMapLoader`'s three silent-failure modes are now
-   **two**, because `5758dfc` added the missing unopenable-file report and
-   replaced `std::stoi` with `strtol`. **The third mode is still open** —
-   `loadFilemapEditor` ends its read loop with no `fail()`/`eof()` check and no
-   diagnostic, so a malformed record mid-file still truncates the level silently
-   (`grep -n 'eof()\|malformed' common/tilemapLoader.cpp` finds only a comment).
-   A gitignored ledger that is three weeks stale and whose top item is
-   mis-described is worse than no ledger, because it is read as current.
-   Keep the file as the working notebook it declares itself to be, but **move the
-   durable half into this file**: an open item that matters belongs here, where
-   it is tracked and reviewed, and the notebook is where the reasoning lands. A
-   rule written at the head of an untracked file is not a record — that rule
-   disappears with the clone.
-3. **Fix this file's own stale statuses.** The "After 2.0.0 ships" entries for
-   the lighting overlay, circle colliders and the non-ECS collision entry are all
-   **done** and their headings do not say so. See the status block added there.
+1. **Finish retiring the guardrails plan.** ✅ **Done 2026-09-22.** The plan
+   file was already deleted in PR #61. The disposition table (eight of eleven
+   traps fully resolved, three half-done — re-verified 2026-09-22) now sits at
+   the head of
+   `docs/superpowers/specs/2026-08-30-engine-guardrails-design.md`, with the
+   body left as history and the file marked retired. Traps 8, 10 and 11 remain
+   half-done: field-site docs and no main loop, not architecture.
+2. **`docs/TECH_DEBT.md` is gitignored** — listed in `.gitignore`, so a fresh
+   clone has no ledger and CI cannot check it. ✅ **Durable half moved
+   2026-09-22** into "Carried from the TECH_DEBT notebook" below. The notebook
+   stays the reasoning file (it is still gitignored by design); every open item
+   that matters now lives here. Verified still open on the move date:
+   `loadFilemapEditor`'s third silent-failure mode (P17 residual — modes one
+   and two fixed by `5758dfc`, the missing `eof()`/`fail()` check was not),
+   unguarded `GetEntityByTag` in examples (P19 residual), Logger level filter
+   and header `<iostream>` (P28), `netSocket::fd_` truncation (P44 residual),
+   missing net unit specs (P31), `template/` out of CI (P65), no SONAME (P67),
+   and guardrails traps 10/11 field-site docs.
+3. **Fix this file's own stale statuses.** ✅ **Done 2026-09-22.** Headings for
+   the non-ECS collision entry and the lighting overlay carry `— **DONE**`;
+   circle colliders are marked done in the status block at the top of
+   "After 2.0.0 ships". The stale "IsAlive walks freeIds" claim under
+   "Carried, not blocking" was corrected the same day.
 4. **One canonical source list.** `examples/nx-platformer/Makefile` and the
    Android CMake glob have both been non-recursive before, and the recurring fix
    written down twice was "emit the canonical source list once and have every
@@ -794,7 +773,7 @@ were done and one of them reads as a queue it is not.**
 | An example with sustained entity churn | ⬜ **Open** — nothing in `examples/` creates and destroys entities continuously. |
 | A debug overlay | ⬜ **Open** — and moved into 2.4.0 above. |
 
-### A non-ECS collision entry point
+### A non-ECS collision entry point — **DONE**
 
 The contact math is already ECS-free and does not know it. `ContactAABB` is four
 floats with no engine types in it, and both `Overlaps(a, b)` and
@@ -999,7 +978,7 @@ If the goal is coverage rather than a sample, a long-running stress spec would
 buy more per line than an example does, and would not add a twelfth README to
 sweep the next time something is deleted.
 
-### A lighting overlay
+### A lighting overlay — **DONE**
 
 Generalises a technique proven in a shipping game: two quarter-resolution RGBA
 surfaces built once and cached — a warm key layer whose alpha follows a falloff
@@ -1160,6 +1139,27 @@ recipe between `editor/Makefile` and `base.mk`) are pre-existing and untouched.
 Reviewed, ruled on, and deliberately left. Listed so they are not rediscovered as
 though new.
 
+### Carried from the TECH_DEBT notebook (moved 2026-09-22)
+
+The gitignored `docs/TECH_DEBT.md` keeps the full evidence and reasoning; this
+is the durable open half. Each row re-verified on the move date — fixed items
+from that notebook are **not** repeated here.
+
+| Item | What | State |
+|---|---|---|
+| P17 residual | `loadFilemapEditor` ends its read loop with no `fail()`/`eof()` check, so a malformed record mid-file truncates the level silently. Modes one and two (unopenable file report, `strtol` instead of `stoi`) fixed by `5758dfc`. | 🔴 Open |
+| P19 residual | `GetEntityByTag` still `.at()`s (precondition documented; `TryGetEntityByTag` and `DoesTagExist` exist). **Zero** call sites under `examples/` use the safe forms — 17 raw `GetEntityByTag` calls remain. | 🟡 Partial |
+| P28 | No `Logger::SetMinLevel` / no opt-out: every entity/component add still formats and writes `std::cout`. `<iostream>` still in three public headers: `logger.h`, `tilemapLoader.h`, `gameStateMachine.h`. | 🟡 Partial |
+| P44 residual | `NetSocket::fd_` is `int`; a Win64 `SOCKET` truncates. MSVC compile break fixed (`_getpid`). Widening `fd_` changes `sizeof(NetSocket)` embedded in `NetServer`/`NetClient` — check the freeze first; else document the truncation and delete the unused `SocketHandle` alias. | 🟡 Partial |
+| P31 | No unit specs for `netSocket` / `netServer` / `netClient` (loopback integration only). No hostile-input spec: forged handshake, `BanIp`, per-IP cap, timeout eviction. | 🟡 Partial |
+| P65 | `template/` is compiled by no CI target and excluded from the pre-commit format path regex. Windows release job only *checks the file exists* in the zip. | 🔴 Open |
+| P67 | `libstormenginev2.so` has no `-Wl,-soname`, so the AssetStore ABI break has no package guard behind it. (The tinyxml2 story in `base.mk` is about *its* soname in `NEEDED`, not this.) | 🔴 Open |
+| Traps 10/11 | Field-site docs: no comment on `SpriteComponent::width/height` (source rect) or `AnimationComponent::vertical` (wrong flag draws nothing / wrong frames). Runtime diagnostic exists (`35877e1`). | 🟡 Partial |
+
+Already scheduled elsewhere — do not re-file: P6/P7 → 2.7.2, P39 (`.map`
+version) → 2.5.1, `Makefile.win` `-pthread` → "What we will not do" / layout
+wave carry list.
+
 - ~~**`ForEachMissedEntity` does not exclude entities queued for death**, where
   `SystemMissedByLateComponent` does.~~ **Fixed.** Ruled "needs kills queued *and*
   a system registered before the flush", which was true and turned out not to be
@@ -1170,9 +1170,12 @@ though new.
 - **Signed overflow in `render.h`'s bounds arithmetic** on absurd sprite values.
   `srcRect.x > textureW - srcRect.w` avoids it at no cost.
 - **Undocumented `const_cast`** in `common/ecs.cpp`'s missed-entity scan.
-- **`IsAlive` is an O(|freeIds|) deque scan** called before the cheaper
-  `IsPendingAdmission` short-circuit in `SystemMissedByLateComponent`. Swapping them
-  helps churn-heavy games.
+- ~~**`IsAlive` is an O(|freeIds|) deque scan** called before the cheaper
+  `IsPendingAdmission` short-circuit in `SystemMissedByLateComponent`.~~
+  **Fixed** by the generation counter (2.0.0): `IsAlive` is a bounds check plus
+  a generation compare. The comment in `SystemMissedByLateComponent` that still
+  claimed the scan was corrected 2026-09-22. Residual: `IsIdInUse` still walks
+  `freeIds` linearly; it is not on the per-frame diagnostic path.
 - **A `System` constructor runs before the duplicate-registration check** in
   `AddSystem`, so a subclass whose constructor had an observable side effect outside
   the `Registry` would fire it and then have the instance discarded. Not live: every

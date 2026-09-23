@@ -1823,8 +1823,8 @@ the game's own headers.
   trade: it acted and could not be observed, calling `Kill()` on each entity
   that had a `RigidBodyComponent` (static scenery survived) - it was deleted in
   2.0.0, so `ContactSystem` is now the only collision system. There is still no event
-  bus and no event queue (`KNOWN_ISSUES.md` #10), and the broadphase sweeps one
-  axis.
+  bus and no event queue (`KNOWN_ISSUES.md` #10), and the broadphase is a
+  uniform grid (no preferred axis).
 - **Sixty-four component types, process-wide.** `MAX_COMPONENTS` is 64 since
   2.0.0 (32 before) and `Signature` is `std::bitset<64>`; ids come from one
   global counter, so the cap is per binary, not per `Registry`. Overflow does

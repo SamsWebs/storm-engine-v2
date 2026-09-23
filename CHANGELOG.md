@@ -16,6 +16,22 @@
   `sizeof(AssetStore)` 256 → 272 (two `unique_ptr`s); `layout.spec.cpp`
   updated with the reason.
 
+### Fixed
+
+- **`TileMapLoader` no longer stops mid-file in silence (P17 residual).**
+  The editor-format reader put every header field in the `while` condition
+  and never checked the optional collider/animation tails. A truncated or
+  non-numeric record therefore either dropped the rest of the file with no
+  diagnostic, or — when the header had been read and only the tail was cut
+  short — pushed a corrupt `Tile` with `hasCollider`/`isAnimated` set and
+  the dimensions left at zero. Each tail is now checked: on failure the
+  loader logs which record failed and after how many complete tiles, keeps
+  the tiles already parsed, and stops without pushing the incomplete record.
+  A clean EOF after a full record is still a normal end of file (including
+  a last record that omits the animation flag), not an error. Division by
+  zero when both the constructor `tileSize` and the record's tile width
+  are zero is now reported instead of trapping. 604 specs.
+
 ## [2.3.1] - 2026-09-08
 
 ### Added

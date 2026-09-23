@@ -599,12 +599,7 @@ const Map &tiles = loader.getMap();
 Each `Tile` has: `relativePosition`, `pixelSrcPosition`, `scale`, `zIndex`,
 `assetId`, `hasCollider`, `colliderW`, `colliderH`.
 
-**The constructor cannot fail loudly — check the map before using it.** Since
-v1.2.4 every failure (missing file, unreadable, no tiles parsed) is reported
-through `Logger::Err`, but the object still constructs and `getMap()` returns
-an empty `Map`. A successfully loaded empty map and a failed load are
-indistinguishable from the return value alone, so a game that skips the check
-renders a blank level with no crash and no obvious cause.
+**The constructor cannot fail loudly — check the map before using it.** Every failure (missing file, unreadable, no tiles parsed, truncated or non-numeric editor record mid-file) is reported through `Logger::Err`, but the object still constructs and `getMap()` returns an empty `Map` (or the complete tiles parsed before the bad record). A successfully loaded empty map and a failed load are indistinguishable from the return value alone, so a game that skips the check renders a blank level with no crash and no obvious cause.
 
 ```cpp
 TileMapLoader loader("assets/tilemaps/level.map", "", 32);
@@ -1017,7 +1012,7 @@ networking builds there.
 8. **Camera-aware rendering** — `RenderSystem` and `RenderColliderSystem` both accept an optional `SDL_Rect*` camera; `isFixed` sprites ignore it (for HUD/UI), and colliders have no such opt-out because a collider is always a world body.
 9. **Geometric pool growth** — component pools grow 2x to avoid O(n²) reallocation.
 10. **Two consumption modes** — installed `.so` (desktop) or compile `common/` directly (Switch, Android, submodules). Editing `common/` changes desktop builds only after `make install`.
-11. **No throw on a game data path** — component ids are range-checked before any `bitset` access (`set`/`test` carry an `out_of_range` throw that would be emitted into a `-fno-exceptions` game TU, e.g. the Switch build), a miss returns a default/`nullptr` instead of aborting, and every diagnostic is throttled to its first 4 occurrences per call site (`ECS_MAX_DIAGNOSTIC_REPORTS`). `GetEntitiesByGroup` returns an empty vector on a miss; `AssetStore::GetTexture` returns `nullptr`. The two reachable throws left on a data path are `TileMapLoader`'s `std::stoi` and `GetEntityByTag`'s `.at()`.
+11. **No throw on a game data path** — component ids are range-checked before any `bitset` access (`set`/`test` carry an `out_of_range` throw that would be emitted into a `-fno-exceptions` game TU, e.g. the Switch build), a miss returns a default/`nullptr` instead of aborting, and every diagnostic is throttled to its first 4 occurrences per call site (`ECS_MAX_DIAGNOSTIC_REPORTS`). `GetEntitiesByGroup` returns an empty vector on a miss; `AssetStore::GetTexture` returns `nullptr`. The one reachable throw left on a data path is `GetEntityByTag`'s `.at()` (`TileMapLoader` uses `strtol` and reports rather than throwing).
 
 ---
 

@@ -9,8 +9,8 @@ slices checked) and continue.
 
 | # | Slice | Branch | Status |
 |---|-------|--------|--------|
-| 1 | Track 0.1–0.3 docs hygiene (retire guardrails, move TECH_DEBT durable half, fix stale statuses) | `docs/track0-hygiene` | in progress |
-| 2 | P17 residual: `loadFilemapEditor` third silent-failure mode (failing spec first) | pending | pending |
+| 1 | Track 0.1–0.3 docs hygiene (retire guardrails, move TECH_DEBT durable half, fix stale statuses) | `docs/track0-hygiene` | done (PR #79) |
+| 2 | P17 residual: `loadFilemapEditor` third silent-failure mode (failing spec first) | `fix/editor-map-truncated` | done |
 | 3 | Track 0.4 One canonical source list | pending | pending |
 | 4 | Track 0.5 Release checklist (verification matrix half) | pending | pending |
 | 5 | Track 0.6 Example layout/measurement harness | pending | pending |
@@ -33,11 +33,12 @@ slices checked) and continue.
 ## Carried TECH_DEBT (not scheduled releases; pick up opportunistically)
 
 Tracked in `docs/ROADMAP.md` → "Carried from the TECH_DEBT notebook":
-P17 residual, P19 residual, P28, P44 residual, P31, P65, P67, traps 10/11.
+P19 residual, P28, P44 residual, P31, P65, P67, traps 10/11.
+(P17 residual closed 2026-09-22, slice 2.)
 
 ## Rules
 
-- Docs-only slice: suite must stay green (598), no new specs required.
+- Docs-only slice: suite must stay green (604), no new specs required.
 - Code slice: failing BDD spec first; suite green after fix.
 - Public API change: `TUTORIAL.md` + `CHANGELOG.md` in the same branch.
 - New public name: `python3 scripts/generate-compat-probes.py --check`.

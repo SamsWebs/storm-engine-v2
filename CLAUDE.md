@@ -41,7 +41,7 @@ Binary name matches the directory name for `platformer`, `jrpg`, `netchat`, `net
 
 ## Tests
 
-Framework is **Igloo + snowhouse** (BDD `Describe`/`It`, snowhouse `Assert::That`), not gtest/Catch2. 598 tests. Specs live in `specs/` mirroring the source tree; they `#include "../common/ecs.h"` by relative path, so the suite always tests the working tree, never the installed library. `specs/main.cpp` is the sole `main()`.
+Framework is **Igloo + snowhouse** (BDD `Describe`/`It`, snowhouse `Assert::That`), not gtest/Catch2. 604 tests. Specs live in `specs/` mirroring the source tree; they `#include "../common/ecs.h"` by relative path, so the suite always tests the working tree, never the installed library. `specs/main.cpp` is the sole `main()`.
 
 **The suite covers `common/` only.** `TESTSRCS` is `find specs` plus `find common` (the two `TESTSRCS` assignments in `Makefile.debian`), so nothing under `editor/` or `examples/` is compiled into `./bin/tests` and no spec can reach it. Wiring either in is not a small job: both include the engine as `<stormengine2/...>`, which resolves to the *installed* headers rather than the working tree the specs deliberately test. Bugs in editor and example code are caught by compilation (CI builds both, see below) and by running them — not by specs.
 
@@ -57,7 +57,7 @@ Test sources are globbed (`find specs -name '*.cpp'` plus `find common -name '*.
 make -f Makefile.debian memcheck TARGET=./bin/tests   # valgrind; TARGET defaults to the .so, which valgrind can't run
 ```
 
-Run `./bin/tests` from anywhere other than the repo root and it **segfaults** — several specs hardcode `./specs/assets/...` paths, and `common/tilemapLoader.cpp` silently no-ops on a missing file, leaving an empty map a later spec dereferences.
+Run `./bin/tests` from anywhere other than the repo root and it **segfaults** — several specs hardcode `./specs/assets/...` paths, and `common/tilemapLoader.cpp` logs the missing file and returns an empty map, which a later spec dereferences.
 
 ### Running a single test
 

@@ -157,7 +157,8 @@ release already fell through.
    stays the reasoning file (it is still gitignored by design); every open item
    that matters now lives here. Verified still open on the move date:
    `loadFilemapEditor`'s third silent-failure mode (P17 residual — modes one
-   and two fixed by `5758dfc`, the missing `eof()`/`fail()` check was not),
+   and two fixed by `5758dfc`, the missing `eof()`/`fail()` check was not;
+   **that residual closed the same day**, see the carried table),
    unguarded `GetEntityByTag` in examples (P19 residual), Logger level filter
    and header `<iostream>` (P28), `netSocket::fd_` truncation (P44 residual),
    missing net unit specs (P31), `template/` out of CI (P65), no SONAME (P67),
@@ -1147,7 +1148,7 @@ from that notebook are **not** repeated here.
 
 | Item | What | State |
 |---|---|---|
-| P17 residual | `loadFilemapEditor` ends its read loop with no `fail()`/`eof()` check, so a malformed record mid-file truncates the level silently. Modes one and two (unopenable file report, `strtol` instead of `stoi`) fixed by `5758dfc`. | 🔴 Open |
+| ~~P17 residual~~ | ~~`loadFilemapEditor` ends its read loop with no `fail()`/`eof()` check, so a malformed record mid-file truncates the level silently.~~ **Fixed 2026-09-22** — header, collider tail and animation tail each checked; incomplete record not pushed; clean EOF still silent. Modes one and two (unopenable file report, `strtol` instead of `stoi`) fixed earlier by `5758dfc`. | ✅ Resolved |
 | P19 residual | `GetEntityByTag` still `.at()`s (precondition documented; `TryGetEntityByTag` and `DoesTagExist` exist). **Zero** call sites under `examples/` use the safe forms — 17 raw `GetEntityByTag` calls remain. | 🟡 Partial |
 | P28 | No `Logger::SetMinLevel` / no opt-out: every entity/component add still formats and writes `std::cout`. `<iostream>` still in three public headers: `logger.h`, `tilemapLoader.h`, `gameStateMachine.h`. | 🟡 Partial |
 | P44 residual | `NetSocket::fd_` is `int`; a Win64 `SOCKET` truncates. MSVC compile break fixed (`_getpid`). Widening `fd_` changes `sizeof(NetSocket)` embedded in `NetServer`/`NetClient` — check the freeze first; else document the truncation and delete the unused `SocketHandle` alias. | 🟡 Partial |

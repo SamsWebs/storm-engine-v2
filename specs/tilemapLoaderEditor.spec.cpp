@@ -147,4 +147,86 @@ Describe(TileMapLoaderEditorSpec) {
     Assert::That(map[2].hasCollider, Equals(false));
     Assert::That(map[2].isAnimated, Equals(true));
   };
+
+  // ── P17 residual: mid-file failures must be loud ─────────────────────────
+  // The read loop used to put every header field in the while condition and
+  // never check the optional collider/animation tails, so a truncated or
+  // non-numeric record either dropped the rest of the file with no diagnostic
+  // or pushed a corrupt Tile (hasCollider with zero dimensions). Logger keeps
+  // a process-wide static history; TileMapLoader owns its own Logger instance,
+  // so the per-instance callbacks cannot be used here.
+
+  int errorsLogged() {
+    int n = 0;
+    for (const auto &entry : Logger::messages)
+      if (entry.type == LOG_ERROR)
+        n++;
+    return n;
+  }
+
+  It(should_report_a_truncated_editor_record_instead_of_stopping_silently) {
+    int before = errorsLogged();
+
+    TileMapLoader loader("./specs/assets/tilemaps/editorTruncatedHeader.map",
+                         "", 8);
+
+    // The complete first record is kept; the half-read second is not pushed.
+    Assert::That(loader.getMap().size(), Equals(1u));
+    Assert::That(errorsLogged() > before, Equals(true));
+  };
+
+  It(should_not_push_an_editor_record_whose_collider_fields_are_missing) {
+    int before = errorsLogged();
+
+    TileMapLoader loader("./specs/assets/tilemaps/editorTruncatedCollider.map",
+                         "", 8);
+
+    // colliderFlag=1 with no collider fields: the record is incomplete.
+    // Pushing it would yield hasCollider=true and colliderW/H left at zero.
+    Assert::That(loader.getMap().size(), Equals(1u));
+    Assert::That(errorsLogged() > before, Equals(true));
+  };
+
+  It(should_not_push_an_editor_record_whose_animation_fields_are_missing) {
+    int before = errorsLogged();
+
+    TileMapLoader loader("./specs/assets/tilemaps/editorTruncatedAnim.map", "",
+                         8);
+
+    // animatedFlag=1 with no animation fields: same contract as colliders.
+    Assert::That(loader.getMap().size(), Equals(1u));
+    Assert::That(errorsLogged() > before, Equals(true));
+  };
+
+  It(should_report_a_nonnumeric_field_in_an_editor_record) {
+    int before = errorsLogged();
+
+    TileMapLoader loader("./specs/assets/tilemaps/editorNonNumeric.map", "", 8);
+
+    Assert::That(loader.getMap().size(), Equals(1u));
+    Assert::That(errorsLogged() > before, Equals(true));
+  };
+
+  It(should_stay_quiet_when_an_editor_map_is_complete) {
+    int before = errorsLogged();
+
+    TileMapLoader loader(editorMap, "", 8);
+
+    // Guard against the fix becoming trigger-happy: a clean EOF after the
+    // last full record is not a truncated record.
+    Assert::That(loader.getMap().size(), Equals(4u));
+    Assert::That(errorsLogged(), Equals(before));
+  };
+
+  It(should_report_tile_width_zero_instead_of_dividing_by_zero) {
+    // Both the constructor tileSize and the record's tileW are zero, so the
+    // grid-position divide has no divisor. Report rather than trap.
+    int before = errorsLogged();
+
+    TileMapLoader loader("./specs/assets/tilemaps/editorZeroTileWidth.map", "",
+                         0);
+
+    Assert::That(loader.getMap().size(), Equals(0u));
+    Assert::That(errorsLogged() > before, Equals(true));
+  };
 };

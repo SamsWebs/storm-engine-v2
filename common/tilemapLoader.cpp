@@ -104,6 +104,13 @@ void TileMapLoader::loadFilemapCSV(const std::string &fileMap) {
 // and all five animation fields were parsed purely to advance the stream and
 // then dropped, because Tile had nowhere to put them.
 //
+// The optional collider and animation tails are checked field-by-field. A
+// record that claims a collider (or an animation) and then ends early used to
+// either drop the rest of the file with no diagnostic or push a Tile with
+// hasCollider/isAnimated set and the dimensions left at zero. A clean EOF
+// after a complete record is still a normal end of file, not an error: the
+// `animatedFlag` read may legitimately fail at EOF for a last record that
+// omits it, so that one failure is treated as "not animated".
 void TileMapLoader::loadFilemapEditor(const std::string &fileMap) {
   std::ifstream fmap{fileMap};
   if (!fmap.is_open()) {
@@ -111,31 +118,58 @@ void TileMapLoader::loadFilemapEditor(const std::string &fileMap) {
     return;
   }
 
-  std::string group, assetId;
-  int tileW, tileH, srcX, srcY, zIndex;
-  float worldX, worldY, scaleX, scaleY;
-  int colliderFlag, animatedFlag;
+  auto reportTruncated = [&](const std::string &what) {
+    logger.Err("TileMapLoader: '" + fileMap + "': truncated or malformed " +
+               what + " after " + std::to_string(map.size()) +
+               " complete tiles; stopping");
+  };
 
-  while (fmap >> group >> assetId >> tileW >> tileH >> srcX >> srcY >> zIndex >>
-         worldX >> worldY >> scaleX >> scaleY >> colliderFlag) {
+  std::string group;
+  while (fmap >> group) {
+    std::string assetId;
+    int tileW = 0, tileH = 0, srcX = 0, srcY = 0, zIndex = 0;
+    float worldX = 0.0f, worldY = 0.0f, scaleX = 0.0f, scaleY = 0.0f;
+    int colliderFlag = 0;
+
+    if (!(fmap >> assetId >> tileW >> tileH >> srcX >> srcY >> zIndex >>
+          worldX >> worldY >> scaleX >> scaleY >> colliderFlag)) {
+      reportTruncated("header for group '" + group + "'");
+      return;
+    }
 
     int colW = 0, colH = 0;
     float offX = 0.0f, offY = 0.0f;
-    if (colliderFlag)
-      fmap >> colW >> colH >> offX >> offY;
+    if (colliderFlag && !(fmap >> colW >> colH >> offX >> offY)) {
+      reportTruncated("collider fields for '" + assetId + "'");
+      return;
+    }
 
-    if (!(fmap >> animatedFlag))
+    int animatedFlag = 0;
+    if (!(fmap >> animatedFlag)) {
+      if (!fmap.eof()) {
+        reportTruncated("animation flag for '" + assetId + "'");
+        return;
+      }
+      // Clean EOF before the optional animation flag: last record omits it.
       animatedFlag = 0;
+    }
 
     int numFrames = 1, frameSpeed = 1, frameOffset = 0;
     bool vertical = true, looped = true;
-    if (animatedFlag) {
-      fmap >> numFrames >> frameSpeed >> vertical >> looped >> frameOffset;
+    if (animatedFlag && !(fmap >> numFrames >> frameSpeed >> vertical >>
+                          looped >> frameOffset)) {
+      reportTruncated("animation fields for '" + assetId + "'");
+      return;
     }
 
     // Use the tile size passed to the constructor to derive grid position.
     // If zero (not set), fall back to the tile width from the map line.
     int ts = (tileSize > 0) ? tileSize : tileW;
+    if (ts == 0) {
+      logger.Err("TileMapLoader: '" + fileMap + "': record '" + assetId +
+                 "' has tile width 0 and no constructor tileSize; stopping");
+      return;
+    }
 
     Tile tile;
     tile.relativePosition = glm::ivec2(static_cast<int>(worldX) / ts,

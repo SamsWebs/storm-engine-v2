@@ -194,8 +194,9 @@ make -f Makefile.debian target && sudo make -f Makefile.debian install
 ### The level renders blank, no error, no crash
 
 `TileMapLoader` constructs successfully even when the file is missing,
-unreadable, or parses to nothing. Failures go to `Logger::Err`, but `getMap()`
-returns an empty `Map` that is indistinguishable from a genuinely empty level.
+unreadable, truncated mid-record, or parses to nothing. Failures go to
+`Logger::Err`, but `getMap()` returns an empty `Map` (or the tiles parsed
+before a bad record) that is hard to tell from a genuinely empty level.
 
 ```cpp
 TileMapLoader loader("assets/tilemaps/level.map", "", 32);

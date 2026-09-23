@@ -307,7 +307,7 @@ The project uses a comprehensive test suite organized by feature:
 | `input/actionMap.spec.cpp` | 27 | One action across keyboard, gamepad, virtual pad and touch; edge semantics |
 | `states/gameStateMachine.spec.cpp` | 17 | State transitions, deferred deletion, ownership |
 | `xmlLoader.spec.cpp` | 15 | XML texture and object definitions |
-| `tilemapLoaderEditor.spec.cpp` | 12 | Editor map format, including the animation and collider-offset fields |
+| `tilemapLoaderEditor.spec.cpp` | 18 | Editor map format, including the animation and collider-offset fields, and loud failure on truncated/non-numeric records |
 | `systems/render.spec.cpp` | 12 | Source-rect bounds, z-ordering, camera offset |
 | `systems/contact.spec.cpp` + `contactEvents` + `contactFiltering` + `contactCircle` + `contactNonFinite` + `contactBroadphase` | 53 | Manifolds and ordering, begin/end events, pair filtering, mixed box/circle sweeps, non-finite rejection, and grid output invariance |
 | `lighting.spec.cpp` | 10 | Two-layer falloff, radius and centre, rebuild and release, against a real software renderer |
@@ -327,8 +327,8 @@ The project uses a comprehensive test suite organized by feature:
 | `layout.spec.cpp` | 1 | The ABI sizes, and the value of `MAX_COMPONENTS` |
 | `gameStateMachineSlim.spec.cpp` + `gameStateMachineNonCopyable` | 3 | The slim header stays slim; the machine is not copyable |
 
-**Total**: 554 specs on `main` after the 2.3.0 wave, plus whatever the working
-branch adds; all passing. Counts are `It(` tallies per file, and they rot — run
+**Total**: 604 specs on the working tree after the P17 residual fix; all
+passing. Counts are `It(` tallies per file, and they rot — run
 `make -f Makefile.debian test` for the authoritative figure. (This table
 previously listed `systems/collision.spec.cpp`, which went away with
 `CollisionSystem` in 2.0.0, and totalled 369 "as of v1.3.0".)

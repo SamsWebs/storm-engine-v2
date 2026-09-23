@@ -1,8 +1,34 @@
 # Guardrails for the eleven Storm! Engine v2 usage traps
 
-**Status:** design, approved for planning
-**Target release:** 1.4.0 (additive minor)
-**Date:** 2026-08-30
+**Status:** retired — disposition below; body is history
+**Original target release:** 1.4.0 (never shipped; the work landed in 2.0.0
+and after, almost none of it via the plan this file was written for)
+**Date:** 2026-08-30 | **Disposition:** 2026-09-17, re-verified 2026-09-22
+
+## Disposition (re-verified 2026-09-22)
+
+Eight of eleven traps fully resolved (2b counted with 2), none by this plan.
+Three half-done remain — trap 8 and traps 10/11 — a runtime diagnostic and
+field-site docs, not architecture. The plan file
+`docs/superpowers/plans/2026-08-30-engine-guardrails.md` was deleted in PR #61.
+
+| Trap | State |
+|---|---|
+| 1 `CollisionSystem` kills | ✅ Class deleted in 2.0.0 |
+| 2 component added after admission | ✅ Throttled diagnostic in `ecs.h` (`SystemMissedByLateComponent`) |
+| 2b system registered late | ✅ Diagnostic in `AddSystem`, plus `AdmitExistingEntitiesTo` |
+| 3 `Update()` never called | ✅ Diagnostic in `ecs.cpp` |
+| 4 `AddSystem<T>(5)` unbuildable | ✅ `AddSystem(Targs &&...)`, perfect-forwarding |
+| 5 `GetSystem<T>()` throws | ✅ `TryGetSystem` added |
+| 6 recycled ids | ✅ Generation counter, 2.0.0 |
+| 7 `GetComponent` alias on miss | ✅ Per-thread reset + `TryGetComponent` |
+| 8 no keyboard abstraction | 🟡 `keyboard.h` and `actionMap.h` exist; the main loop is still the game's |
+| 9 no namespaces | ✅ `namespace storm`, 2.0.0 |
+| 10 `SpriteComponent::width/height` are the source rect | 🟡 `RenderSystem` reports a srcRect outside its texture (landed 2026-08-30 as `35877e1`); no comment on the fields in `sprite.h` |
+| 11 `AnimationComponent::vertical` wrong draws nothing | 🟡 Same diagnostic names the flag when the offset walks off the texture; wrong-but-in-bounds frames still silent; no comment on the field in `animation.h` |
+
+The 2026-09-17 pass that first wrote this table marked 10 and 11 ⬜ — it missed
+that the diagnostic had already landed. Corrected here.
 
 ## Problem
 

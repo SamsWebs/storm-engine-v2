@@ -48,7 +48,6 @@ local.properties
 .claude/settings.local.json
 .agents/
 .hermes/
-CLAUDE.md
 CODING.md
 docs/TECH_DEBT.md
 

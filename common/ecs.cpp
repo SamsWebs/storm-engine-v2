@@ -172,8 +172,7 @@ struct RegistryDiagnostics {
   unsigned long entitiesCreated = 0;
 };
 
-std::unordered_map<const Registry *, RegistryDiagnostics> &
-DiagnosticsTable() {
+std::unordered_map<const Registry *, RegistryDiagnostics> &DiagnosticsTable() {
   // Intentionally leaked. ~Registry reaches into this map, and the editor's
   // Registry::Instance() singleton is destroyed during static teardown —
   // after a function-local static would already have been destroyed.
@@ -190,8 +189,8 @@ bool Registry::IsIdInUse(std::size_t id) const {
   if (id >= numEntities) {
     return false;
   }
-  return std::find(freeIds.begin(), freeIds.end(),
-                   static_cast<int>(id)) == freeIds.end();
+  return std::find(freeIds.begin(), freeIds.end(), static_cast<int>(id)) ==
+         freeIds.end();
 }
 
 // Occupancy is checked with IsIdInUse *before* the candidate is stamped with
@@ -349,12 +348,10 @@ Registry::SystemMissedByLateComponent(Entity entity,
       componentId >= MAX_COMPONENTS) {
     return nullptr;
   }
-  // Queued first, alive second, and the order is the point: IsAlive walks
-  // `freeIds`, which in a churn-heavy game is every id ever killed, while
-  // IsPendingAdmission is a set lookup. Both answers are nullptr, so swapping
-  // them changes nothing but the cost of the common case -- a component added
-  // to an entity created this frame, which is the overwhelmingly normal thing
-  // for a game to do and used to pay for the scan every time.
+  // Queued first, alive second. Both early-outs answer nullptr and both are
+  // cheap: IsPendingAdmission is a container lookup, IsAlive is a bounds check
+  // plus a generation compare (it no longer walks freeIds — the remaining
+  // linear scan is IsIdInUse, used when stamping an existing id, not here).
   //
   // Still queued: Update() has not decided its membership yet, so adding a
   // component now is exactly the correct thing to do.
@@ -580,8 +577,8 @@ void Registry::TagEntity(Entity entity, const std::string &tag) {
     static thread_local unsigned int staleReports = 0;
     if (EcsShouldReport(staleReports)) {
       logger.Err("TagEntity: entity " + std::to_string(entityId) + " " +
-                 ComponentMissDescription(ComponentMiss::Stale) +
-                 "; ignoring" + EcsSuppressionNote(staleReports));
+                 ComponentMissDescription(ComponentMiss::Stale) + "; ignoring" +
+                 EcsSuppressionNote(staleReports));
     }
     return;
   }
@@ -647,8 +644,8 @@ void Registry::GroupEntity(Entity entity, const std::string &group) {
     static thread_local unsigned int staleReports = 0;
     if (EcsShouldReport(staleReports)) {
       logger.Err("GroupEntity: entity " + std::to_string(entityId) + " " +
-                 ComponentMissDescription(ComponentMiss::Stale) +
-                 "; ignoring" + EcsSuppressionNote(staleReports));
+                 ComponentMissDescription(ComponentMiss::Stale) + "; ignoring" +
+                 EcsSuppressionNote(staleReports));
     }
     return;
   }

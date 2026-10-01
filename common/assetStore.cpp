@@ -46,6 +46,16 @@ void AssetStore::StoreTexture(SDL_Renderer *renderer,
   logger.Log("New texture added to the Asset Store with id = " + assetId);
 }
 
+void AssetStore::AddTextureFromSurface(SDL_Renderer *renderer,
+                                       const std::string &assetId,
+                                       SDL_Surface *surface) {
+  if (surface == nullptr) {
+    logger.Err("AssetStore: no surface for '" + assetId + "' - nothing stored");
+    return;
+  }
+  StoreTexture(renderer, assetId, surface); // takes ownership, frees it
+}
+
 void AssetStore::AddTexture(SDL_Renderer *renderer, const std::string &assetId,
                             const std::string &filePath) {
   if (InPack(filePath)) {

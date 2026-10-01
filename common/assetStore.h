@@ -92,6 +92,22 @@ public:
   void AddTexture(SDL_Renderer *renderer, const std::string &assetId,
                   const PackReader &pack, const std::string &entryName);
 
+  // ⚠️ THE MISSING HALF OF `ReadBlob`, and it exists because the doc on
+  // ReadBlob promises a use it did not let anyone finish.
+  //
+  // ReadBlob hands a caller the raw pack-or-file bytes for "pixel-processing
+  // pipelines", and a caller that processes them has nowhere to put the
+  // result: every Add takes a PATH, and StoreTexture - which takes a surface -
+  // is private. So a palette recolour, a palette swap, a window icon built from
+  // a pack entry: all reachable up to the last step and blocked on it.
+  //
+  // Ownership: takes the surface and FREES it (SDL_CreateTextureFromSurface
+  // copies; the surface is dead the moment this returns). Replace-and-free
+  // semantics for the id are the store's one rule, unchanged - this is a door
+  // onto it, not a second copy of it.
+  void AddTextureFromSurface(SDL_Renderer *renderer, const std::string &assetId,
+                             SDL_Surface *surface);
+
   // A TTF_Font is rasterised at one point size, so a game that draws at two
   // sizes stores two ids ("hud-18", "title-32"). Re-adding an id replaces and
   // frees the old font.

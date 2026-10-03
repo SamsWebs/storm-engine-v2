@@ -387,5 +387,10 @@ void PlayState::render() {
     SDL_RenderDrawRect(renderer_, &pr);
   }
 
-  SDL_RenderPresent(renderer_);
+  // Present() draws the overlay list and then presents, in that order, in one
+  // call — so a HUD or a touch overlay cannot end up drawn after the present
+  // and invisible. This example has no overlays, so the default argument does;
+  // the point of adopting it here is that the call site is now the same shape a
+  // game that DOES have overlays would use.
+  Present(renderer_);
 }

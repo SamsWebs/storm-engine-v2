@@ -4,6 +4,28 @@
 
 ### Added
 
+- **`GameState::Present()` and `OverlayList`** (2.4.1). `Present(renderer_,
+  overlays)` draws every registered overlay and then presents the frame, in one
+  call, so the ordering cannot be got wrong by the caller. The motivating
+  defect: on Android the touch overlay must be drawn *before* the present, and
+  a state calling `SDL_RenderPresent` itself ships a menu with invisible
+  controls that looks correct on every other platform.
+
+  The overlay list is the **game's** member, not `GameState`'s — `Present`
+  takes it by reference and `OverlayList` is a standalone type. That is what
+  keeps `Present` non-virtual with no new member, so `GameState`'s size and
+  vtable are unchanged and a 2.4.x minor costs no game a layout change it did
+  not ask for. Draw order is registration order (later on top); re-adding a
+  name replaces in place and keeps its position, so a HUD re-registering every
+  frame cannot climb the stack every frame. `Add` refuses an empty name and a
+  null callback; `Present` tolerates a null renderer.
+
+  It cannot stop a state calling `SDL_RenderPresent` directly — nothing in C++
+  can, short of owning the renderer — and the header says so rather than
+  overclaiming. Adopting it is the fix. `OverlayList` is bridged in
+  `compat/global.h` (145 names). 11 new specs, 615 total. `examples/platformer`
+  adopted it.
+
 - **`tools/screen-sweep.py`** — a controls sweep for the examples. It drives
   any example under a private Xvfb, presses one key per fresh process (a
   keypress that opens a screen otherwise leaves you measuring the next one), and

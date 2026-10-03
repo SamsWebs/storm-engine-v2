@@ -218,9 +218,10 @@ Nothing here changes a public signature, a struct layout or a member. The layout
 pins in `specs/layout.spec.cpp` are the gate: a size that moves in a minor is a
 bug in this plan, not a licence.
 
-1. **`GameState::Present()`.** A non-virtual method with no new member, which is
-exactly the trick `CapFrameRate` already uses in that header — "Non-virtual and
-adds no member, so it changes neither `GameState`'s layout nor its vtable." It
+1. **`GameState::Present()`.** ✅ **Done 2026-10-04.** A non-virtual method with
+no new member, which is exactly the trick `CapFrameRate` already uses in that
+header — "Non-virtual and adds no member, so it changes neither `GameState`'s
+layout nor its vtable." It
 draws the registered overlays and then calls `SDL_RenderPresent` once. The
 motivation is specific: on Android the touch overlay must be drawn *before* the
 present, and a state that calls `SDL_RenderPresent` itself ships a menu with
@@ -235,6 +236,35 @@ convention, and the engine is where it belongs.
    itself is spec'd rather than implied. What it must not become is a second
    convention a game can bypass by calling `SDL_RenderPresent` directly, because
    a convention is what failed the first time.
+
+   **The decision, as implemented: the GAME owns the list and `GameState` only
+   borrows it.** `OverlayList` is a standalone type in `gameStateBase.h` and
+   `Present(SDL_Renderer*, const OverlayList& = OverlayList())` takes it by
+   reference. That is what makes "no new member" and "draws the registered
+   overlays" compatible at all — the storage lives in the derived class that
+   actually has overlays, so `GameState`'s size and vtable are untouched and no
+   game pays a layout change for a feature most of them never use. A member
+   would have been easier to write.
+
+   Draw order is **registration order**, spec'd in pixels: two overlays painting
+   the same rect come out with the later one on top. Re-adding an existing name
+   **replaces the callback in place** and keeps its position, so a HUD that
+   re-registers every frame cannot climb the stack every frame. `Add` refuses
+   an empty name and a null callback.
+
+   **On the last constraint above — "must not become a convention a game can
+   bypass" — the honest answer is that it partly cannot be met, and the code
+   says so rather than pretending.** Nothing in C++ stops a state calling
+   `SDL_RenderPresent` directly short of owning the renderer. What `Present()`
+   buys is that the correct call is the shortest one and the overlay ordering is
+   a property of the call instead of the caller's memory; a state that keeps
+   calling `SDL_RenderPresent` keeps today's behaviour, including the invisible
+   Android menu. Adopting it is the fix, and `tools/screen-sweep.py` is what
+   tells you a state has not adopted it.
+
+   `examples/platformer` adopted it, which is the "an item is done when an
+   in-tree example uses it" half. 615 specs, up from 604.
+
 2. **`stormengine2/ui/scale.h`.** `UiScale(windowHeight)` / `Px(v, h)` /
 `FontPt(basePt, h)` — pure, SDL-free, spec'd. A game that scales its fonts but
 not its literal offsets gets a 4K layout whose halves drift apart; a game that

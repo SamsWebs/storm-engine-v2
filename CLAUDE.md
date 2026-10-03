@@ -43,9 +43,9 @@ Binary name matches the directory name for `platformer`, `jrpg`, `netchat`, `net
 
 Framework is **Igloo + snowhouse** (BDD `Describe`/`It`, snowhouse `Assert::That`), not gtest/Catch2. 604 tests. Specs live in `specs/` mirroring the source tree; they `#include "../common/ecs.h"` by relative path, so the suite always tests the working tree, never the installed library. `specs/main.cpp` is the sole `main()`.
 
-**The suite covers `common/` only.** `TESTSRCS` is `find specs` plus `find common` (the two `TESTSRCS` assignments in `Makefile.debian`), so nothing under `editor/` or `examples/` is compiled into `./bin/tests` and no spec can reach it. Wiring either in is not a small job: both include the engine as `<stormengine2/...>`, which resolves to the *installed* headers rather than the working tree the specs deliberately test. Bugs in editor and example code are caught by compilation (CI builds both, see below) and by running them — not by specs.
+**The suite covers `common/` only.** `TESTSRCS` is `find specs` plus the engine sources read from `engine-sources.txt` (via `ENGINE_SOURCES`), so nothing under `editor/` or `examples/` is compiled into `./bin/tests` and no spec can reach it. Wiring either in is not a small job: both include the engine as `<stormengine2/...>`, which resolves to the *installed* headers rather than the working tree the specs deliberately test. Bugs in editor and example code are caught by compilation (CI builds both, see below) and by running them — not by specs.
 
-Test sources are globbed (`find specs -name '*.cpp'` plus `find common -name '*.cpp'`) — a new `specs/<area>/<name>.spec.cpp` is picked up with zero build-file edits, and the test binary statically compiles the engine rather than linking the `.so`.
+Spec sources are globbed (`find specs -name '*.cpp'`); engine sources come from `engine-sources.txt` (the canonical list, see build system below), so a new `specs/<area>/<name>.spec.cpp` is picked up with zero build-file edits, and the test binary statically compiles the engine rather than linking the `.so`. A new `common/*.cpp` must be added to `engine-sources.txt` or it will not link — `check-engine-sources` and CI fail if the list drifts from `find common`.
 
 ```bash
 ./bin/tests            # must run from the repo root
@@ -139,13 +139,13 @@ Most of this is invisible from any single makefile.
 Two modes exist in-repo. There is no `external/storm-engine-v2` submodule pattern here (that convention lives in downstream game repos).
 
 1. **Installed shared library** — all desktop examples and the editor. Headers resolve via `-I/usr/local/include`, the link is `-lstormenginev2`, and `base.mk` bakes `-Wl,-rpath=/usr/local/lib` so binaries run without `LD_LIBRARY_PATH`. On Linux the engine is only ever a `.so`, never a static `.a`. The MinGW build is the exception in form only: `Makefile.win` produces a DLL plus the `libstormenginev2.dll.a` import library the linker needs.
-2. **Engine as source** — `examples/nx-platformer` and `examples/android-platformer` compile `common/*.cpp` directly into the game and use a committed symlink `include/stormengine2 -> ../../../common` so `<stormengine2/...>` resolves identically. Invisible in a plain `find`; use `ls -la`.
+2. **Engine as source** — `examples/nx-platformer` and `examples/android-platformer` compile engine translation units directly into the game and use a committed symlink `include/stormengine2 -> ../../../common` so `<stormengine2/...>` resolves identically. Invisible in a plain `find`; use `ls -la`. Both read the same canonical source list as the desktop builds (see build system below), so all 13 engine TUs (including `common/net/`) compile on every platform.
 
 Games always include the engine with angle brackets (`#include <stormengine2/ecs.h>`); quoted/relative includes are reserved for the game's own headers.
 
 Consequence of the two modes: editing `common/` changes desktop builds only after `make install`, but changes Switch/Android builds immediately.
 
-**Only the Switch build globs non-recursively.** `examples/nx-platformer/Makefile:8` lists `include/stormengine2` (a symlink to `common/`) in `SOURCES` and expands it with `$(wildcard $(CURDIR)/$(dir)/*.cpp)`, one level deep — so `common/net/` is silently absent from Switch. Android is **recursive**: `examples/android-platformer/app/jni/CMakeLists.txt:53` is `file(GLOB_RECURSE ENGINE_SRC "${REPO_ROOT}/common/*.cpp")`, so it does compile `common/net/`. A new `.cpp` in a subdirectory of `common/` therefore vanishes on Switch only.
+**One canonical source list: `engine-sources.txt` at the repo root.** `Makefile.debian` (`LIBSRCS`/`TESTSRCS`), `Makefile.win` (`LIBSRCS`), `examples/nx-platformer/Makefile` (`ENGINE_SRCS`) and `examples/android-platformer/app/jni/CMakeLists.txt` (`file(STRINGS …)`) all read it instead of globbing `common/` themselves. The Switch Makefile used to expand `SOURCES` (including the `include/stormengine2` symlink) with a non-recursive `$(wildcard …/*.cpp)` and silently dropped all seven `common/net/` TUs; Android used `file(GLOB_RECURSE)` but without `CONFIGURE_DEPENDS`, so a newly added file needed a manual re-configure. Both defects die when the list is the only source of truth: a new `.cpp` under `common/` is one line in one file. `make -f Makefile.debian check-engine-sources` (run by `all`/`test`) and a `pr-validate.yml` step fail the build if the list drifts from `find common -name '*.cpp'`. `Dockerfile.debian` copies the list, so the CI image can build. Adding a source means regenerating the list (`find common -name '*.cpp' | sort`, keep the `#` header comments) or adding the path by hand.
 
 Canonical game layout: `Makefile` (`NAME = <binname>` + `include ../examples.mk`), `assets/`, `bin/`, `src/{main.cpp, game.h, game.cpp, states/playState.{h,cpp}}`, optional `src/components/*.h` and `src/systems/*.h`.
 
@@ -400,8 +400,10 @@ specs, and a pin bump in every consuming game, so it needs a second consumer or
 a plainly engine-shaped design. Leaving it local is a legitimate answer.
 
 When a change genuinely does need a new mechanism, the shape it takes still has
-to survive the Switch and Android builds — non-recursive globs on Switch,
-`-fno-exceptions` on both — neither of which is in CI.
+to survive the Switch and Android builds — neither of which is in CI, and both
+of which now compile `common/net/` through the same `engine-sources.txt` the
+desktop builds use (so a new engine `.cpp` must be listed there or it drops out
+of every platform at once), plus `-fno-exceptions` on both.
 
 ### Implementation and verification
 
@@ -415,7 +417,7 @@ Verify:
 - alternate entry points and bypass paths
 - serialization/deserialization, and editor-writer against engine-reader
 - error paths
-- platform-specific behavior - Switch `-fno-exceptions` and the non-recursive `common/*.cpp` globs on Switch and Android, neither of which is in CI
+- platform-specific behavior - Switch `-fno-exceptions` and Android/Switch source enumeration (both now driven by `engine-sources.txt`), neither of which is in CI
 - regression coverage: a fix is only really closed once a spec fails without it
 - cross-subsystem integration, including at least one real consumer under `examples/`
 

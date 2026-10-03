@@ -29,6 +29,9 @@ COPY ./examples /opt/library/examples
 COPY ./editor /opt/library/editor
 COPY ./Makefile.debian /opt/library/Makefile
 COPY ./base.mk /opt/library/base.mk
+# One canonical engine source list; Makefile.debian reads it for LIBSRCS/TESTSRCS
+# and fails the build if it drifts from find common.
+COPY ./engine-sources.txt /opt/library/engine-sources.txt
 # `make install` reads both of these. The release workflow stages the .deb with
 # `make install DESTDIR=...` inside this image, so anything the install target
 # touches has to be in the context or the packaging step dies on a missing file

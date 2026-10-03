@@ -1,0 +1,25 @@
+# One canonical list of engine translation units, paths relative to the repo
+# root. Every build path reads this file instead of globbing common/ itself:
+# Makefile.debian, Makefile.win, examples/nx-platformer/Makefile, and
+# examples/android-platformer/app/jni/CMakeLists.txt.
+#
+# A new .cpp under common/ must be added here or it will not link on every
+# platform. CI fails if this list drifts from `find common -name '*.cpp'`.
+# Regenerate with:
+#   find common -name '*.cpp' | sort
+# then merge into this file (keep the header comments; the checker ignores
+# # lines and blank lines).
+
+common/assetStore.cpp
+common/ecs.cpp
+common/gameStateMachine.cpp
+common/logger.cpp
+common/net/netClient.cpp
+common/net/netConnection.cpp
+common/net/netPacket.cpp
+common/net/netServer.cpp
+common/net/netSnapshot.cpp
+common/net/netSocket.cpp
+common/net/netVarInt.cpp
+common/tilemapLoader.cpp
+common/xmlLoader.cpp

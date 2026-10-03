@@ -72,8 +72,11 @@ LDFLAGS := -L$(DEPS)/lib -mconsole
 LIBS    := -lmingw32 -lSDL2main -lSDL2 -lSDL2_image -lSDL2_ttf -lSDL2_mixer \
            -ltinyxml2 -lws2_32
 
-# Engine sources — recursive, same as Makefile.debian
-LIBSRCS := $(shell find common -name '*.cpp')
+# Engine sources — one canonical list, same as Makefile.debian and the
+# Switch/Android example builds. CI fails if it drifts from find common.
+# grep '^common/', not awk with '#': a bare `#` inside $(shell …) starts a
+# make comment and truncates the call.
+LIBSRCS := $(shell grep '^common/' engine-sources.txt)
 LIBOBJS := $(patsubst common/%.cpp, $(OBJDIR)/engine/%.o, $(LIBSRCS))
 
 # Spec sources + engine sources (specs link the engine statically)

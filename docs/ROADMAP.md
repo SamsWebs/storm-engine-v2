@@ -168,11 +168,17 @@ release already fell through.
    circle colliders are marked done in the status block at the top of
    "After 2.0.0 ships". The stale "IsAlive walks freeIds" claim under
    "Carried, not blocking" was corrected the same day.
-4. **One canonical source list.** `examples/nx-platformer/Makefile` and the
-   Android CMake glob have both been non-recursive before, and the recurring fix
-   written down twice was "emit the canonical source list once and have every
-   build path read it". Nothing has. That is one file, and it retires a whole
-   class of defect rather than an instance.
+4. **One canonical source list.** ✅ **Done 2026-09-23.** `engine-sources.txt`
+   at the repo root is the single enumeration; `Makefile.debian`, `Makefile.win`,
+   `examples/nx-platformer/Makefile` and the Android CMake all read it instead
+   of globbing `common/` themselves. The Switch Makefile's non-recursive wildcard
+   (which silently dropped all seven `common/net/` TUs) and Android's
+   `GLOB_RECURSE`-without-`CONFIGURE_DEPENDS` both die when the list is the only
+   source of truth. `make check-engine-sources` and a `pr-validate.yml` step fail
+   if the list drifts from `find common -name '*.cpp'`; `Dockerfile.debian` copies
+   the list so the CI image builds. Retires P6's source-list half (and the
+   recurring "fix the glob again" write-up) outright; P7 (`socketInitializeDefault`)
+   remains and is what 2.7.2 still carries.
 5. **State the verification matrix.** Done for this file — see "What CI
    actually verifies, and what ships green" under [Build and CI](#build-and-ci).
    The remaining half is the release checklist, so "all targets build" can never
@@ -309,16 +315,20 @@ own 627 lines.
 rule split into a pure header the way the flagship game already did it. A net
 layer that cannot tell the host its own LAN address leaves every game to solve
 it.
-2. **The Switch halves.** `NetSocketsInit()` needs a `socketInitializeDefault()`
-arm, and `examples/nx-platformer/Makefile` needs a recursive source glob
-(`SOURCES := src src/states src/components include/stormengine2`, where
-`include/stormengine2` is a symlink to `common/` and therefore reaches the six
-top-level `.cpp` files and none of the seven under `common/net/`). These must land
-together: the first is masked by the second and surfaces the moment it is fixed.
-**Neither has been built here** — devkitPro is not on this machine — so both are
-ledger claims verified only as *still present in the source*, which is a weaker
-thing than verified as *broken*, and should be repeated to whoever builds it next
-rather than asserted.
+2. **The Switch halves — source-list half done, `NetSocketsInit` remains.**
+   The recursive-source-glob half landed 2026-09-23 as part of Track 0.4:
+   `examples/nx-platformer/Makefile` now reads `engine-sources.txt` (all 13
+   engine TUs, including `common/net/`) instead of the old non-recursive
+   `SOURCES := … include/stormengine2` wildcard. What is left for 2.7.2 is
+   `NetSocketsInit()`, which still needs a `socketInitializeDefault()` arm —
+   without it `socket(AF_INET, SOCK_DGRAM, 0)` returns -1 on Switch and the
+   engine logs "failed to open socket", which reads like a firewall problem.
+   **The source half has only been verified by dry-run (`make -n` listing all
+   13 engine TUs), not by a real devkitPro build here** — devkitPro is on this
+   machine but the Switch link has not been run as part of this change, so
+   treat the dry-run as weaker than a green build and re-verify with
+   `DEVKITPRO=… make` when convenient. The `NetSocketsInit` half has never been
+   built here either.
 
 ### 3.0.0 — the ECS wave (breaking, reserved, unscheduled)
 
@@ -1157,7 +1167,9 @@ from that notebook are **not** repeated here.
 | P67 | `libstormenginev2.so` has no `-Wl,-soname`, so the AssetStore ABI break has no package guard behind it. (The tinyxml2 story in `base.mk` is about *its* soname in `NEEDED`, not this.) | 🔴 Open |
 | Traps 10/11 | Field-site docs: no comment on `SpriteComponent::width/height` (source rect) or `AnimationComponent::vertical` (wrong flag draws nothing / wrong frames). Runtime diagnostic exists (`35877e1`). | 🟡 Partial |
 
-Already scheduled elsewhere — do not re-file: P6/P7 → 2.7.2, P39 (`.map`
+Already scheduled elsewhere — do not re-file: P7 (`socketInitializeDefault`,
+Switch half of P6's platform-init, only remaining piece after the 2026-09-23
+source-list landing) → 2.7.2, P39 (`.map`
 version) → 2.5.1, `Makefile.win` `-pthread` → "What we will not do" / layout
 wave carry list.
 

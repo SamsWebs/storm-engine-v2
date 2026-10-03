@@ -18,6 +18,17 @@
 
 ### Fixed
 
+- **One canonical engine source list** (`engine-sources.txt` at the repo
+  root). `Makefile.debian`, `Makefile.win`, `examples/nx-platformer` and
+  `examples/android-platformer` all read it instead of globbing `common/`
+  themselves. The Switch Makefile's non-recursive wildcard used to compile
+  only the six top-level `common/*.cpp` files and silently drop all seven
+  under `common/net/`; the list has all 13. Adding a `.cpp` under `common/`
+  means one line in one file (or a regenerate), not a fix in four build
+  systems. `make -f Makefile.debian check-engine-sources` and a
+  `pr-validate.yml` step fail the build if the list drifts from
+  `find common -name '*.cpp'`. 604 specs.
+
 - **`TileMapLoader` no longer stops mid-file in silence (P17 residual).**
   The editor-format reader put every header field in the `while` condition
   and never checked the optional collider/animation tails. A truncated or

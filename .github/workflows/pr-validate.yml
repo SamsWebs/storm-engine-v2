@@ -27,6 +27,19 @@ jobs:
       - name: Check the compat probe is not stale
         run: python3 scripts/generate-compat-probes.py --check
 
+      # One canonical engine source list, read by Makefile.debian, Makefile.win,
+      # and both cross-build examples. A new common/*.cpp not listed here would
+      # silently drop out of the .so and every platform build — the exact class
+      # of defect this file exists to kill (non-recursive Switch glob, Android
+      # GLOB that used to miss net/, Windows example fork). Runs on the host
+      # next to the compat probe: no toolchain needed, fail before Docker.
+      - name: Check the engine source list is not stale
+        run: |
+          find common -name '*.cpp' | sort > /tmp/actual-sources.txt
+          grep -v '^[[:space:]]*#' engine-sources.txt \
+            | grep -v '^[[:space:]]*$$' | sort > /tmp/listed-sources.txt
+          diff -u /tmp/listed-sources.txt /tmp/actual-sources.txt
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 

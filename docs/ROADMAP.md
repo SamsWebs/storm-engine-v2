@@ -179,10 +179,20 @@ release already fell through.
    the list so the CI image builds. Retires P6's source-list half (and the
    recurring "fix the glob again" write-up) outright; P7 (`socketInitializeDefault`)
    remains and is what 2.7.2 still carries.
-5. **State the verification matrix.** Done for this file — see "What CI
-   actually verifies, and what ships green" under [Build and CI](#build-and-ci).
-   The remaining half is the release checklist, so "all targets build" can never
-   again be written from intent.
+5. **State the verification matrix.** ✅ **Done 2026-10-04.** Both halves. The
+   matrix for this file is "What CI actually verifies, and what ships green"
+   under [Build and CI](#build-and-ci); the release checklist that makes it
+   actionable is [`docs/RELEASING.md`](RELEASING.md), and its executable half
+   is `scripts/release-check.py`. That script is the half that stops rotting:
+   it asserts the four hand-written version sites agree (`Makefile.debian`,
+   `Makefile.win`, and the seven `data-ver` elements in `web/index.html` —
+   the release workflow's pre-release gate reads only the first of those, so a
+   tag could ship with the website advertising the previous release), that the
+   canonical source list matches `find common`, that the compat probe is fresh,
+   and that the coverage claims in the checklist are still true — a workflow
+   gaining a devkitPro or NDK invocation, or losing the `build-windows` /
+   `build-linux` job ids, fails the gate rather than leaving the matrix
+   quietly wrong. Verified by sabotaging each check in both directions.
 6. **A layout/measurement harness for the examples.** The engine ships 14
    examples with UI and no way to look at one without playing to it. The flagship
    game's `tools/layout_shot.cpp` renders the real font at the positions the

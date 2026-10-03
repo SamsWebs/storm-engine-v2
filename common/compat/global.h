@@ -65,6 +65,8 @@
 #include "../systems/render.h"
 #include "../systems/renderCollider.h"
 
+#include "../ui/scale.h"
+
 // ── ECS ─────────────────────────────────────────────────────────────────────
 using storm::Component;
 using storm::ComponentMiss;
@@ -153,6 +155,12 @@ using storm::GameState;
 using storm::GameStateMachine;
 using storm::MILLISECS_PER_FRAME;
 using storm::OverlayList;
+
+// ── UI scale (2.4.2) ─────────────────────────────────────────────────────────
+using storm::FontPt;
+using storm::kUiReferenceHeight;
+using storm::Px;
+using storm::UiScale;
 
 // ── Input ───────────────────────────────────────────────────────────────────
 using storm::ActionBinding;

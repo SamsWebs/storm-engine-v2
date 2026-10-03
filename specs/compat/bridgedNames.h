@@ -8,7 +8,7 @@
 // third of the exports, so a name missing from the bridge was missing
 // from the spec too.
 //
-// 145 names.
+// 149 names.
 #pragma once
 
 namespace storm_compat_probe {
@@ -42,6 +42,7 @@ using ::EntityOrder;
 using ::EvalTouches;
 using ::EvalVPad;
 using ::FPS;
+using ::FontPt;
 using ::GameState;
 using ::GameStateMachine;
 using ::Gamepad;
@@ -107,6 +108,7 @@ using ::OverlayList;
 using ::PackReader;
 using ::PackWriter;
 using ::Pool;
+using ::Px;
 using ::Registry;
 using ::RenderColliderSystem;
 using ::RenderSystem;
@@ -124,6 +126,7 @@ using ::TouchPoint;
 using ::TouchZone;
 using ::TouchZones;
 using ::TransformComponent;
+using ::UiScale;
 using ::VPadControl;
 using ::VPadLayout;
 using ::VPadState;
@@ -157,4 +160,5 @@ using ::kNetResendMs;
 using ::kNetSequenceBits;
 using ::kNetTimeoutMs;
 using ::kNetVarIntMaxBytes;
+using ::kUiReferenceHeight;
 } // namespace storm_compat_probe

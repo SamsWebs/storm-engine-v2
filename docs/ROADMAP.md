@@ -265,11 +265,23 @@ convention, and the engine is where it belongs.
    `examples/platformer` adopted it, which is the "an item is done when an
    in-tree example uses it" half. 615 specs, up from 604.
 
-2. **`stormengine2/ui/scale.h`.** `UiScale(windowHeight)` / `Px(v, h)` /
-`FontPt(basePt, h)` — pure, SDL-free, spec'd. A game that scales its fonts but
-not its literal offsets gets a 4K layout whose halves drift apart; a game that
-scales both by different factors gets the same thing more slowly. One function is
-what makes them agree by construction.
+2. **`stormengine2/ui/scale.h`.** ✅ **Done 2026-10-04.** `UiScale(windowHeight)` /
+`Px(v, h)` / `FontPt(basePt, h)` — pure, SDL-free, header-only, spec'd in 11
+cases. A game that scales its fonts but not its literal offsets gets a 4K
+layout whose halves drift apart; a game that scales both by different factors
+gets the same thing more slowly. One function is what makes them agree by
+construction. The decisions worth recording, because each is one a plausible
+implementation gets wrong: the reference is **720** and scaling is the identity
+there; rounding is **half away from zero** (truncation makes every odd pixel at
+1.5× lose half a pixel, and a column of them drifts visibly); a **positive**
+value never rounds to 0, so a 1px border does not vanish at 480p, while 0 stays
+0 and negatives keep their sign; the result is **monotonic**, so adjacent
+columns cannot swap widths between resolutions; a non-positive window height is
+**clamped to the reference** rather than trusted, because a factor of zero makes
+every `Px()` come back as `INT_MIN`; and the free functions **must agree with
+the type exactly**, since a layout that picks up two scalings depending on
+which call site wrote it has the original bug wearing a disguise. No consumer
+action: it is a new header, opt in.
 3. **`text.h` grows the drawing verbs it is missing.** Centre and right
 alignment, a measured fit that *marks* a truncated string rather than clipping it
 silently, and a footer built from a list of parts so it can wrap between verbs.

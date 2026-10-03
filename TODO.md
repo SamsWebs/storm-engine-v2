@@ -13,7 +13,7 @@ slices checked) and continue.
 | 2 | P17 residual: `loadFilemapEditor` third silent-failure mode (failing spec first) | `fix/editor-map-truncated` | done |
 | 3 | Track 0.4 One canonical source list | `fix/engine-canonical-sources` | done (merged) |
 | 4 | Track 0.5 Release checklist (verification matrix half) | `chore/release-checklist` | done |
-| 5 | Track 0.6 Example layout/measurement harness | pending | pending |
+| 5 | Track 0.6 Example layout/measurement harness | `chore/example-layout-harness` | done |
 | 6 | 2.4.1 `GameState::Present()` | pending | pending |
 | 7 | 2.4.2 `ui/scale.h` | pending | pending |
 | 8 | 2.4.3 `text.h` verbs | pending | pending |

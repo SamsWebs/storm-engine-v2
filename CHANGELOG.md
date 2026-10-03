@@ -4,6 +4,17 @@
 
 ### Added
 
+- **`tools/screen-sweep.py`** — a controls sweep for the examples. It drives
+  any example under a private Xvfb, presses one key per fresh process (a
+  keypress that opens a screen otherwise leaves you measuring the next one), and
+  reports the changed-pixel count and bounding box against a measured idle
+  baseline. Its purpose is to make looking cheap and to catch byte-identical
+  frame pairs automatically, because a dead input path is invisible to the spec
+  suite, which asserts on state and never presses a key. It reports rather than
+  concludes: `examples/puzzle` draws its PAUSED overlay in 1,039 px against a
+  6,144 px idle floor, so a threshold would call a working feature dead. Local
+  tool, not in CI — the CI image has no Xvfb. No public API change.
+
 - **`docs/RELEASING.md` and `scripts/release-check.py`** — the release
   checklist, and the gate that keeps it honest. The version is hand-written in
   four places and the release workflow validated one of them, so a tag could go

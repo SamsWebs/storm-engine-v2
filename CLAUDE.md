@@ -37,7 +37,9 @@ sudo make -f Makefile.debian install         # required first: examples/editor l
 cd examples/platformer && make && make run   # `make` builds only; `make run` launches (CWD must be the example dir)
 ```
 
-Binary name matches the directory name for `platformer`, `jrpg`, `netchat`, `netrepl`, `netplay-checkers`; it differs for puzzle→`tetris`, shooter→`alienattack`, sports→`hockey`, strategy→`tanks`. Use `make run` rather than guessing `./bin/<dir>`.
+Binary name matches the directory name for `platformer`, `jrpg`, `netchat`, `netrepl`, `netplay-checkers`; it differs for puzzle→`tetris`, shooter→**`1945`**, sports→`hockey`, strategy→**`realms`**. (The `1945` and `realms` names were wrong here until 2026-10-04 — this line said `alienattack` and `tanks`, and `examples/strategy/bin/` still held a `tanks` binary built before the rename.) **Read `NAME` out of the example's `Makefile`; do not guess it from the directory.** Use `make run` rather than guessing `./bin/<dir>`.
+
+`tools/screen-sweep.py` drives any example under a private Xvfb, presses one key per fresh process, and reports the pixel delta and the bounding box of the change against a measured idle baseline — the controls sweep. `python3 tools/screen-sweep.py examples/platformer`, or `--all`. Two rules it exists to enforce: **one launch per key** (a keypress that opens a screen leaves you measuring the next one), and **read DEAD before anything else** (a byte-identical frame pair after a keypress is invisible to the spec suite, which never presses a key). It is a *look* helper, not a verdict: a count below the idle floor may still be a real overlay — `examples/puzzle`'s PAUSED is 1,039 px against a 6,144 px floor, and the box (97x19) is what tells them apart. Not in CI; the image has no Xvfb.
 
 ## Tests
 

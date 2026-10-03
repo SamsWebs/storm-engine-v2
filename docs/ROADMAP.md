@@ -193,12 +193,24 @@ release already fell through.
    gaining a devkitPro or NDK invocation, or losing the `build-windows` /
    `build-linux` job ids, fails the gate rather than leaving the matrix
    quietly wrong. Verified by sabotaging each check in both directions.
-6. **A layout/measurement harness for the examples.** The engine ships 14
-   examples with UI and no way to look at one without playing to it. The flagship
-   game's `tools/layout_shot.cpp` renders the real font at the positions the
-   layout code computes and writes a PNG under Xvfb. One tool serves every
-   example, and the rule it enforces — *look at a screen you changed* — has caught
-   four layout defects in one session in the game that adopted it.
+6. **A layout/measurement harness for the examples.** ✅ **Done 2026-10-04**
+   as `tools/screen-sweep.py`. It drives any example under a private Xvfb,
+   presses **one key per fresh process**, and reports the changed-pixel count
+   and the bounding box of the change against a measured idle baseline. One
+   tool serves every example, and the rule it enforces is *look at a screen you
+   changed* — the sweep on `examples/platformer` and `examples/puzzle` is what
+   found the stale-binary and dead-jump-reading problems described in
+   `tools/screen-sweep.py`'s own header, neither of which any spec or build
+   could see. Not in CI: the image has no Xvfb and every example needs an
+   installed engine, so it is a local tool by construction.
+
+   **What it deliberately does not do is conclude that a key is broken.** The
+   measured reason is in the tool: `examples/puzzle` draws its PAUSED overlay in
+   1,039 px against a 6,144 px idle floor, so a pixel threshold calls a pause
+   that visibly works dead. The count is a lead and the box is the evidence; a
+   human looks at the frame. The flagship game's `layout_shot.cpp` renders at
+   computed positions, which is the stronger tool for pure layout arithmetic —
+   the sweep is the complement for anything that needs a key pressed.
 
 ### 2.4.0 — frame and presentation seams (additive)
 

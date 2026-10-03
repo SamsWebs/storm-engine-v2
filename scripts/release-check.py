@@ -317,7 +317,7 @@ def main():
         print(f"{failed} check(s) FAILED.")
         return 1
     print("All checks passed. Two gates remain and are NOT run here:")
-    print("  make -f Makefile.debian test      (the 604 specs)")
+    print("  make -f Makefile.debian test      (the spec suite)")
     print("  the pushed tag's build-and-release run")
     return 0
 

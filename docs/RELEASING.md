@@ -83,7 +83,8 @@ make -f Makefile.debian test          # builds ./bin/tests, then runs it
 ```
 
 There is no plain `Makefile` at the repo root; every invocation needs
-`-f Makefile.debian`. 604 specs, and it **must be run from the repo root** —
+`-f Makefile.debian`. The count moves; trust `./bin/tests`'s own
+last line, not this file. It **must be run from the repo root** —
 several specs hardcode `./specs/assets/...` and the run segfaults elsewhere.
 
 ### 3. Build what CI will build, locally

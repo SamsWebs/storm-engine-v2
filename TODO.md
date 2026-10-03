@@ -14,7 +14,7 @@ slices checked) and continue.
 | 3 | Track 0.4 One canonical source list | `fix/engine-canonical-sources` | done (merged) |
 | 4 | Track 0.5 Release checklist (verification matrix half) | `chore/release-checklist` | done |
 | 5 | Track 0.6 Example layout/measurement harness | `chore/example-layout-harness` | done |
-| 6 | 2.4.1 `GameState::Present()` | pending | pending |
+| 6 | 2.4.1 `GameState::Present()` | `feat/gamestate-present` | done |
 | 7 | 2.4.2 `ui/scale.h` | pending | pending |
 | 8 | 2.4.3 `text.h` verbs | pending | pending |
 | 9 | 2.4.4 `version.h` | pending | pending |
@@ -38,7 +38,7 @@ P19 residual, P28, P44 residual, P31, P65, P67, traps 10/11.
 
 ## Rules
 
-- Docs-only slice: suite must stay green (604), no new specs required.
+- Docs-only slice: suite must stay green, no new specs required.
 - Code slice: failing BDD spec first; suite green after fix.
 - Public API change: `TUTORIAL.md` + `CHANGELOG.md` in the same branch.
 - New public name: `python3 scripts/generate-compat-probes.py --check`.

@@ -152,6 +152,7 @@ using storm::FPS;
 using storm::GameState;
 using storm::GameStateMachine;
 using storm::MILLISECS_PER_FRAME;
+using storm::OverlayList;
 
 // ── Input ───────────────────────────────────────────────────────────────────
 using storm::ActionBinding;

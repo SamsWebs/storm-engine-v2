@@ -11,7 +11,7 @@ slices checked) and continue.
 |---|-------|--------|--------|
 | 1 | Track 0.1–0.3 docs hygiene (retire guardrails, move TECH_DEBT durable half, fix stale statuses) | `docs/track0-hygiene` | done (PR #79) |
 | 2 | P17 residual: `loadFilemapEditor` third silent-failure mode (failing spec first) | `fix/editor-map-truncated` | done |
-| 3 | Track 0.4 One canonical source list | pending | pending |
+| 3 | Track 0.4 One canonical source list | `fix/engine-canonical-sources` | pending (in review) |
 | 4 | Track 0.5 Release checklist (verification matrix half) | pending | pending |
 | 5 | Track 0.6 Example layout/measurement harness | pending | pending |
 | 6 | 2.4.1 `GameState::Present()` | pending | pending |

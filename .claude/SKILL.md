@@ -61,9 +61,11 @@ the engine into itself.
 surfaces when a release is cut, not when a PR is opened.
 
 The `common/net/` module is a port of Teeworlds 0.7.5 networking (zlib).
-Android compiles all of `common/` including `common/net/`
-(`file(GLOB_RECURSE ...)`); the Switch example enumerates source directories
-non-recursively and therefore does not build `common/net/`.
+Every build path — Debian, Windows, Switch, Android — reads the same canonical
+source list (`engine-sources.txt` at the repo root), so all 13 engine TUs
+including `common/net/` compile on every platform. Adding a `.cpp` under
+`common/` means one line in that file (or a regenerate); `make
+-f Makefile.debian check-engine-sources` and CI fail if the list is stale.
 
 **The engine ships no main loop, no Game class, no window management.**
 `Game::Run()` is written by the game. The only engine piece in it is
@@ -977,14 +979,20 @@ and `examples.mk` links the **installed** library (`-lstormenginev2`) — it
 compiles no engine source at all. The submodule pattern, compiling the engine
 into the game binary, is what `examples/nx-platformer/Makefile`,
 `examples/android-platformer/app/jni/CMakeLists.txt` and
-`examples/examples.win.mk` do. When copying it, glob engine sources
-**recursively**.
+`examples/examples.win.mk` do. When copying it, read the same
+`engine-sources.txt` the in-tree builds use — do **not** hand-glob
+`common/` by directory depth (the old non-recursive Switch wildcard and the
+Android `GLOB_RECURSE`-without-`CONFIGURE_DEPENDS` both dropped files; the
+canonical list has all 13 TUs including `common/net/`).
 
-**`nx-platformer` compiles only `common/*.cpp` (a non-recursive glob)** — so
-`common/net/` is silently absent from the Switch build. Watch for the same
-pattern in any game Makefile that globs engine sources by hand.
-`android-platformer` had the identical defect and now uses `GLOB_RECURSE`, so
-networking builds there.
+**Every platform build enumerates the engine the same way** — `engine-sources.txt`
+at the repo root, read by `Makefile.debian`, `Makefile.win`, the Switch example
+and the Android CMake. `make -f Makefile.debian check-engine-sources` and a
+`pr-validate.yml` step fail if it drifts from `find common -name '*.cpp'`, so
+"the glob missed a subdirectory" is no longer a class of defect that can reach a
+release. The reusable lesson for an out-of-tree game: **never glob the engine by
+directory depth** — the old non-recursive Switch wildcard and the Android
+`GLOB_RECURSE`-without-`CONFIGURE_DEPENDS` both dropped files the same way.
 
 ### Dependencies
 
@@ -1289,7 +1297,7 @@ Because the player is moved by hand here, do **not** also register
 
 The engine's `platformer` example demonstrates the basic pattern: `TransformComponent` + `RigidBodyComponent` + `SpriteComponent` + `AnimationComponent` + `BoxColliderComponent`. The `nx-platformer` and `android-platformer` variants show the same game on Switch and Android.
 
-The `android-platformer` variant is not a pure port: it is the reference consumer of the engine's virtual gamepad. It builds the layout once from the logical window size (`MakeVPadLayout(w, h)` — Xbox lettering by default), feeds SDL touches through `EvalVPad` each frame, letterboxes with `SDL_RenderSetLogicalSize`, and handles orientation by overriding `setOrientationBis` in `PlatformerActivity` (it requests `SCREEN_ORIENTATION_FULL_SENSOR`, so the game follows the device through all four orientations even with the auto-rotate lock on; SDL overwrites the manifest's `screenOrientation` from native code, so the manifest alone cannot decide this). It also links `common/net/` (`GLOB_RECURSE` + the `INTERNET` permission).
+The `android-platformer` variant is not a pure port: it is the reference consumer of the engine's virtual gamepad. It builds the layout once from the logical window size (`MakeVPadLayout(w, h)` — Xbox lettering by default), feeds SDL touches through `EvalVPad` each frame, letterboxes with `SDL_RenderSetLogicalSize`, and handles orientation by overriding `setOrientationBis` in `PlatformerActivity` (it requests `SCREEN_ORIENTATION_FULL_SENSOR`, so the game follows the device through all four orientations even with the auto-rotate lock on; SDL overwrites the manifest's `screenOrientation` from native code, so the manifest alone cannot decide this). It also links `common/net/` (the canonical `engine-sources.txt` list + the `INTERNET` permission, which fails at runtime rather than at build time).
 
 #### Shooter (Side-scrolling shoot-em-up)
 
@@ -1843,12 +1851,13 @@ the game's own headers.
   `Update` / `WasPressed`); every source is optional, so a desktop build and a
   phone build share one binding table. On Switch, games still read libnx
   `PadState` themselves.
-- `common/net/` is absent from the **Switch** build only:
-  `examples/nx-platformer/Makefile` globs `$(wildcard $(dir)/*.cpp)` over
-  `include/stormengine2` (a symlink to `common/`), which is non-recursive and
-  picks up 6 of the 13 translation units. The **Android** example does build it
-  — `app/jni/CMakeLists.txt` uses `GLOB_RECURSE` and the manifest carries
-  `INTERNET`.
+- `common/net/` compiles on every platform as of 2026-09-23. The Switch
+  example used to enumerate `include/stormengine2` (symlink to `common/`)
+  with a non-recursive wildcard and picked up only 6 of 13 engine TUs;
+  it now reads `engine-sources.txt`, same as the desktop and Android builds.
+  The Android example already used `GLOB_RECURSE` and still gets all 13 from
+  the list (`file(STRINGS …)` + `CMAKE_CONFIGURE_DEPENDS`), with the
+  `INTERNET` permission on the manifest.
 - The editor's shadowing copy of `common/components/sprite.h` is gone;
   `editor/include/` was deleted and the editor now compiles against the
   installed engine headers with `#include <stormengine2/components/sprite.h>`.

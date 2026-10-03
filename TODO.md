@@ -15,7 +15,7 @@ slices checked) and continue.
 | 4 | Track 0.5 Release checklist (verification matrix half) | `chore/release-checklist` | done |
 | 5 | Track 0.6 Example layout/measurement harness | `chore/example-layout-harness` | done |
 | 6 | 2.4.1 `GameState::Present()` | `feat/gamestate-present` | done |
-| 7 | 2.4.2 `ui/scale.h` | pending | pending |
+| 7 | 2.4.2 `ui/scale.h` | `feat/ui-scale` | done |
 | 8 | 2.4.3 `text.h` verbs | pending | pending |
 | 9 | 2.4.4 `version.h` | pending | pending |
 | 10 | 2.4.5 debug overlay | pending | pending |

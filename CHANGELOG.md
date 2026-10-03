@@ -4,6 +4,28 @@
 
 ### Added
 
+- **`stormengine2/ui/scale.h`** (2.4.2). `UiScale(windowHeight)` with `Px(v)` /
+  `FontPt(basePt)`, plus the free-function forms `Px(v, h)` / `FontPt(pt, h)` for
+  call sites too deep to want a scale object. Pure, SDL-free, header-only, and
+  exception-free (Switch compiles with exceptions off).
+
+  It exists because a layout's halves can drift apart on a screen nobody tested
+  on: a game that scales fonts but not literal offsets gets a 4K layout whose
+  two halves disagree, and a game that scales both by separately-computed
+  factors gets the same thing more slowly. Neither announces itself — the layout
+  is correct at the resolution it was authored at.
+
+  Reference height **720**, and scaling is the identity there. Rounding is half
+  away from zero, so no pixel column loses half a pixel at 1.5×. A positive
+  value never rounds to 0 (a 1px border does not vanish at 480p) while 0 stays
+  0 and negatives keep their sign (a negative offset is an edge running off the
+  screen; clamping it would push it on-screen). The result is monotonic, so
+  adjacent columns cannot swap widths between resolutions. A non-positive window
+  height is clamped to the reference rather than trusted. The free functions
+  agree with the type exactly — a layout picking up two scalings depending on
+  which call site wrote it is the original bug in disguise. 11 new specs, 626
+  total. Bridged in `compat/global.h` (149 names). No consumer action: opt in.
+
 - **`GameState::Present()` and `OverlayList`** (2.4.1). `Present(renderer_,
   overlays)` draws every registered overlay and then presents the frame, in one
   call, so the ordering cannot be got wrong by the caller. The motivating

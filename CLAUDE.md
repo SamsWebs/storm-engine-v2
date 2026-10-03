@@ -85,7 +85,7 @@ clang-format -i --style=file <files>
 clang-format --dry-run -Werror --style=file common/ecs.h
 ```
 
-Formatting is **not checked in CI** (`pr-validate.yml` runs the compat-probe check, the spec suite in Docker, and the example/editor build — no `clang-format` step). A handful of files in `common/` have historically failed it — `input/touchControls.h`, `net/{netClient,netServer,netSocket,netTypes}.h` and `xmlLoader.{h,cpp}` were the list as of 1.3.0. Do not trust that list; check it:
+Formatting is **not checked in CI** (`pr-validate.yml` runs the source-list and compat-probe checks, the spec suite in Docker, and the example/editor build — no `clang-format` step). Most of `common/` fails it: **16 of the 51 tracked files under `common/`** as of 2026-10-04 — `ecs.h`, `states/gameState.h`, `lighting.h`, `collision/shapes.h`, `xmlLoader.{h,cpp}`, `input/{actionMap,touchControls}.h`, five `net/` headers and three `systems/` headers. The old documented list of six (`input/touchControls.h`, four `net/` headers, `xmlLoader.{h,cpp}`) was accurate at 1.3.0 and is now well short. Do not trust either list; measure it:
 
 ```bash
 clang-format --dry-run -Werror --style=file $(git ls-files 'common/**/*.h' 'common/**/*.cpp' 'common/*.h' 'common/*.cpp')
@@ -96,6 +96,16 @@ clang-format --dry-run -Werror --style=file $(git ls-files 'common/**/*.h' 'comm
 The hook only checks files that are *in the commit*, so a `--no-verify` commit silently leaves the rest of a file's directory drifting. If you skip the hook to keep a diff readable, format the whole example in a follow-up commit.
 
 ## CI and releases
+
+**Cutting a release is `docs/RELEASING.md`** — the ordered checklist, and the
+verification matrix of what a green run does *not* prove. Its executable half is
+`python3 scripts/release-check.py`, which asserts the four hand-written version
+sites agree (`Makefile.debian`, `Makefile.win`, and the seven `data-ver`
+elements in `web/index.html` — the release workflow's pre-release gate reads
+only the first, so a tag can otherwise ship advertising the wrong version), that
+`engine-sources.txt` matches `find common`, that the compat probe is fresh, and
+that the checklist's coverage claims are still true. Run it before tagging; it
+builds nothing and runs no specs by design.
 
 ```bash
 docker build -t stormenginev2-test:amd64 --platform=linux/amd64 --no-cache . -f Dockerfile.debian && docker run --rm stormenginev2-test:amd64
@@ -178,7 +188,7 @@ All six git submodules are Android-only third-party deps under `vendor/android/`
 
 `<stormengine2/compat/global.h>` is the bridge: one `using storm::X;` per public name, pulling them all back into the global namespace so a 1.x game compiles unchanged. It is a bridge, not an API — a game that keeps it forever gains nothing from the change, and a future major removes it. Use it to get green, then drop it and qualify the names.
 
-`specs/compat/bridgedNames.h` is **generated** from the engine headers by `scripts/generate-compat-probes.py` (currently 140 names) and compiled by `specs/compat/global.spec.cpp`, so a public name added to the engine and not to the bridge fails the build. CI runs the generator with `--check`. Run it after adding any public name.
+`specs/compat/bridgedNames.h` is **generated** from the engine headers by `scripts/generate-compat-probes.py` (currently 144 names) and compiled by `specs/compat/global.spec.cpp`, so a public name added to the engine and not to the bridge fails the build. CI runs the generator with `--check`. Run it after adding any public name.
 
 ## ECS model
 

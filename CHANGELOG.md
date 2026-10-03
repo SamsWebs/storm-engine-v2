@@ -4,6 +4,16 @@
 
 ### Added
 
+- **`docs/RELEASING.md` and `scripts/release-check.py`** — the release
+  checklist, and the gate that keeps it honest. The version is hand-written in
+  four places and the release workflow validated one of them, so a tag could go
+  out green with `web/index.html` advertising the previous release. The script
+  asserts the four sites agree, that `engine-sources.txt` still matches
+  `find common`, that the compat probe is fresh, and that the checklist's
+  coverage claims are still true — a workflow gaining a devkitPro or NDK build,
+  or losing a release job, fails the gate instead of leaving the matrix
+  quietly wrong. No public API change.
+
 - **`AssetStore::LoadPack` — the one-choke-point pack wiring.**
   A game calls `LoadPack("assets.pak")` once at startup; afterwards every
   path-based `AddTexture`/`AddFont`/`AddSound` whose blob is in the pack

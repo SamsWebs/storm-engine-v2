@@ -90,6 +90,8 @@ using storm::System;
 // ── Assets, text, loaders ───────────────────────────────────────────────────
 using storm::AssetStore;
 using storm::AssetStore_Ptr;
+using storm::FittedText;
+using storm::FooterLayout;
 using storm::LightingOverlay;
 using storm::LoadTexturesFromXml;
 using storm::Map;

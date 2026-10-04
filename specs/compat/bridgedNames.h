@@ -8,7 +8,7 @@
 // third of the exports, so a name missing from the bridge was missing
 // from the spec too.
 //
-// 149 names.
+// 151 names.
 #pragma once
 
 namespace storm_compat_probe {
@@ -42,7 +42,9 @@ using ::EntityOrder;
 using ::EvalTouches;
 using ::EvalVPad;
 using ::FPS;
+using ::FittedText;
 using ::FontPt;
+using ::FooterLayout;
 using ::GameState;
 using ::GameStateMachine;
 using ::Gamepad;

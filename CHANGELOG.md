@@ -306,6 +306,27 @@
   to live in a downstream game's header comment; it is now a table next to the
   function, measured from the implementations rather than assumed.
 
+- **`AssetStore::AddTextureFromSurface` — the missing half of `ReadBlob`**
+  (#81) — `AddTextureFromSurface(renderer, assetId, surface)` takes an
+  `SDL_Surface *` you already built and stores it as a texture, so the
+  `ReadBlob` → process → load path finally closes.
+
+  `ReadBlob` documents itself as existing for "pixel-processing pipelines", and
+  before this a caller that processed the bytes had nowhere to put the result:
+  every `Add*` takes a **path**, and the surface-taking `StoreTexture` is
+  private. So a palette recolour, a palette swap, or a window icon built from a
+  pack entry was reachable up to the last step and blocked on it — a promise in
+  a doc comment that the API did not let anyone keep.
+
+  **Ownership: it takes the surface and frees it.** `SDL_CreateTextureFromSurface`
+  copies, so the surface is dead the moment the call returns; pass one you own,
+  not one you intend to keep. Replace-and-free for the id is unchanged — this is
+  a door onto the store's one rule, not a second copy of it.
+
+  Documented here because the entry was missing, not because the API is new:
+  the commit that added it landed without a `CHANGELOG.md` line, which is the
+  same gap `ReadBlob` had and this file had to be reopened for twice in a day.
+
 - **`AssetStore::LoadPack` — the one-choke-point pack wiring.**
   A game calls `LoadPack("assets.pak")` once at startup; afterwards every
   path-based `AddTexture`/`AddFont`/`AddSound` whose blob is in the pack

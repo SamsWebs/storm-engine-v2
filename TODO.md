@@ -17,7 +17,7 @@ slices checked) and continue.
 | 6 | 2.4.1 `GameState::Present()` | `feat/gamestate-present` | done |
 | 7 | 2.4.2 `ui/scale.h` | `feat/ui-scale` | done |
 | 8 | 2.4.3 `text.h` verbs | `feat/text-verbs` | done |
-| 9 | 2.4.4 `version.h` | pending | pending |
+| 9 | 2.4.4 `version.h` | `feat/version-header` | done |
 | 10 | 2.4.5 debug overlay | pending | pending |
 | 11 | 2.5.1 Version the `.map` (+ editor writer) | pending | pending |
 | 12 | 2.5.2 Asset path seam | pending | pending |

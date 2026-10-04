@@ -32,6 +32,7 @@
 #include "../packFile.h"
 #include "../text.h"
 #include "../tilemapLoader.h"
+#include "../version.h"
 #include "../xmlLoader.h"
 
 #include "../components/animation.h"
@@ -92,6 +93,11 @@ using storm::AssetStore;
 using storm::AssetStore_Ptr;
 using storm::FittedText;
 using storm::FooterLayout;
+using storm::kEngineVersion;
+using storm::kEngineVersionMajor;
+using storm::kEngineVersionMinor;
+using storm::kEngineVersionPatch;
+using storm::kEngineVersionString;
 using storm::LightingOverlay;
 using storm::LoadTexturesFromXml;
 using storm::Map;
@@ -163,6 +169,8 @@ using storm::FontPt;
 using storm::kUiReferenceHeight;
 using storm::Px;
 using storm::UiScale;
+using storm::VersionEquals;
+using storm::VersionString;
 
 // ── Input ───────────────────────────────────────────────────────────────────
 using storm::ActionBinding;

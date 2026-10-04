@@ -102,10 +102,15 @@ without touching the system.
 ### 4. Bump the version in all four sites
 
 ```bash
-# Makefile.debian, Makefile.win, and the data-ver elements in web/index.html
+# Makefile.debian's VERSION ?= is the ONLY place the number is written.
+sed -i 's/^VERSION ?= .*/VERSION ?= 2.4.0/' Makefile.debian
+python3 scripts/generate-version.py     # writes common/version.h, Makefile.win, web/index.html
 ```
 
-Then re-run step 1. **Do not skip it** — it exists because this is the one
+One edit, not four. Then re-run step 1, which fails if any of the generated
+sites is stale — a bump that misses one ships a page advertising the wrong
+release, and the workflow's pre-release gate reads only `Makefile.debian`, so
+nothing else would notice. **Do not skip it** — it exists because this is the one
 release chore that has silently shipped wrong.
 
 A release number is a *tree* fact, not a build input. The workflow overrides

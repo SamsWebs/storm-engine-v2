@@ -46,7 +46,7 @@ jobs:
         run: |
           find common -name '*.cpp' | sort > /tmp/actual-sources.txt
           grep -v '^[[:space:]]*#' engine-sources.txt \
-            | grep -v '^[[:space:]]*$$' | sort > /tmp/listed-sources.txt
+            | grep -v '^[[:space:]]*$' | sort > /tmp/listed-sources.txt
           diff -u /tmp/listed-sources.txt /tmp/actual-sources.txt
 
       - name: Set up Docker Buildx

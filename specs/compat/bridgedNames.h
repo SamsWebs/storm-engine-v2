@@ -8,7 +8,7 @@
 // third of the exports, so a name missing from the bridge was missing
 // from the spec too.
 //
-// 158 names.
+// 160 names.
 #pragma once
 
 namespace storm_compat_probe {
@@ -30,6 +30,8 @@ using ::Contact;
 using ::ContactAABB;
 using ::ContactCircle;
 using ::ContactSystem;
+using ::DebugOverlay;
+using ::DebugStats;
 using ::DpadFromPoint;
 using ::ECS_MAX_DIAGNOSTIC_REPORTS;
 using ::EcsComponentIdIsValid;

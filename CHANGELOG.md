@@ -4,6 +4,30 @@
 
 ### Added
 
+- **`common/debugOverlay.h`** (2.4.5) — `DebugStats` (the numbers) and
+  `DebugOverlay` (the numbers plus visibility and a `Draw()`). FPS, frame time,
+  entity count, per-system timings and the last few `Err` lines, toggled by the
+  state calling `Toggle()`.
+
+  **`DebugStats` is pure and takes its clock from the caller** — it never calls
+  `SDL_GetTicks`. If the clock were inside, every spec would be a timing
+  assertion, and a timing assertion is a flaky assertion that gets deleted.
+
+  The rules that are easy to get wrong, all spec'd: fps is a window average
+  over the samples **actually fed**, not over the window size (dividing by the
+  full window on frame one reports 1/64th of the real rate); the window is a
+  **ring**, so one 200ms hitch ages out rather than poisoning the rate forever;
+  no elapsed time reports **0, not infinity**; a **negative** delta (a clock
+  that jumped backwards on resume) counts as zero rather than being subtracted;
+  only the **slowest** system is named; a `BeginSystem` with no `EndSystem` is
+  **dropped**, because printing the time since it opened is a confidently wrong
+  number; and the last errors are the **most recent, newest first**.
+
+  Register it in the `OverlayList` from 2.4.1 and it is drawn *before* the
+  present — an overlay drawn after the present is one nobody ever sees, which
+  is a diagnostic worse than none because it looks configured. 11 new specs, 662
+  total. Bridged in `compat/global.h` (160 names).
+
 - **`stormengine2/version.h`** (2.4.4), and the release number is now written
   **once**. `Makefile.debian`'s `VERSION ?=` is the single source;
   `scripts/generate-version.py` generates `common/version.h`, `Makefile.win` and

@@ -34,13 +34,19 @@ echo "==> building and installing the engine"
 make target
 make install
 
-# base.mk's LIB carries -lnfd and the GTK libraries for the editor's native
-# file dialogs. examples/examples.mk inherits them but no example calls NFD or
-# GTK (`grep -rl 'nfd\.h\|NFD_\|gtk/' examples/*/src` is empty), so the link
-# is done with LIB overridden from the command line — otherwise every example
-# fails on a missing libnfd rather than on anything real.
-EXAMPLE_LIB="-L/usr/local/lib -Wl,-rpath=/usr/local/lib -lSDL2 -lSDL2_image \
--lSDL2_ttf -lSDL2_mixer -lz -ltinyxml2 -llua -ldl"
+# The examples link with base.mk's LIB, unmodified. This file used to override
+# it on the command line, and that override was a second copy of the flags that
+# nobody kept in sync: it still named -ltinyxml2 and -llua after base.mk had
+# deliberately dropped both, and it had lost the gtk pkg-config half. It died
+# the moment the gate above it stopped failing first -- "cannot find
+# -ltinyxml2" on the first example, with a correct list right there.
+#
+# The override existed to keep -lnfd off the examples' link line. -lnfd has been
+# in EDITOR_LIB, not LIB, for a while now, so the reason it gave was already
+# stale when the copy was written. base.mk is the one place these flags exist;
+# the gtk libraries in LIB are harmless here (no example calls gtk, but they
+# resolve, and the image installs them) and they are the price of not keeping a
+# second copy.
 
 for dir in examples/*/; do
   name=$(basename "$dir")
@@ -51,7 +57,7 @@ for dir in examples/*/; do
   echo "==> building example: $name"
   # A subshell, not `make -C`: examples/examples.mk derives BIN_DIR from $(PWD),
   # which make does not update when it changes directory itself.
-  (cd "$dir" && make LIB="$EXAMPLE_LIB")
+  (cd "$dir" && make)
 done
 
 echo "==> compiling the editor (objects only, see header comment)"

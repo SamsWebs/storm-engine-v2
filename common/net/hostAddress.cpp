@@ -9,7 +9,8 @@
 // A .cpp, unlike the rest of this slice, because getifaddrs is a system call
 // and header-only would put <ifaddrs.h> behind every consumer of the ranking.
 // It is listed in engine-sources.txt, so it reaches the Switch and Android
-// builds too.
+// builds too -- which is a promise that has to be kept, so see the __SWITCH__
+// arm below for what it actually does there.
 #include "hostAddress.h"
 
 #include <cstring>
@@ -19,7 +20,8 @@
 #if defined(_WIN32)
 #include <winsock2.h>
 #include <ws2tcpip.h>
-#else
+#elif !defined(__SWITCH__)
+// Switch is excluded from this arm on purpose -- see LocalCandidates().
 #include <arpa/inet.h>
 #include <ifaddrs.h>
 #include <net/if.h>
@@ -104,6 +106,27 @@ std::vector<NetCandidate> LocalCandidates() {
     found.push_back(candidate);
   }
   freeaddrinfo(result);
+  return found;
+#elif defined(__SWITCH__)
+  // No candidates, deliberately, and this is the third Switch half found by
+  // actually running the Switch build rather than dry-running the makefile
+  // (2.7.2). The POSIX arm below needs <ifaddrs.h>, and devkitA64 has no
+  // ifaddrs.h and no libnx equivalent -- checked, not assumed: libnx exposes
+  // nifm for the CURRENT network profile, which is a connection, not an
+  // address, and no local-address call anywhere in switch.h.
+  //
+  // The Windows arm's gethostname/getaddrinfo was considered and rejected: a
+  // console's own hostname does not resolve on a normal LAN, and where one did
+  // resolve it would be a DHCP record that can be days stale -- which is
+  // exactly the "an address in the lobby nobody can connect to" failure the
+  // ranking in hostAddress.h exists to prevent. Returning nothing is a lobby
+  // saying "no address found", which is true; returning a guess is not.
+  //
+  // A Switch game that wants LAN play has to supply the address itself (its
+  // own config, a known subnet, or discovery over a channel it already has).
+  // The ranking half still works there unchanged -- it is pure -- so a Switch
+  // game feeding in candidates it found some other way gets the same
+  // ChooseBest() every other platform gets.
   return found;
 #else
   ifaddrs *list = nullptr;

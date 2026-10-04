@@ -4,6 +4,38 @@
 
 ### Added
 
+- **`NetSocket::Open` failure classification, and a Switch platform init**
+  (2.7.2) — `NetSocketsInit()` gains an `#elif defined(__SWITCH__)` arm
+  calling `socketInitializeDefault()`, so `socket()` no longer returns -1 on a
+  Switch where the `bsd:` service was never started. `Open`'s three failure
+  stages now report separately — `PlatformInit`, `Socket`, `Bind` — where one
+  shared line made a missing platform init read as a socket problem, which
+  reads as a firewall problem. The platform-init line also carries the decoded
+  libnx `Result` (`NetResultModule` / `NetResultDescription` /
+  `NetResultText`), because "socket init failed" without the code is four
+  guesses and a reboot.
+
+  New: `NetSocketOpenFailure`, `NetClassifySocketSetup`,
+  `NetSocketOpenFailureMessage`, `NetResultModule`, `NetResultDescription`,
+  `NetResultText`. 18 new specs, 694 total. Bridged in `compat/global.h`
+  (180 names).
+
+  **Two latent Switch build breaks fixed, both hidden behind `common/net/`
+  being excluded from that build until 2026-09-23:**
+  `common/net/netSocket.cpp` used `INET_ADDRSTRLEN`, which devkitA64's headers
+  do not define, so the file had never compiled for Switch at all; and
+  `common/net/hostAddress.cpp` called `getifaddrs` with no Switch
+  implementation. The second one falsifies the 2.7.1 entry's claim that
+  `hostAddress.cpp` "reaches Switch and Android" — being in
+  `engine-sources.txt` gets a file *compiled*, not working. `hostAddress.cpp`
+  now has a `__SWITCH__` arm returning no candidates (there is no `ifaddrs.h`
+  and no libnx equivalent), so a Switch lobby reports "no address found" rather
+  than a stale DHCP guess. The ranking half is pure and still works there.
+
+  Verified: all 14 engine TUs cross-compile under devkitA64 and
+  `examples/nx-platformer` links an 8.4 MB `.nro`. **Not** verified: behaviour
+  on hardware. Nothing here has run on a console.
+
 - **`common/net/hostAddress.h` / `.cpp`** (2.7.1) — the engine can now tell
   the host its own LAN address, with the ranking rule split into a pure,
   header-only, spec'd header and the enumeration left as a thin platform layer
@@ -26,8 +58,10 @@
   reach the second card) and `ChooseBest()` (for a default) both exist, and the
   spec asserts the answer is **order-independent**.
 
-  14 new specs, 676 total. `.cpp` added to `engine-sources.txt` so it reaches
-  Switch and Android. Bridged in `compat/global.h` (174 names) — note that
+  14 new specs, 676 total. `.cpp` added to `engine-sources.txt` so it is
+  compiled into the Switch and Android builds — see the 2.7.2 entry above:
+  compiling it for Switch is what showed there is no `getifaddrs` there, and
+  it now returns no candidates rather than pretending to work. Bridged in `compat/global.h` (174 names) — note that
   `Score`, `Ranked` and `Classify` are short and generic, so a 1.x game that
   force-includes the bridge and has its own `Score` must qualify this one.
 

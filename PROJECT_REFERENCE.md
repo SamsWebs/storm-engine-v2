@@ -333,9 +333,12 @@ passing. Counts are `It(` tallies per file, and they rot — run
 previously listed `systems/collision.spec.cpp`, which went away with
 `CollisionSystem` in 2.0.0, and totalled 369 "as of v1.3.0".)
 
-The suite covers `common/` only - `TESTSRCS` is `find specs` plus `find
-common`, so nothing under `editor/` or `examples/` is compiled into
-`./bin/tests`. Run `./bin/tests` from the repo root; several specs hardcode
+The suite covers `common/` only - spec sources are globbed (`find specs`)
+and engine sources come from the canonical `engine-sources.txt` (same list
+every platform build reads), so nothing under `editor/` or `examples/` is
+compiled into `./bin/tests`. A new `common/*.cpp` must be added to
+`engine-sources.txt` or it will not link (`check-engine-sources` / CI catch
+drift). Run `./bin/tests` from the repo root; several specs hardcode
 `./specs/assets/...` paths.
 
 ---

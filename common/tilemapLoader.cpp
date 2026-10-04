@@ -118,14 +118,71 @@ void TileMapLoader::loadFilemapEditor(const std::string &fileMap) {
     return;
   }
 
+  // The version header, read from THIS stream so the records that follow start
+  // after it — reading it from a second open of the same file leaves the parser
+  // looking at "storm-map" as the first group name, and every versioned map
+  // loads zero tiles.
+  //
+  // A map written by a newer engine is refused here rather than half-read:
+  // half-reading produces a level that renders and is wrong, which is the worst
+  // outcome available, because nothing about it looks broken. A map with NO
+  // header is version 1 and loads unchanged, which is what keeps every map
+  // written before the header existed working.
+  const TileMapVersion version = ReadTileMapVersion(fmap);
+  const std::string refusal = TileMapVersionRefusal(version, fileMap);
+  if (!refusal.empty()) {
+    logger.Err(refusal);
+    return;
+  }
+
   auto reportTruncated = [&](const std::string &what) {
     logger.Err("TileMapLoader: '" + fileMap + "': truncated or malformed " +
                what + " after " + std::to_string(map.size()) +
                " complete tiles; stopping");
   };
 
+  // One-token pushback, local because the stream is. Needed for exactly one
+  // field — the optional trailing animation flag — and the reason is worth
+  // stating, because the obvious implementation is the one that was there.
+  //
+  // `fmap >> animatedFlag` cannot tell "this record omitted the flag" from "the
+  // file ended": an int extraction that hits the next record's group token
+  // ("tiles") and an extraction that hits EOF both set failbit, so the only
+  // test available was eof(), which fires on the LAST record and nowhere else.
+  // A flag omitted anywhere else was reported as a truncated file and the
+  // loader returned an EMPTY MAP — one hand-edit, or one writer that skipped a
+  // zero flag, cost a whole level. Reading the token as a string separates the
+  // cases: a token that is a number is the flag, a token that is not is the
+  // next record's group and gets pushed back.
+  std::string pending;
+  bool hasPending = false;
+  auto nextToken = [&](std::string &out) {
+    if (hasPending) {
+      out = pending;
+      pending.clear();
+      hasPending = false;
+      return true;
+    }
+    return static_cast<bool>(fmap >> out);
+  };
+  auto looksNumeric = [](const std::string &text) {
+    if (text.empty()) {
+      return false;
+    }
+    std::size_t i = (text[0] == '-' || text[0] == '+') ? 1 : 0;
+    if (i == text.size()) {
+      return false;
+    }
+    for (; i < text.size(); ++i) {
+      if (text[i] < '0' || text[i] > '9') {
+        return false;
+      }
+    }
+    return true;
+  };
+
   std::string group;
-  while (fmap >> group) {
+  while (nextToken(group)) {
     std::string assetId;
     int tileW = 0, tileH = 0, srcX = 0, srcY = 0, zIndex = 0;
     float worldX = 0.0f, worldY = 0.0f, scaleX = 0.0f, scaleY = 0.0f;
@@ -144,15 +201,22 @@ void TileMapLoader::loadFilemapEditor(const std::string &fileMap) {
       return;
     }
 
+    // The optional animation flag. See the pushback note above for why this is
+    // a string read and not `fmap >> animatedFlag`.
     int animatedFlag = 0;
-    if (!(fmap >> animatedFlag)) {
-      if (!fmap.eof()) {
-        reportTruncated("animation flag for '" + assetId + "'");
-        return;
+    std::string flagToken;
+    if (nextToken(flagToken)) {
+      if (looksNumeric(flagToken)) {
+        animatedFlag = std::atoi(flagToken.c_str());
+      } else {
+        // Not a flag: it is the next record's group, and the loop needs it.
+        pending = flagToken;
+        hasPending = true;
       }
-      // Clean EOF before the optional animation flag: last record omits it.
-      animatedFlag = 0;
     }
+    // Nothing readable here means the file ended, which is the last record
+    // legitimately omitting its flag. Nothing ELSE about the stream can reach
+    // here, because a malformed token was pushed back rather than consumed.
 
     int numFrames = 1, frameSpeed = 1, frameOffset = 0;
     bool vertical = true, looped = true;

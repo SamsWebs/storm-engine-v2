@@ -23,8 +23,10 @@
 // It includes the whole engine by design - a compatibility shim cannot know
 // which parts a game uses. Reach for the individual headers in your own code.
 
+#include "../assetPath.h"
 #include "../assetStore.h"
 #include "../collision/shapes.h"
+#include "../debugOverlay.h"
 #include "../ecs.h"
 #include "../gameStateMachine.h"
 #include "../lighting.h"
@@ -32,6 +34,7 @@
 #include "../packFile.h"
 #include "../text.h"
 #include "../tilemapLoader.h"
+#include "../version.h"
 #include "../xmlLoader.h"
 
 #include "../components/animation.h"
@@ -47,6 +50,7 @@
 #include "../input/touchControls.h"
 #include "../input/virtualGamepad.h"
 
+#include "../net/hostAddress.h"
 #include "../net/net.h"
 #include "../net/netClient.h"
 #include "../net/netConnection.h"
@@ -64,6 +68,8 @@
 #include "../systems/movement.h"
 #include "../systems/render.h"
 #include "../systems/renderCollider.h"
+
+#include "../ui/scale.h"
 
 // ── ECS ─────────────────────────────────────────────────────────────────────
 using storm::Component;
@@ -86,14 +92,37 @@ using storm::Signature;
 using storm::System;
 
 // ── Assets, text, loaders ───────────────────────────────────────────────────
+using storm::AssetFilePath;
+using storm::AssetOverrideExists;
+using storm::AssetOverridePath;
+using storm::AssetPath;
 using storm::AssetStore;
 using storm::AssetStore_Ptr;
+using storm::FittedText;
+using storm::FooterLayout;
+using storm::JoinAssetPath;
+using storm::kEngineVersion;
+using storm::kEngineVersionMajor;
+using storm::kEngineVersionMinor;
+using storm::kEngineVersionPatch;
+using storm::kEngineVersionString;
+using storm::kTileMapFormatMagic;
+using storm::kTileMapFormatMinVersion;
+using storm::kTileMapFormatVersion;
 using storm::LightingOverlay;
 using storm::LoadTexturesFromXml;
 using storm::Map;
+using storm::Ranked;
+using storm::ReadTileMapVersion;
+using storm::ResolveAssetFile;
+using storm::Score;
 using storm::Text;
 using storm::Tile;
 using storm::TileMapLoader;
+using storm::TileMapVersion;
+using storm::TileMapVersionLine;
+using storm::TileMapVersionRefusal;
+using storm::TileMapVersionState;
 using storm::XmlLoader;
 using storm::XmlObjectDef;
 using storm::XmlTextureDef;
@@ -148,10 +177,21 @@ using storm::RenderColliderSystem;
 using storm::RenderSystem;
 
 // ── State machine ───────────────────────────────────────────────────────────
+using storm::DebugOverlay;
+using storm::DebugStats;
 using storm::FPS;
 using storm::GameState;
 using storm::GameStateMachine;
 using storm::MILLISECS_PER_FRAME;
+using storm::OverlayList;
+
+// ── UI scale (2.4.2) ─────────────────────────────────────────────────────────
+using storm::FontPt;
+using storm::kUiReferenceHeight;
+using storm::Px;
+using storm::UiScale;
+using storm::VersionEquals;
+using storm::VersionString;
 
 // ── Input ───────────────────────────────────────────────────────────────────
 using storm::ActionBinding;
@@ -181,11 +221,24 @@ using storm::VPadState;
 using storm::VPadStyle;
 
 // ── Networking ──────────────────────────────────────────────────────────────
+using storm::AddressClass;
+using storm::BestLocalAddress;
+using storm::BetterThan;
+using storm::ChooseBest;
+using storm::Classify;
+using storm::FirstOctet;
+using storm::IsLinkLocalV4;
+using storm::IsLoopbackV4;
+using storm::IsPrivateV4;
+using storm::IsUsable;
+using storm::LocalCandidates;
 using storm::NetAddress;
 using storm::NetAddressFromParts;
 using storm::NetAddressToString;
+using storm::NetCandidate;
 using storm::NetChunk;
 using storm::NetChunkHeader;
+using storm::NetClassifySocketSetup;
 using storm::NetClient;
 using storm::NetConnection;
 using storm::NetControlMessage;
@@ -200,12 +253,17 @@ using storm::NetPacketHeaderUnpack;
 using storm::NetPortToHost;
 using storm::NetRandom32;
 using storm::NetResolveAddress;
+using storm::NetResultDescription;
+using storm::NetResultModule;
+using storm::NetResultText;
 using storm::NetSendControl;
 using storm::NetServer;
 using storm::NetSnapshot;
 using storm::NetSnapshotCache;
 using storm::NetSnapshotDelta;
 using storm::NetSocket;
+using storm::NetSocketOpenFailure;
+using storm::NetSocketOpenFailureMessage;
 using storm::NetVarIntPack;
 using storm::NetVarIntUnpack;
 using storm::NonceToToken;

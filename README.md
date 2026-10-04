@@ -22,10 +22,11 @@ A lightweight, ECS-based 2D game engine built on SDL2 - made for game jams and p
 - **Gamepad** support - an `SDL_GameController` wrapper with edge-detected `Pressed`/`Released` and a configurable stick deadzone (`<stormengine2/input/gamepad.h>`), used by the shooter, strategy and sports examples
 - **Virtual gamepad** for touch devices - d-pad + action-button layout, pure and spec'd (`<stormengine2/input/virtualGamepad.h>`), driven by `examples/android-platformer`
 - **Action mapping** - bind one game action across the keyboard, gamepad, virtual gamepad and touch at once, with one edge per action rather than four (`<stormengine2/input/actionMap.h>`, new in 2.0.0)
+- **Asset packs and player overrides** - one `LoadPack` call, then every path-based load comes from the pack when it is there and the loose file when it is not, so a partial pack still works and no call site changes (`<stormengine2/assetPath.h>`, see [docs/assets.md](docs/assets.md))
 - **UDP networking** - host/join LAN play: reliable + unreliable chunks, kick/ban/timeout, snapshot replication with per-client deltas and a prediction cache (`<stormengine2/net/net.h>`, see [docs/networking.md](docs/networking.md))
 - Built-in **tile map editor** with drag-to-paint, drag-to-erase, and layer support
 - Example games: platformer, shooter (*1945*, a vertical shoot-'em-up with menu, HUD and controller support), strategy (*Realms*, a *Dragon Force*-style campaign map with pushed side-on battles - artwork downloaded separately, see below), puzzle, JRPG, sports, Android platformer, Switch platformer, and networking demos (netchat, netrepl, netplay-checkers)
-- Platforms: Linux, Nintendo Switch (source builds), Android (source builds, verified on hardware); iOS possible via the same SDL layer
+- Platforms: Linux, Nintendo Switch (source builds, cross-compile and link verified), Android (source builds, verified on hardware); iOS possible via the same SDL layer
 
 ## Collision math without the ECS
 
@@ -463,6 +464,24 @@ The library and the spec suite cross-build; the examples are not wired into the 
 ## Nintendo Switch
 
 Switch builds use [devkitPro](https://devkitpro.org/) and produce a `.nro` homebrew file.
+
+The whole engine, `common/net/` included, cross-compiles for Switch and links
+into the `.nro`. Two things about that are worth knowing, because both were
+true of this section until recently and neither was:
+
+- **The net layer needs a platform init that only the Switch needs.** libnx
+  routes BSD sockets through the `bsd:` service, which stays inert until
+  `socketInitializeDefault()` has run; without it `socket()` returns -1 and the
+  engine used to log "failed to create non-blocking UDP socket", which reads
+  like a firewall problem. `AssetStore`/`NetSocket` now do that init, and
+  `NetSocket::Open` reports platform-init failure as its own case.
+- **A source build is a real verification, not a formality.** Cross-compiling
+  the engine for Switch is what found two latent breaks that no desktop build
+  and no dry-run could: `netSocket.cpp` had never compiled for Switch at all,
+  and `hostAddress.cpp` called `getifaddrs`, which does not exist there. Both
+  are fixed. If you change anything under `common/`, building for Switch is
+  worth it - it is the only compiler in the repo that rejects code the desktop
+  build accepts.
 
 ### Prerequisites
 

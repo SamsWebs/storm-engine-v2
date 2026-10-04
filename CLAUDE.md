@@ -37,15 +37,17 @@ sudo make -f Makefile.debian install         # required first: examples/editor l
 cd examples/platformer && make && make run   # `make` builds only; `make run` launches (CWD must be the example dir)
 ```
 
-Binary name matches the directory name for `platformer`, `jrpg`, `netchat`, `netrepl`, `netplay-checkers`; it differs for puzzle→`tetris`, shooter→`alienattack`, sports→`hockey`, strategy→`tanks`. Use `make run` rather than guessing `./bin/<dir>`.
+Binary name matches the directory name for `platformer`, `jrpg`, `netchat`, `netrepl`, `netplay-checkers`; it differs for puzzle→`tetris`, shooter→**`1945`**, sports→`hockey`, strategy→**`realms`**. (The `1945` and `realms` names were wrong here until 2026-10-04 — this line said `alienattack` and `tanks`, and `examples/strategy/bin/` still held a `tanks` binary built before the rename.) **Read `NAME` out of the example's `Makefile`; do not guess it from the directory.** Use `make run` rather than guessing `./bin/<dir>`.
+
+`tools/screen-sweep.py` drives any example under a private Xvfb, presses one key per fresh process, and reports the pixel delta and the bounding box of the change against a measured idle baseline — the controls sweep. `python3 tools/screen-sweep.py examples/platformer`, or `--all`. Two rules it exists to enforce: **one launch per key** (a keypress that opens a screen leaves you measuring the next one), and **read DEAD before anything else** (a byte-identical frame pair after a keypress is invisible to the spec suite, which never presses a key). It is a *look* helper, not a verdict: a count below the idle floor may still be a real overlay — `examples/puzzle`'s PAUSED is 1,039 px against a 6,144 px floor, and the box (97x19) is what tells them apart. Not in CI; the image has no Xvfb.
 
 ## Tests
 
-Framework is **Igloo + snowhouse** (BDD `Describe`/`It`, snowhouse `Assert::That`), not gtest/Catch2. 604 tests. Specs live in `specs/` mirroring the source tree; they `#include "../common/ecs.h"` by relative path, so the suite always tests the working tree, never the installed library. `specs/main.cpp` is the sole `main()`.
+Framework is **Igloo + snowhouse** (BDD `Describe`/`It`, snowhouse `Assert::That`), not gtest/Catch2. 676 tests. Specs live in `specs/` mirroring the source tree; they `#include "../common/ecs.h"` by relative path, so the suite always tests the working tree, never the installed library. `specs/main.cpp` is the sole `main()`.
 
-**The suite covers `common/` only.** `TESTSRCS` is `find specs` plus `find common` (the two `TESTSRCS` assignments in `Makefile.debian`), so nothing under `editor/` or `examples/` is compiled into `./bin/tests` and no spec can reach it. Wiring either in is not a small job: both include the engine as `<stormengine2/...>`, which resolves to the *installed* headers rather than the working tree the specs deliberately test. Bugs in editor and example code are caught by compilation (CI builds both, see below) and by running them — not by specs.
+**The suite covers `common/` only.** `TESTSRCS` is `find specs` plus the engine sources read from `engine-sources.txt` (via `ENGINE_SOURCES`), so nothing under `editor/` or `examples/` is compiled into `./bin/tests` and no spec can reach it. Wiring either in is not a small job: both include the engine as `<stormengine2/...>`, which resolves to the *installed* headers rather than the working tree the specs deliberately test. Bugs in editor and example code are caught by compilation (CI builds both, see below) and by running them — not by specs.
 
-Test sources are globbed (`find specs -name '*.cpp'` plus `find common -name '*.cpp'`) — a new `specs/<area>/<name>.spec.cpp` is picked up with zero build-file edits, and the test binary statically compiles the engine rather than linking the `.so`.
+Spec sources are globbed (`find specs -name '*.cpp'`); engine sources come from `engine-sources.txt` (the canonical list, see build system below), so a new `specs/<area>/<name>.spec.cpp` is picked up with zero build-file edits, and the test binary statically compiles the engine rather than linking the `.so`. A new `common/*.cpp` must be added to `engine-sources.txt` or it will not link — `check-engine-sources` and CI fail if the list drifts from `find common`.
 
 ```bash
 ./bin/tests            # must run from the repo root
@@ -58,6 +60,35 @@ make -f Makefile.debian memcheck TARGET=./bin/tests   # valgrind; TARGET default
 ```
 
 Run `./bin/tests` from anywhere other than the repo root and it **segfaults** — several specs hardcode `./specs/assets/...` paths, and `common/tilemapLoader.cpp` logs the missing file and returns an empty map, which a later spec dereferences.
+
+### Sabotaging a slice's own specs
+
+`tools/sabotage-<area>.py` proves a slice's specs can fail, one defect at a
+time, and reports how many specs each defect breaks. A sabotage reporting **0
+failures** is a spec that cannot see the bug it was written for — which is the
+whole reason the tool exists rather than a note claiming the specs were read
+carefully. Three exist: `sabotage-netSocket.py`, `sabotage-tilemapFormat.py`,
+`sabotage-assetPath.py`.
+
+```bash
+python3 tools/sabotage-assetPath.py      # restores the file on exit, including on failure
+```
+
+Read them before trusting a slice's numbers. Two things they have each caught,
+both of which were mine:
+
+- **Specs that pass on the first run are not yet verified.** Several sabotage
+  rounds needed a new spec or a corrected assertion before the sabotage landed.
+- **Anchors go stale the moment `clang-format` runs**, and a harness that
+  cannot find its anchor reports as *passing* without having tested anything.
+  `sabotage-assetPath.py` matches whitespace-insensitively for that reason; the
+  other two do not, so **format first, then anchor**. A `SKIPPED` line in the
+  output is a broken harness, not a clean result.
+
+A sabotage that *cannot* fail on this platform should be left out and said so in
+the harness docstring rather than kept to pad the count — `sabotage-assetPath.py`
+keeps a spec for the empty-path guard with no matching sabotage, because
+`ifstream("").good()` is already false here.
 
 ### Running a single test
 
@@ -85,7 +116,7 @@ clang-format -i --style=file <files>
 clang-format --dry-run -Werror --style=file common/ecs.h
 ```
 
-Formatting is **not checked in CI** (`pr-validate.yml` runs the compat-probe check, the spec suite in Docker, and the example/editor build — no `clang-format` step). A handful of files in `common/` have historically failed it — `input/touchControls.h`, `net/{netClient,netServer,netSocket,netTypes}.h` and `xmlLoader.{h,cpp}` were the list as of 1.3.0. Do not trust that list; check it:
+Formatting is **not checked in CI** (`pr-validate.yml` runs the source-list and compat-probe checks, the spec suite in Docker, and the example/editor build — no `clang-format` step). Most of `common/` fails it: **16 of the 51 tracked files under `common/`** as of 2026-10-04 — `ecs.h`, `states/gameState.h`, `lighting.h`, `collision/shapes.h`, `xmlLoader.{h,cpp}`, `input/{actionMap,touchControls}.h`, five `net/` headers and three `systems/` headers. The old documented list of six (`input/touchControls.h`, four `net/` headers, `xmlLoader.{h,cpp}`) was accurate at 1.3.0 and is now well short. Do not trust either list; measure it:
 
 ```bash
 clang-format --dry-run -Werror --style=file $(git ls-files 'common/**/*.h' 'common/**/*.cpp' 'common/*.h' 'common/*.cpp')
@@ -96,6 +127,16 @@ clang-format --dry-run -Werror --style=file $(git ls-files 'common/**/*.h' 'comm
 The hook only checks files that are *in the commit*, so a `--no-verify` commit silently leaves the rest of a file's directory drifting. If you skip the hook to keep a diff readable, format the whole example in a follow-up commit.
 
 ## CI and releases
+
+**Cutting a release is `docs/RELEASING.md`** — the ordered checklist, and the
+verification matrix of what a green run does *not* prove. Its executable half is
+`python3 scripts/release-check.py`, which asserts the four hand-written version
+sites agree (`Makefile.debian`, `Makefile.win`, and the seven `data-ver`
+elements in `web/index.html` — the release workflow's pre-release gate reads
+only the first, so a tag can otherwise ship advertising the wrong version), that
+`engine-sources.txt` matches `find common`, that the compat probe is fresh, and
+that the checklist's coverage claims are still true. Run it before tagging; it
+builds nothing and runs no specs by design.
 
 ```bash
 docker build -t stormenginev2-test:amd64 --platform=linux/amd64 --no-cache . -f Dockerfile.debian && docker run --rm stormenginev2-test:amd64
@@ -139,13 +180,13 @@ Most of this is invisible from any single makefile.
 Two modes exist in-repo. There is no `external/storm-engine-v2` submodule pattern here (that convention lives in downstream game repos).
 
 1. **Installed shared library** — all desktop examples and the editor. Headers resolve via `-I/usr/local/include`, the link is `-lstormenginev2`, and `base.mk` bakes `-Wl,-rpath=/usr/local/lib` so binaries run without `LD_LIBRARY_PATH`. On Linux the engine is only ever a `.so`, never a static `.a`. The MinGW build is the exception in form only: `Makefile.win` produces a DLL plus the `libstormenginev2.dll.a` import library the linker needs.
-2. **Engine as source** — `examples/nx-platformer` and `examples/android-platformer` compile `common/*.cpp` directly into the game and use a committed symlink `include/stormengine2 -> ../../../common` so `<stormengine2/...>` resolves identically. Invisible in a plain `find`; use `ls -la`.
+2. **Engine as source** — `examples/nx-platformer` and `examples/android-platformer` compile engine translation units directly into the game and use a committed symlink `include/stormengine2 -> ../../../common` so `<stormengine2/...>` resolves identically. Invisible in a plain `find`; use `ls -la`. Both read the same canonical source list as the desktop builds (see build system below), so all 14 engine TUs (including `common/net/`) compile on every platform. Being *in* the list is what gets a file compiled, not what makes it work — Switch proved that, see Platforms.
 
 Games always include the engine with angle brackets (`#include <stormengine2/ecs.h>`); quoted/relative includes are reserved for the game's own headers.
 
 Consequence of the two modes: editing `common/` changes desktop builds only after `make install`, but changes Switch/Android builds immediately.
 
-**Only the Switch build globs non-recursively.** `examples/nx-platformer/Makefile:8` lists `include/stormengine2` (a symlink to `common/`) in `SOURCES` and expands it with `$(wildcard $(CURDIR)/$(dir)/*.cpp)`, one level deep — so `common/net/` is silently absent from Switch. Android is **recursive**: `examples/android-platformer/app/jni/CMakeLists.txt:53` is `file(GLOB_RECURSE ENGINE_SRC "${REPO_ROOT}/common/*.cpp")`, so it does compile `common/net/`. A new `.cpp` in a subdirectory of `common/` therefore vanishes on Switch only.
+**One canonical source list: `engine-sources.txt` at the repo root.** `Makefile.debian` (`LIBSRCS`/`TESTSRCS`), `Makefile.win` (`LIBSRCS`), `examples/nx-platformer/Makefile` (`ENGINE_SRCS`) and `examples/android-platformer/app/jni/CMakeLists.txt` (`file(STRINGS …)`) all read it instead of globbing `common/` themselves. The Switch Makefile used to expand `SOURCES` (including the `include/stormengine2` symlink) with a non-recursive `$(wildcard …/*.cpp)` and silently dropped all seven `common/net/` TUs; Android used `file(GLOB_RECURSE)` but without `CONFIGURE_DEPENDS`, so a newly added file needed a manual re-configure. Both defects die when the list is the only source of truth: a new `.cpp` under `common/` is one line in one file. `make -f Makefile.debian check-engine-sources` (run by `all`/`test`) and a `pr-validate.yml` step fail the build if the list drifts from `find common -name '*.cpp'`. `Dockerfile.debian` copies the list, so the CI image can build. Adding a source means regenerating the list (`find common -name '*.cpp' | sort`, keep the `#` header comments) or adding the path by hand.
 
 Canonical game layout: `Makefile` (`NAME = <binname>` + `include ../examples.mk`), `assets/`, `bin/`, `src/{main.cpp, game.h, game.cpp, states/playState.{h,cpp}}`, optional `src/components/*.h` and `src/systems/*.h`.
 
@@ -154,7 +195,7 @@ Canonical game layout: `Makefile` (`NAME = <binname>` + `include ../examples.mk`
 Platform is chosen by **which build file you invoke**, not a `PLATFORM=` variable. There is no `DEBUG` variable; `PREFIX` and `DESTDIR` exist but only for `install`.
 
 - Debian: `make -f Makefile.debian` — g++, `-std=c++17`. The default profile is `-O0 -g`; `PROFILE=release` swaps that for `-O2` and no `-g`, which is what the release workflow passes, so the shipped `.deb` is no longer an `-O0` build.
-- Switch: devkitPro make in `examples/nx-platformer` — `-D__SWITCH__`, `-O2`, and `-fno-exceptions`. `DEVKITPRO` must be exported or the makefile hard-errors before any target is considered (including `clean` and `run`).
+- Switch: devkitPro make in `examples/nx-platformer` — `-D__SWITCH__`, `-O2`, and `-fno-exceptions`. `DEVKITPRO` must be exported or the makefile hard-errors before any target is considered (including `clean` and `run`). **This build now runs here and is worth running after any `common/` change** — it is the only compiler in this repo that will reject code the desktop build accepts, and it found two latent breaks (`INET_ADDRSTRLEN` undeclared, and a `getifaddrs` call with no Switch implementation) that had been hiding behind `common/net/` being excluded until 2026-09-23. It is a compile and link check only: no console, and `-ffunction-sections` + `--gc-sections` mean unreferenced net code never reaches the `.nro`.
 - Android: Gradle + NDK CMake in `examples/android-platformer`.
 
 `-fno-exceptions` on Switch matters: the ECS still throws through `std::map::at` (`Registry::GetSystem`, `GetEntityByTag`), which becomes `abort` there rather than a catchable error. Guard with `HasSystem()` / `DoesTagExist()` instead of relying on a catch. The component cap no longer throws — `EcsComponentIdIsValid` gates every id, and a system handed a type past the cap is **latched off** (`System::disabled`) so it matches nothing, rather than ending up with an empty signature that matches everything.
@@ -168,6 +209,24 @@ cd examples/android-platformer && ./gradlew assembleDebug installDebug
 
 Toolchain install (devkitPro packages, `sdkmanager`, submodule init, `adb logcat` filters) is in README.md.
 
+**Building the editor or a desktop example without `make install`.** `install`
+writes to `/usr/local/include` and `/usr/local/lib`, which are root-owned, and
+this machine has no passwordless sudo — so the documented install-then-build
+path cannot run and the nine desktop examples cannot be built through it. The
+workaround is to point the include path at the working tree instead:
+
+```bash
+mkdir -p /tmp/eng-inc && ln -sfn "$PWD/common" /tmp/eng-inc/stormengine2
+R="$PWD"
+cd editor && make INCLUDE="-I/tmp/eng-inc -I$R/vendor -I$R/vendor/android/tinyxml2"
+```
+
+`INCLUDE` is a plain `=` in `base.mk`, so a command-line value **replaces** it
+rather than adding to it — passing `-I/tmp/eng-inc` alone loses `-Ivendor` and
+the build dies on `imgui/imgui.h`. Re-state all three. This compiles
+`editor/` to objects, which is what CI checks; the link still fails on `-lnfd`,
+which is the documented gap and not a regression. On this machine devkitPro **is** present at `/opt/devkitpro` and the Switch build works; there is no NDK, so the Android build is still unrun and claims about it stay theoretical.
+
 All six git submodules are Android-only third-party deps under `vendor/android/` (SDL2 2.30.11, SDL_image 2.8.8, SDL_ttf 2.22.0, SDL_mixer 2.8.1, tinyxml2 10.0.0, glm 1.0.1) — a bare clone builds and tests fine without them. SDL2/SDL_image must stay SHARED because SDLActivity `dlopen`s them by name. Two submodule *names* don't match their *paths* (`vendor/android/SDL` → `vendor/android/SDL2`, `vendor/android/SDL_image` → `vendor/android/SDL_image2`).
 
 `vendor/` is dual-purpose: `vendor/{imgui,sol,lua,fakeit,nfd}` are checked-in headers reached via `-I$(ROOT_DIR)/vendor` for desktop; `vendor/android/*` are submodules used only by Gradle/CMake, and are skipped by `clean`'s `*.o` sweep and excluded from the Docker context (`.dockerignore`).
@@ -178,7 +237,7 @@ All six git submodules are Android-only third-party deps under `vendor/android/`
 
 `<stormengine2/compat/global.h>` is the bridge: one `using storm::X;` per public name, pulling them all back into the global namespace so a 1.x game compiles unchanged. It is a bridge, not an API — a game that keeps it forever gains nothing from the change, and a future major removes it. Use it to get green, then drop it and qualify the names.
 
-`specs/compat/bridgedNames.h` is **generated** from the engine headers by `scripts/generate-compat-probes.py` (currently 140 names) and compiled by `specs/compat/global.spec.cpp`, so a public name added to the engine and not to the bridge fails the build. CI runs the generator with `--check`. Run it after adding any public name.
+`specs/compat/bridgedNames.h` is **generated** from the engine headers by `scripts/generate-compat-probes.py` (currently 194 names) and compiled by `specs/compat/global.spec.cpp`, so a public name added to the engine and not to the bridge fails the build. CI runs the generator with `--check`. Run it after adding any public name.
 
 ## ECS model
 
@@ -198,11 +257,29 @@ All six git submodules are Android-only third-party deps under `vendor/android/`
 - **Bodies are boxes or circles.** `BoxColliderComponent` and `CircleColliderComponent`; give an entity one or the other, never both (both is a game bug, and the box wins). A circle's `offset` places the **centre**, unlike a box's top-left, and `transform.scale` scales its radius by the larger absolute axis — a circle cannot be an ellipse. Against a box corner a circle reports a diagonal normal where a box snaps to an axis, which is the whole reason it exists. The math is free-standing in `common/collision/shapes.h` (glm and nothing else from the engine): `Overlaps` / `Manifold` / `ClosestPointOn` / `MinimumTranslation` / `BoundsOf`, overloaded for all three pairings and usable with no `Registry` at all.
 - **`RenderColliderSystem` is the debug overlay**, drawing both shapes in green and resolving them through `ContactSystem::BoundsOf` / `CircleOf` so it cannot disagree with the sweep. `Update(renderer, &camera)` pans like `RenderSystem`; the camera is optional and there is no `isFixed` equivalent, because a collider is always a world body.
 - **The broadphase is a uniform grid**, no preferred axis — a column of platforms costs the same as a row. Cell size is derived per frame from the bodies present (twice their mean extent); `SetCellSize(float)` overrides it and 0 restores the derived value. A body far larger than the grid — a level-sized floor collider — is tested against everything instead of filling thousands of cells. Do not build tilemap collision from one collider entity per tile; the per-box least-penetration manifold catches on seams. Snap to the grid like `examples/platformer`.
-- **`AssetStore` caches fonts and sounds too** (1.3.0): `AddFont(id, path, ptSize)` / `GetFont`, `AddSound(id, path)` / `GetSound`, and `ClearAssets()` frees all three. A `TTF_Font` is one point size, so register one id per size (`"hud-18"`). **`ClearAssets()` must run before `TTF_Quit()` / `Mix_CloseAudio()` / `SDL_Quit()`** - those free every font and chunk themselves, and the store usually outlives the state that shut them down. Three examples had that order wrong.
-- **`common/text.h`** - `Text::Draw` / `DrawCentred` / `Measure`. Header-only, null-safe on renderer and font, leaks nothing on any failure path. Four examples had hand-rolled copies; one re-opened the font from disk on every call.
+- **The asset path convention is `common/assetPath.h` and is public** (2.5.2) — "
+       "`AssetPath()` is the one path, relative to the assets root, and it is "
+       "simultaneously the game's logical path and the pack's entry name because a "
+       "pack's entries ARE relative to that root. `AssetStore::PackEntryName` delegates "
+       "to it. It was private until then, which is the whole defect: a game cannot "
+       "reuse a convention it cannot see, so a game reimplemented it, spelled one path "
+       "`"./assets/gfx/x.png"`, and the pack was silently skipped. "
+       "`ResolveAssetFile` is the override resolver ("shipped content is read-only, the "
+       "player's replacement lives beside the save"); the whole seam including the "
+       "pack-vs-loose fallback is written down in [`docs/assets.md`](docs/assets.md). "
+       "Note `AssetOverrideExists` uses `is_regular_file`, not an `ifstream` probe: "
+       "`ifstream(dir).good()` is **true** on Linux, so a stray folder would be accepted "
+       "as a replacement.
+
+**`AssetStore` caches fonts and sounds too** (1.3.0): `AddFont(id, path, ptSize)` / `GetFont`, `AddSound(id, path)` / `GetSound`, and `ClearAssets()` frees all three. A `TTF_Font` is one point size, so register one id per size (`"hud-18"`). **`ClearAssets()` must run before `TTF_Quit()` / `Mix_CloseAudio()` / `SDL_Quit()`** - those free every font and chunk themselves, and the store usually outlives the state that shut them down. Three examples had that order wrong.
+- **`common/debugOverlay.h`** (2.4.5) - `DebugStats` (pure; **never calls `SDL_GetTicks`**, the caller supplies the delta, so every spec is deterministic and none sleeps) and `DebugOverlay` (visibility + `Draw()`). FPS, frame time, entity count, per-system timings, last `Err` lines. The state calls `Toggle()` from its own `processInput()` - the overlay does **not** poll, because the engine's input layer is edge-triggered by design and the active state owns all polling. Rules that are easy to get wrong: fps averages over the samples **actually fed**, not the window size; the window is a **ring** so one hitch ages out; no elapsed time reports **0, not infinity**; a **negative** delta counts as zero rather than being subtracted; only the **slowest** system is named; a `BeginSystem` with no `EndSystem` is **dropped**; the last errors are **most recent, newest first**. Register it in an `OverlayList` (2.4.1) so it draws *before* the present.
+- **`stormengine2/version.h`** (2.4.4) - `kEngineVersion`, a major/minor/patch triple, `kEngineVersionString` ("v2.3.1"), `VersionString()`, exact `VersionEquals()`. **GENERATED by `scripts/generate-version.py` from `Makefile.debian`'s `VERSION ?=` — do not hand-edit it.** The number is written in exactly one place: the generator also stamps `Makefile.win` and the seven `data-ver` values in `web/index.html`, and `--check` runs in `pr-validate.yml` and `scripts/release-check.py`. After bumping the version, run `python3 scripts/generate-version.py`. `Makefile.debian` is the source rather than a root `VERSION` file **on purpose**: the release workflow's pre-release gate parses that line with a sed and once failed *open* on a parse it did not recognise, so do not make it a `$(shell cat …)`. A version spec must never pin the literal number — it fails every release and gets deleted.
+- **`common/text.h`** - `Text::Draw` / `DrawCentred` / `DrawRight` / `Measure`, plus `FitText`/`DrawFitted` (a measured fit that **marks** a truncated string) and `FitFooter`/`DrawFooter` (a footer as a list of parts, broken only between them). Header-only, null-safe on renderer and font, leaks nothing on any failure path. Four examples had hand-rolled copies; one re-opened the font from disk on every call. The rules that are easy to get wrong: the truncation **mark is inside the limit** (cut to the limit then append the mark overflows by the mark's width), cutting is on a **character** boundary (a byte-wise UTF-8 cut leaves a lone continuation byte TTF draws as a replacement box), text that fits comes back **byte-for-byte unchanged**, not-even-the-mark-fits returns **empty and still truncated**, a footer part too wide for the limit is kept **whole and flagged `overflow`** rather than cut, and the separator is **between** parts, never trailing a broken line. `FittedText`/`FooterLayout` are at namespace scope, not nested in `Text` — a caller names them in a signature.
 - **`common/input/gamepad.h`** - `Gamepad` over `SDL_GameController`: `Down(GamepadButton)`, `Pressed(...)`, `Released(...)`, `Current()` for analog sticks and triggers. Not the same thing as `input/virtualGamepad.h`, which is an on-screen touch pad and is SDL-free. Call `Shutdown()` before `SDL_Quit()`.
 - **`common/states/gameStateBase.h`** (1.3.0) - the `GameState` interface with none of the convenience includes: 80,265 preprocessed lines against `gameState.h`'s 146,748, a 45% saving. `gameState.h` includes it and adds the rest, so nothing existing changed. `gameStateMachine.h` includes the *base*, deliberately - it uses only `GameState *`, and including the convenience header would drag the whole engine back into every state that switches states, making the slim header pointless. `specs/gameStateMachineSlim.spec.cpp` guards that at compile time by defining its own `Registry`, which collides if `ecs.h` leaks back in. A game that does not use the ECS should include the base header and include what it uses.
+- **`stormengine2/ui/scale.h`** (2.4.2) - `UiScale(windowHeight)` with `Px(v)` / `FontPt(basePt)`, plus free-function forms `Px(v, h)` / `FontPt(pt, h)`. Pure, SDL-free, header-only, **no `.cpp` in `common/ui/`** (Android reads `engine-sources.txt`; a `.cpp` there would build on desktop and vanish on mobile). Reference height **720** and the identity there; rounding is half-away-from-zero; a **positive** value never rounds to 0 (a 1px border must not vanish at 480p) while 0 stays 0 and **negatives keep their sign** (a negative offset is an edge off-screen; clamping it pushes it on-screen); the result is monotonic; a non-positive window height is clamped to the reference rather than trusted. `Px(v,h)` MUST agree with `UiScale(h).Px(v)` — a layout with two scalings is the bug wearing a disguise. Exception-free for Switch.
 - **`GameState::CapFrameRate(maxDeltaSeconds = 0.05)`** - paces the frame, returns elapsed seconds, rolls `millisecondsPreviousFrame` forward. Pass 0 to leave the delta unclamped. Seven states used to write this out by hand and five shadowed the base member to do it. Non-virtual and adds no member, so `GameState`'s layout and vtable are unchanged.
+- **`GameState::Present(renderer, overlays = OverlayList())`** (2.4.1) - draws every registered overlay in **registration order**, then calls `SDL_RenderPresent` once, in one call so the ordering cannot be got wrong. The overlay list is the **game's** member, not `GameState`'s: `Present` takes it by reference, which is what lets it be non-virtual with no new member. `Add` refuses an empty name and a null callback; re-adding a name **replaces in place and keeps its position**, so a HUD re-registering every frame cannot climb the stack every frame. It **cannot** stop a state calling `SDL_RenderPresent` directly - nothing in C++ can short of owning the renderer - and the header says so; `tools/screen-sweep.py` is what tells you a state has not adopted it. The present call is the last statement and is the only `SDL_RenderPresent` in `common/`, which is why "exactly once" is a structural guarantee no spec can assert (`SDL_RenderPresent` returns void).
 - `Registry::AddEntityToSystem(Entity)` (singular) was **declared with no definition anywhere** on pre-1.2.x sources — a link error. It is gone; `common/ecs.h` carries a comment where it used to be. The real entry point is `AddEntityToSystems`. (`System::AddEntityToSystem` is a different, defined method.)
 - Two usage styles coexist: the **editor** uses the `Registry::Instance()` singleton; every **game** owns a plain `Registry registry_` member per game state, so each state is its own world.
 - The `Logger` writes to `std::cout` on every entity creation and every component add, and keeps a process-wide static history capped at 1000 entries. ECS-heavy frames do synchronous console I/O.
@@ -251,6 +328,7 @@ Rules you can only learn by tracing multiple files:
 - **`NetSnapshot` is two-phase:** `AddItem` only before `Finish()`, `FindItem`/`GetItemByIndex` only after. An in-place `AddItem` replace requires an identical field count. Even an empty delta base must have `Finish()` called on it — otherwise `FindItem` silently fails and every tick re-encodes the whole world as new items.
 - **A stalled handshake auto-bans the IP for 60 s** (CONNECT seen, CONNECT_READY never proven, 10 s timeout). Per-IP concurrent slots cap at 4, which limits local multi-client testing.
 - `NetServer`/`NetClient` install send lambdas capturing `this` (and a slot index), so they must never be copied — and as of 2.0.0 they cannot be: `NetServer`, `NetClient`, `NetConnection` and `NetSocket` all `= delete` their copy constructor and copy assignment (`KNOWN_ISSUES.md` item 6, fixed). Hold them by reference or `unique_ptr`, never by value and never in a resizing `std::vector`; both are also far too large for the stack (~372 KB and ~188 KB). Their destructors fire user callbacks, so explicitly `Stop()`/`Disconnect()` in `onExit()` before teardown.
+- **`NetSocket::Open` has three failure stages and reports them separately** — `PlatformInit` (WSAStartup / libnx `socketInitializeDefault` never ran), `Socket` (the fd or its non-blocking switch), `Bind` (the port, named in the message). They were one line until 2.7.2, which made a missing Switch platform init look like a firewall. libnx routes BSD sockets through the `bsd:` service, which is inert until `socketInitializeDefault()` runs, so a Switch build without that arm gets `socket()` → -1. The syscalls are not spec'd and cannot be; the *pure* half is, in `specs/net/netSocket.spec.cpp`.
 - Disconnect reasons are bare string literals with no enum, scattered across `netConnection.cpp` / `netServer.cpp` / `netClient.cpp` (`"timeout"`, `"server full"`, `"banned"`, …). Don't switch on them; if you must, grep all three files — the set is not centralized.
 
 Reference implementations, in increasing order of realism: `netchat` (minimal console host/join + reliable echo), `netrepl` (60 Hz authoritative host, per-client base snapshot, delta encode/apply — note bases advance on *send*, not ack, so the delta must be vital), `netplay-checkers` (graphical, ECS, but uses **full-state broadcast, not snapshots** — the right call for turn-based, and it doubles as late-joiner sync). `specs/net/netLoopback.spec.cpp`'s `PumpUntil` helper is the canonical verified pattern for driving both sides.
@@ -276,7 +354,11 @@ cd editor && make clean
 
 The editor is a standalone SDL2 + ImGui + sol2/Lua tilemap/collider painter that *links* the engine and reuses its `Registry::Instance()`, Logger and component structs — it is not an engine subsystem. It also declares its own `RenderSystem`/`AnimationSystem` under `editor/src/rendering/` that shadow the engine's same-named systems. It must run with CWD=`editor/` (it reads `fonts/fontawesome-webfont.ttf` and `./assets/mouse_hand.png`; `editor/README.md`'s claim that assets live in `bin/assets/` is stale).
 
-It writes three files: `<name>.lua` (project: canvas size, tile size, tileset id→path), `<name>.map` (tiles), `<name>_colliders.map`. `TileMapLoader` reads the `.map` and auto-detects format by peeking the first non-space char — alpha means editor format, digit means legacy CSV. That flips the meaning of the constructor's second argument: editor maps embed srcX/srcY so you pass `""`; legacy CSV needs the PNG (only `examples/strategy` still does this). **No example ever reads the `.lua` file** — it's an editor project file, despite sitting next to the `.map` in every `assets/tilemaps/`.
+It writes three files: `<name>.lua` (project: canvas size, tile size, tileset id→path), `<name>.map` (tiles), `<name>_colliders.map`. `TileMapLoader` reads the `.map` and auto-detects format by peeking the first non-space char — alpha means editor format, digit means legacy CSV. **The magic is alpha-leading for that reason**: a version header starting with a digit would be sniffed as CSV and take the other branch entirely.
+
+**A `.map` carries a version header** (`common/tilemapFormat.h`, 2.5.1): `storm-map 1`. A file with no header reads as version 1 and loads unchanged, so every map written before the header existed keeps working; a file declaring a version this build does not know is **refused** with a diagnostic, not half-read. The editor's `SaveMap`/`SaveColliders` and the engine's `loadFilemapEditor` both call the same two functions, so the writer cannot stamp a version the reader rejects. Two traps in that header, both spec'd: it is read as **two tokens, not a line** (a line read silently drops the first record if the newline is lost), and the reader **rewinds** after probing for the magic (eating that token parses every record one field to the left, and nothing complains because every field is still a valid int or string).
+
+The 22-field **record** is still parsed twice by hand — `loadFilemapEditor` and the editor's `LoadMap` — and `SaveMap` is still the only writer with no spec that calls it. That is P39, open; the version half is done, the record half is not. That flips the meaning of the constructor's second argument: editor maps embed srcX/srcY so you pass `""`; legacy CSV needs the PNG (only `examples/strategy` still does this). **No example ever reads the `.lua` file** — it's an editor project file, despite sitting next to the `.map` in every `assets/tilemaps/`.
 
 ## Conventions
 
@@ -400,8 +482,10 @@ specs, and a pin bump in every consuming game, so it needs a second consumer or
 a plainly engine-shaped design. Leaving it local is a legitimate answer.
 
 When a change genuinely does need a new mechanism, the shape it takes still has
-to survive the Switch and Android builds — non-recursive globs on Switch,
-`-fno-exceptions` on both — neither of which is in CI.
+to survive the Switch and Android builds — neither of which is in CI, and both
+of which now compile `common/net/` through the same `engine-sources.txt` the
+desktop builds use (so a new engine `.cpp` must be listed there or it drops out
+of every platform at once), plus `-fno-exceptions` on both.
 
 ### Implementation and verification
 
@@ -415,7 +499,7 @@ Verify:
 - alternate entry points and bypass paths
 - serialization/deserialization, and editor-writer against engine-reader
 - error paths
-- platform-specific behavior - Switch `-fno-exceptions` and the non-recursive `common/*.cpp` globs on Switch and Android, neither of which is in CI
+- platform-specific behavior - Switch `-fno-exceptions` and Android/Switch source enumeration (both now driven by `engine-sources.txt`), neither of which is in CI
 - regression coverage: a fix is only really closed once a spec fails without it
 - cross-subsystem integration, including at least one real consumer under `examples/`
 

@@ -17,6 +17,7 @@
 #include <stormengine2/components/transform.h>
 #include <stormengine2/ecs.h>
 #include <stormengine2/logger.h>
+#include <stormengine2/tilemapFormat.h>
 
 #include "../AssetManager.h"
 #include "../Canvas.h"

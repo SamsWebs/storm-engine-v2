@@ -76,10 +76,45 @@ public:
   // PackEntryName convention as the Adds); false means "read the file" -
   // the same fallback rule, and automatic for anything the pack cannot
   // hold (e.g. the player's data/ cache, which a built pack never
-  // contains). The bytes are a COPY: safe to hand to SDL_RWFromMem and to
-  // outlive however the caller uses them, subject to the caller keeping
-  // them alive as long as an RWops-derived TTF_Font stays open (the lazy-
-  // glyph rule - decode synchronously or keep the vector alive).
+  // contains).
+  //
+  // ── WHOSE LIFETIME IS THE BLOB? ────────────────────────────────────────────
+  //
+  // Every load in this store is either SYNCHRONOUS or LAZY, and the two have
+  // different lifetime rules, so the distinction decides whether the bytes have
+  // to outlive the call. Measured from the implementations, not assumed:
+  //
+  //   | load              | call                       | decode      | blob
+  //   must |
+  //   |-------------------|----------------------------|-------------|-----------|
+  //   | texture, file     | IMG_Load(path)             | synchronous | — | |
+  //   texture, pack     | IMG_Load_RW(src, freesrc=1)| synchronous | ends here
+  //   | | sound, file       | Mix_LoadWAV(path)          | synchronous | — | |
+  //   sound, pack       | Mix_LoadWAV_RW(src, 1)     | synchronous | ends here
+  //   | | FONT, file        | TTF_OpenFont(path)         | LAZY        | until
+  //   the | | FONT, pack        | TTF_OpenFontRW(src, 1)     | LAZY        |
+  //   font dies |
+  //
+  // SDL_image and SDL_mixer decode inside the call and free the RWops on every
+  // path, so their blobs are dead the moment the call returns. SDL_ttf does
+  // NOT: it keeps the RWops (font->freesrc = 1) and reads glyphs out of it at
+  // RENDER time, so a font's bytes must outlive the font or it reads freed
+  // memory — the failure is a crash or garbage glyphs many minutes later, with
+  // nothing pointing back at the load. That is why the store keeps a pack
+  // font's blob in fontBlobs for the font's lifetime rather than freeing it
+  // with the local.
+  //
+  // The rule for a CALLER of ReadBlob, then: decode it inside the scope, or
+  // keep the vector alive as long as anything derived from it is open. A
+  // texture or a sound built from it can let it go immediately; a TTF_Font
+  // cannot.
+  //
+  // The bytes are a COPY — `PackReader::Read` resizes the caller's own vector
+  // and reads into it, so two reads of one entry never alias and a blob
+  // outlives the store. Both halves of that are spec'd in
+  // `specs/assetStorePack.spec.cpp`; note the aliasing one guards a contract
+  // rather than a defect that exists today, because a `std::vector` out-param
+  // cannot alias by construction.
   bool ReadBlob(const std::string &filePath, std::vector<uint8_t> *bytes) const;
 
   // Pack-file variants: the blob comes from a storm::PackReader instead of

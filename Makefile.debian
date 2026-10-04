@@ -12,12 +12,35 @@ TEST_TARGET 	= $(BIN_DIR)/$(TEST_BIN)
 # clean existed only to paper over that gap and made every build a full one.
 # Switching PROFILE is handled too — base.mk stamps the flags and every object
 # depends on that stamp, so -O0 and -O2 objects can no longer be mixed.
-all: test-target run-test target
+# check-engine-sources is an order-free goal, not a file prereq: listing a
+# .PHONY here would make test-target always relink. `all` runs it first so a
+# local full build still catches a stale list without waiting for CI.
+all: check-engine-sources test-target run-test target
 
 include ./base.mk
 
-LIBSRCS  = $(shell find common -name '*.cpp')
+# One canonical source list, read by every build path (debian, win, Switch,
+# Android). CI fails if it drifts from `find common -name '*.cpp'`.
+# grep '^common/', not awk '/!^#/': a bare `#` inside $(shell …) starts a make
+# comment and truncates the call (unterminated shell), and `$$` before `)`
+# unbalances make's paren scan.
+ENGINE_SOURCES = $(shell grep '^common/' engine-sources.txt)
+LIBSRCS  = $(ENGINE_SOURCES)
 LIBOBJS  = $(LIBSRCS:.cpp=.o)
+
+.PHONY: check-engine-sources
+check-engine-sources:
+	@listed=$$(mktemp); actual=$$(mktemp); \
+	trap 'rm -f $$listed $$actual' EXIT; \
+	grep '^common/' engine-sources.txt | sort > $$listed; \
+	find common -name '*.cpp' | sort > $$actual; \
+	if ! diff -u $$listed $$actual; then \
+	  echo "engine-sources.txt is stale. Regenerate:"; \
+	  echo "  find common -name '*.cpp' | sort"; \
+	  echo "and merge into engine-sources.txt (keep the # header comments)."; \
+	  exit 1; \
+	fi; \
+	echo "engine-sources.txt is up to date."
 
 # tinyxml2 is COMPILED IN rather than linked -- see the LIB comment in base.mk
 # for why the soname had to go. Two details are deliberate:
@@ -89,10 +112,10 @@ install:
 	mkdir -p $(INSTALL_SHARE_DIR)
 	cp -r ./template $(INSTALL_SHARE_DIR)/template
 
-test: test-target run-test
+test: check-engine-sources test-target run-test
 
 TESTSRCS  	:= $(shell find specs -name '*.cpp')
-TESTSRCS  	+= $(shell find common -name '*.cpp')
+TESTSRCS  	+= $(ENGINE_SOURCES)
 TESTOBJS  	= $(TESTSRCS:.cpp=.o)
 
 # Ordering prerequisite, not just a listed goal: without it `make -j test`
@@ -100,9 +123,9 @@ TESTOBJS  	= $(TESTSRCS:.cpp=.o)
 run-test: test-target
 	$(TEST_TARGET)
 
-# $(TINYXML2_OBJ) is listed explicitly because TESTSRCS is built by
-# `find common`, and this object's SOURCE lives in vendor/android/tinyxml2 --
-# only the .o lands in common/. Without it the specs link against nothing for
+# $(TINYXML2_OBJ) is listed explicitly because TESTSRCS reads engine-sources.txt
+# (every common/*.cpp), and this object's SOURCE lives in vendor/android/tinyxml2
+# -- only the .o lands in common/. Without it the specs link against nothing for
 # every tinyxml2 symbol xmlLoader.cpp names.
 test-target: $(TESTOBJS) $(TINYXML2_OBJ)
 	mkdir -p $(BIN_DIR)

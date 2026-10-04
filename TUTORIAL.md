@@ -14,11 +14,17 @@ storm-engine-v2 is a C++17 game engine built on SDL2 that uses the **Entity Comp
 8. [Writing a Custom Component](#writing-a-custom-component)
 9. [Writing a Custom System](#writing-a-custom-system)
 10. [AssetStore](#assetstore)
-11. [Text](#text)
-12. [Gamepad](#gamepad)
-13. [Logger](#logger)
-13. [Tags and Groups](#tags-and-groups)
-14. [Putting It Together](#putting-it-together)
+11. [Asset Paths and Overrides](#asset-paths-and-overrides)
+12. [Text](#text)
+13. [UI Scale](#ui-scale)
+14. [Tilemaps and the .map Format](#tilemaps-and-the-map-format)
+15. [Gamepad](#gamepad)
+16. [Engine Version](#engine-version)
+17. [Debug Overlay](#debug-overlay)
+18. [Networking](#networking)
+19. [Logger](#logger)
+20. [Tags and Groups](#tags-and-groups)
+21. [Putting It Together](#putting-it-together)
 
 ## Core Concepts
 
@@ -464,9 +470,38 @@ void PlayState::render() {
     if (isDebugging_)
         registry.GetSystem<RenderColliderSystem>().Update(renderer_);
 
-    SDL_RenderPresent(renderer_);
+    // Present(), NOT SDL_RenderPresent(). See below.
+    Present(renderer_, overlays_);
 }
 ```
+
+**Call `Present(renderer_, overlays_)`, not `SDL_RenderPresent`.** `Present` is
+a non-virtual member of `GameState` that draws the overlay list and then
+presents, and it is the only `SDL_RenderPresent` in the engine. That sounds
+like tidiness; the reason is ordering. Anything you draw after
+`SDL_RenderPresent` is drawn into a back buffer nobody will ever look at, so a
+debug overlay or a debug font registered after the present is a diagnostic
+that looks configured and never appears.
+
+`overlays_` is an `OverlayList` member of your state - the list belongs to the
+game, and `Present` takes it by reference, so adding an overlay changes
+neither `GameState`'s layout nor its vtable:
+
+```cpp
+// In the state's constructor, or once on enter.
+overlays_.Add("debug", [this](SDL_Renderer *r) {
+    debug_.Draw(r, assetStore_->GetFont("hud-18"), 8, 8);
+});
+overlays_.Add("prompt", [this](SDL_Renderer *r) { drawPrompt(r); });
+
+// Later, if the overlay is no longer relevant.
+overlays_.Remove("prompt");
+```
+
+Re-adding a name **replaces the callback in place and keeps its position**, so
+an overlay that re-registers every frame does not climb to the top of the stack
+every frame. `Add` returns false for an empty name or a null callback and
+changes nothing.
 
 ## Writing a Custom Component
 
@@ -572,6 +607,102 @@ The store does not initialise SDL_ttf or SDL_mixer. Without `TTF_Init()` or
 
 The `AssetStore_Ptr` (`std::unique_ptr<AssetStore>`) is created in `Game` and moved into the first state via `std::move`. If you need it in subsequent states, pass a raw pointer or reference rather than moving ownership again.
 
+### Asset packs
+
+Call `LoadPack` once at startup and every path-based `Add*` afterwards loads
+from the pack when the pack holds that entry, falling back to the loose file
+when it does not:
+
+```cpp
+assetStore->LoadPack("assets.pak");   // false just means "no pack" - not fatal
+```
+
+A development tree with a partial pack still works and **no call site
+changes**. A missing or corrupt pack is logged and leaves the loose-file
+contract standing, so a broken pack is a performance problem, not a
+correctness one.
+
+### Raw bytes, and surfaces you built yourself
+
+`ReadBlob` gets you the bytes for anything the store does not cache - a
+pixel-processing pipeline, a window icon, a font you open yourself. It uses
+the same pack-then-file rule:
+
+```cpp
+std::vector<uint8_t> bytes;
+if (assetStore->ReadBlob("assets/gfx/logo.png", &bytes)) {
+    // bytes came from the pack, or from the file
+}
+```
+
+The bytes are a **copy**, so they outlive the store. Whether they must outlive
+the *call* depends on the loader, and this is the part worth knowing:
+
+| you build | decodes | the bytes must live until |
+|---|---|---|
+| a texture (`IMG_Load_RW`) | synchronously | the call returns |
+| a sound (`Mix_LoadWAV_RW`) | synchronously | the call returns |
+| **a font (`TTF_OpenFontRW`)** | **lazily, at render time** | **you close the font** |
+
+SDL_ttf keeps the `SDL_RWops` and reads glyphs out of it when it *draws*. Let
+the vector die and you get garbage glyphs or a crash minutes later, with
+nothing pointing back at the load. So if you open your own font over a blob,
+keep that vector alive as long as the font is open.
+
+If you have already built an `SDL_Surface` yourself - recoloured it, or decoded
+it by hand - `AddTextureFromSurface` takes it. **It frees the surface**:
+`SDL_CreateTextureFromSurface` copies, so the surface is dead the moment the
+call returns.
+
+The whole path convention, including overrides, is in
+[`docs/assets.md`](docs/assets.md).
+
+
+## Asset Paths and Overrides
+
+`<stormengine2/assetPath.h>` is the seam between the path a game writes and the
+file that gets opened. Three shapes, one rule:
+
+```
+"assets/gfx/player.png"       what a game writes
+         |  AssetPath()
+         v
+"gfx/player.png"              the pack entry name == the logical asset path
+         +-- AssetFilePath(.., "assets")       -> "assets/gfx/player.png"
+         +-- AssetOverridePath(.., "userdata") -> "userdata/gfx/player.png"
+```
+
+There is **one** asset path, not several that happen to agree: it is relative
+to the assets root, and it is simultaneously the game's logical path and the
+pack's entry name, because a pack's entries *are* relative to that root.
+
+`AssetPath` normalises three things - backslashes to forward slashes (a pack
+built on Windows must load on Linux), a leading `./`, and a leading `assets/`
+- and it is idempotent, so calling it twice is safe.
+
+`ResolveAssetFile` is the one-call version of "shipped content is read-only,
+the player's replacement lives beside the save":
+
+```cpp
+#include <stormengine2/assetPath.h>
+
+std::string which;
+const std::string file = ResolveAssetFile(
+    "assets/gfx/player.png",  // what the game normally writes
+    "assets",                 // where shipped content is read from
+    "userdata/mods",          // where replacements are read from
+    &which);                  // "override" or "shipped"
+```
+
+It creates and writes nothing. An empty `writableBase` means "no override
+support" and gets the shipped file. **Keep the `which` out-parameter** if you
+can: a loader that silently prefers a replacement is a support ticket nobody
+can answer, because the game shows the wrong art and nothing records that it
+looked.
+
+Details, including the pack-versus-loose fallback and the blob lifetime table:
+[`docs/assets.md`](docs/assets.md).
+
 ## Text
 
 Drawing one line with SDL_ttf is a five-call dance with a failure path at every
@@ -598,6 +729,191 @@ Header-only and null-safe: a null renderer or font draws nothing and returns
 `{0, 0}`, which is exactly what `GetFont` hands you for an unregistered ID. It
 never opens or closes a font, and never leaks the intermediate surface or
 texture.
+
+```cpp
+// Right-aligned against a fixed edge - the HUD number that must not shift
+// left as the score grows from 3 to 4 digits.
+Text::DrawRight(renderer, font, std::to_string(score), windowWidth - 10, 10,
+                {255, 255, 255, 255});
+```
+
+### Text that has to fit
+
+A string that might be too long is a layout problem, and the usual fix -
+measure it yourself and then decide what to cut - puts the truncation logic in
+every state. `FitText` and `DrawFitted` do the cutting:
+
+```cpp
+// Measure only, so you can lay out around it. `truncated` tells you whether
+// anything was actually cut, which is the difference between "Score: 400" and
+// "Score: 4000" both fitting and one of them being silently mangled.
+FittedText fitted = Text::FitText(font, message, 200);
+
+// Or fit and draw in one call.
+Text::DrawFitted(renderer, font, message, 200, x, y, color);
+```
+
+`FittedText` is `{ size, text, truncated }`, and `text` is what was (or would
+be) drawn - which may be shorter than what you passed in. The mark is a UTF-8
+ellipsis by default and you can pass your own.
+
+For a multi-part footer - control hints, "press X to continue" - `FitFooter`
+lays parts out over a line budget and `DrawFooter` draws the result:
+
+```cpp
+// Wraps as many parts as fit maxLines, two spaces between them.
+FooterLayout layout = Text::FitFooter(font, {"Move: WASD", "Jump: Space",
+                                            "Quit: Esc"}, 300, 2);
+if (layout.dropped) {
+    // Something did not fit. `overflow` is the worse case: a part wider than
+    // maxWidth on its own, which no amount of wrapping can save.
+}
+Text::DrawFooter(renderer, font, hints, 300, x, y, 18, color);
+```
+
+`layout.width` is the **widest** line, so that is the number to align
+something else against.
+
+## UI Scale
+
+Every hard-coded pixel in a layout is wrong on exactly one window size.
+`<stormengine2/ui/scale.h>` gives you one factor instead:
+
+```cpp
+#include <stormengine2/ui/scale.h>
+
+// Built once, when you know the window height.
+UiScale ui(windowHeight);
+
+SDL_Rect button{ui.Px(16), ui.Px(24), ui.Px(180), ui.Px(36)};
+Text::Draw(renderer, fontAt(ui.FontPt(16)), "Start", button.x, button.y, white);
+```
+
+`Px` scales a pixel measurement and `FontPt` a point size, both against a 720px
+reference, so the same numbers give the same proportions at any height. Round
+values never collapse to zero, negatives keep their sign, and a window height
+of zero or less is clamped rather than dividing by it.
+
+For one-off values with no object to keep, the free functions take the height:
+
+```cpp
+int margin = Px(16, windowHeight);
+```
+
+Header-only, pure, and SDL-free - no `.cpp` to add to any build list.
+
+## Tilemaps and the .map Format
+
+`TileMapLoader` reads the space-separated format the tile editor writes, and
+also the older comma-separated index format. The editor format needs no
+tileset PNG, because each record carries its own source rectangle:
+
+```cpp
+// No PNG argument, and a tile size - the loader derives grid positions by
+// dividing world coordinates by it.
+TileMapLoader loader("assets/tilemaps/level.map", "", 16);
+const Map &tiles = loader.getMap();
+```
+
+**A `.map` can carry a version header**, `<stormengine2/tilemapFormat.h>`:
+
+```
+storm-map 1
+tiles grass 8 8 0 0 0 0 0 1 1 0 0
+```
+
+A file with **no** header reads as version 1 and loads unchanged, so every map
+written before the header existed keeps working. A file declaring a version
+this build does not know is **refused** with a diagnostic naming the number,
+rather than half-read - half-reading produces a level that renders and is
+wrong, which is worse than one that does not load.
+
+If you write `.map` files yourself, use `TileMapVersionLine()` and
+`ReadTileMapVersion` rather than hand-writing the header, so the version you
+stamp is the version the reader enforces. See [`docs/ROADMAP.md`](docs/ROADMAP.md)
+§2.5.1 for why the record parser is still hand-rolled twice.
+
+## Engine Version
+
+`<stormengine2/version.h>` is the compile-time version, generated from
+`Makefile.debian` so it cannot drift from what was built:
+
+```cpp
+#include <stormengine2/version.h>
+
+SDL_Log("running %s", storm::kEngineVersionString);   // "v2.3.1"
+SDL_Log("major %d", kEngineVersionMajor);
+
+// For a save-file or asset-format check. Exact string compare, no parsing.
+if (!VersionEquals("2.3.1")) { /* refuse */ }
+```
+
+There is no runtime "which engine am I" call beyond `VersionString()`; the
+constant is the answer, and it is `constexpr`.
+
+## Debug Overlay
+
+`<stormengine2/debugOverlay.h>` gives you fps, the slowest system, and a ring
+of recent errors. It is opt-in, hidden until toggled, and **takes its clock
+from you** rather than calling `SDL_GetTicks`, so it works in a test and does
+not make your frame time depend on the overlay:
+
+```cpp
+DebugOverlay debug_;   // a member of your PlayState
+
+void PlayState::update(double dt) {
+    debug_.BeginFrame(dt);
+    debug_.BeginSystem("movement");
+    movement_.Update(dt);
+    debug_.EndSystem(ms);          // whatever you measured
+    debug_.EndFrame();
+    debug_.SetEntityCount(registry_.GetEntityCount());
+    debug_.Error("could not spawn player at %d", tileId);
+}
+
+void PlayState::render(SDL_Renderer *renderer, const AssetStore &assets) {
+    // Registered in the OverlayList, so it draws BEFORE the present. An
+    // overlay drawn after SDL_RenderPresent is one nobody ever sees.
+    overlays_.Add("debug", [&](SDL_Renderer *r) {
+        debug_.Draw(r, assets.GetFont("hud-18"), 8, 8);
+    });
+    Present(renderer, overlays_);
+}
+```
+
+`Toggle()` flips visibility and is usually bound to a key. `DebugStats` on its
+own is the pure part - no drawing - if you want the numbers without the
+overlay.
+
+## Networking
+
+The net layer (`<stormengine2/net/net.h>`) is hand-rolled non-blocking UDP:
+`NetServer`, `NetClient`, and the snapshot types. It is **not** covered by this
+tutorial - see [`docs/networking.md`](docs/networking.md), which documents the
+handshake, the windowing rules and the object sizes.
+
+One helper is worth knowing here because it is about hosting, not protocol.
+`<stormengine2/net/hostAddress.h>` tells the host its own LAN address:
+
+```cpp
+#include <stormengine2/net/hostAddress.h>
+
+// Never loopback: a lobby advertising 127.0.0.1 only works on the host.
+NetCandidate lan = BestLocalAddress();
+if (lan.address.empty()) {
+    // No usable address - say so in the lobby rather than advertising one
+    // nobody can reach.
+}
+```
+
+It **ranks** the answers rather than returning the first non-loopback one,
+because every machine has several and they are not equally useful: a developer
+laptop carries 127.0.0.1, a docker bridge, a VPN tunnel, and exactly one
+interface a player on the same network can reach. `Ranked()` gives you the
+whole list for a lobby UI; `ChooseBest()` gives the default.
+
+On Switch it returns nothing: there is no `getifaddrs` there, and a stale guess
+is worse than an honest "no address found".
 
 ## Gamepad
 
@@ -812,6 +1128,29 @@ bool PlayState::onExit()  { m_exiting = true;         return true; }
 | Assets | `examples/<name>/assets/` - paths are relative to the binary |
 | Binary output | `examples/<name>/bin/` (Linux), `examples/<name>/bin/win/` (Windows, with its DLLs) |
 | Build rules | `base.mk`, `examples/examples.mk`; `examples/examples.win.mk` for Windows |
+
+The headers you will actually include, and what each is for:
+
+| Header | For |
+|---|---|
+| `<stormengine2/ecs.h>` | `Registry`, `Entity`, the systems |
+| `<stormengine2/components/…>` | `TransformComponent`, `SpriteComponent`, `AnimationComponent`, colliders |
+| `<stormengine2/systems/…>` | `RenderSystem`, `MovementSystem`, `ContactSystem`, the debug collider overlay |
+| `<stormengine2/states/gameState.h>` | `GameState`, `GameStateMachine`, `OverlayList`, `Present` |
+| `<stormengine2/assetStore.h>` | `AssetStore` - the `Add*`/`Get*` path above |
+| `<stormengine2/assetPath.h>` | the asset path convention and the override resolver |
+| `<stormengine2/text.h>` | `Text` - one call instead of the SDL_ttf dance |
+| `<stormengine2/ui/scale.h>` | one scale factor for a whole layout |
+| `<stormengine2/tilemapLoader.h>` | `TileMapLoader`, `Tile`, `Map` |
+| `<stormengine2/tilemapFormat.h>` | the `.map` version header |
+| `<stormengine2/version.h>` | the compile-time engine version |
+| `<stormengine2/debugOverlay.h>` | fps, slowest system, recent errors |
+| `<stormengine2/net/net.h>` | `NetServer`, `NetClient`, snapshots |
+| `<stormengine2/net/hostAddress.h>` | the host's own LAN address, ranked |
+| `<stormengine2/compat/global.h>` | a 1.x bridge; qualify names or delete it |
+
+`GameState` already includes the engine headers, so a state header does not
+need to repeat them.
 
 On Windows the engine is not installed anywhere — the examples link
 `build/win/libstormenginev2.dll` from the repo, and a game outside the repo

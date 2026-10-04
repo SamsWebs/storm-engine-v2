@@ -47,10 +47,25 @@ file(COPY "${REPO_ROOT}/vendor/android/SDL_mixer2/include/SDL_mixer.h"
      DESTINATION "${CMAKE_CURRENT_BINARY_DIR}/compat/SDL2")
 
 # ── Engine core + game sources into the single JNI library ──────────────────
-# Recursive: a plain common/*.cpp glob picks up 6 of the 13 translation units
-# and silently drops all of common/net/, so anything touching Net* fails to
-# link. Networking also needs the INTERNET permission in AndroidManifest.xml.
-file(GLOB_RECURSE ENGINE_SRC "${REPO_ROOT}/common/*.cpp")
+# One canonical source list, read by every build path (this file, both root
+# makefiles, and the Switch example). A plain common/*.cpp glob used to be
+# non-recursive here too and silently dropped all of common/net/; the list
+# cannot miss a subdirectory because it is not a glob. CI fails if the list
+# drifts from find common -name '*.cpp'. CMAKE_CONFIGURE_DEPENDS re-runs
+# configure when the list itself changes (a new entry), which is what
+# GLOB_RECURSE CONFIGURE_DEPENDS would have done for a new file on disk.
+file(STRINGS "${REPO_ROOT}/engine-sources.txt" _engine_src_lines)
+set(ENGINE_SRC "")
+foreach(_line IN LISTS _engine_src_lines)
+  if(_line MATCHES "^[ \t]*#" OR _line STREQUAL "")
+    continue()
+  endif()
+  list(APPEND ENGINE_SRC "${REPO_ROOT}/${_line}")
+endforeach()
+unset(_line)
+unset(_engine_src_lines)
+set_property(DIRECTORY APPEND PROPERTY
+             CMAKE_CONFIGURE_DEPENDS "${REPO_ROOT}/engine-sources.txt")
 file(GLOB GAME_SRC   "${EXAMPLE_DIR}/src/*.cpp" "${EXAMPLE_DIR}/src/states/*.cpp")
 
 add_library(main SHARED ${ENGINE_SRC} ${GAME_SRC})

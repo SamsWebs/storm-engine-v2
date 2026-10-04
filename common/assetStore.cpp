@@ -1,5 +1,7 @@
 #include "assetStore.h"
 
+#include "assetPath.h"
+
 #include <climits>
 
 #include "packFile.h"
@@ -104,20 +106,14 @@ bool AssetStore::InPack(const std::string &filePath) const {
 }
 
 std::string AssetStore::PackEntryName(const std::string &filePath) const {
-  // The convention, in one place: the path as the game writes it minus its
-  // leading "assets/" (the pack's entries are relative to the assets root).
-  // The optional "./" comes first - the consuming game writes
-  // "./assets/gfx/x.png", and CWD-relative paths commonly carry it.
-  std::string path = filePath;
-  static const std::string kDot = "./";
-  if (path.rfind(kDot, 0) == 0) {
-    path.erase(0, kDot.size());
-  }
-  static const std::string kPrefix = "assets/";
-  if (path.rfind(kPrefix, 0) == 0) {
-    return path.substr(kPrefix.size());
-  }
-  return path;
+  // The convention is NOT here any more. It lives in <stormengine2/assetPath.h>
+  // as AssetPath(), public and spec'd, because this member being private was
+  // the defect: a game cannot reuse a convention it cannot see, so a game
+  // reimplemented it, spelled one path "./assets/gfx/x.png", and the pack was
+  // skipped for that asset with no diagnostic -- which reads as "the pack is
+  // broken" and sends the next person to debug the wrong thing. One owner, so
+  // the store and a game's own loader cannot disagree about what a path means.
+  return AssetPath(filePath);
 }
 
 SDL_RWops *AssetStore::OpenPackEntry(const PackReader &pack,

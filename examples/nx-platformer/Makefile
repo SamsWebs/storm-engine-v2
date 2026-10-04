@@ -5,10 +5,24 @@ endif
 TOPDIR      ?= $(CURDIR)
 TARGET      := nx-platformer
 BUILD       := bin
-SOURCES     := src src/states src/components include/stormengine2
+# Game sources only. Engine translation units come from the canonical list at
+# the repo root — the old `include/stormengine2` entry (a symlink to common/)
+# was a non-recursive wildcard that silently dropped common/net/ from Switch.
+SOURCES     := src src/states src/components
 DATA        := data
 INCLUDES    := include
 ROMFS       := $(TOPDIR)/romfs
+
+# Repo root is two levels up (examples/nx-platformer -> examples -> root).
+# Resolved from TOPDIR, not CURDIR, so the sub-make that runs with CWD=bin/
+# still computes the same path when this file is parsed again.
+# grep '^common/', not awk with '#': a bare `#` inside $(shell …) starts a
+# make comment and truncates the call.
+REPO_ROOT   := $(abspath $(TOPDIR)/../..)
+ENGINE_SRCS := $(shell grep '^common/' $(REPO_ROOT)/engine-sources.txt)
+# Absolute directories that contain engine sources — what vpath needs so
+# notdir-basenames like netClient.cpp resolve without a non-recursive glob.
+ENGINE_DIRS := $(sort $(dir $(addprefix $(REPO_ROOT)/,$(ENGINE_SRCS))))
 
 include $(DEVKITPRO)/libnx/switch_rules
 
@@ -55,16 +69,19 @@ export OUTPUT   :=  $(CURDIR)/$(BUILD)/$(TARGET)
 export TOPDIR   :=  $(CURDIR)
 
 export VPATH    :=  $(foreach dir,$(SOURCES),$(CURDIR)/$(dir)) \
+                    $(ENGINE_DIRS) \
                     $(foreach dir,$(DATA),$(CURDIR)/$(dir))
 
 # The same directory list, kept so the sub-make below can narrow VPATH to
 # source files only. See the note there.
 export SEARCHDIRS := $(foreach dir,$(SOURCES),$(CURDIR)/$(dir)) \
+                     $(ENGINE_DIRS) \
                      $(foreach dir,$(DATA),$(CURDIR)/$(dir))
 
 export DEPSDIR  :=  $(CURDIR)/$(BUILD)
 
-CPPFILES    :=  $(foreach dir,$(SOURCES),$(notdir $(wildcard $(CURDIR)/$(dir)/*.cpp)))
+CPPFILES    :=  $(foreach dir,$(SOURCES),$(notdir $(wildcard $(CURDIR)/$(dir)/*.cpp))) \
+                $(notdir $(ENGINE_SRCS))
 SFILES      :=  $(foreach dir,$(SOURCES),$(notdir $(wildcard $(CURDIR)/$(dir)/*.s)))
 BINFILES    :=  $(foreach dir,$(DATA),$(notdir $(wildcard $(dir)/*.*)))
 

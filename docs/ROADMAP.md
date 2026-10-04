@@ -123,7 +123,7 @@ used by nobody, and nothing anywhere said so.
 | 2.4.3 `text.h` verbs | S | nothing — additive statics |
 | 2.4.4 `version.h` | S | nothing; examples adopt `--version` |
 | 2.4.5 debug overlay | S | nothing — opt in |
-| 2.5.1 version the `.map` | M | rebuild; **the editor must write the new version too** |
+| 2.5.1 version the `.map` (header done; record parser still open) | M | rebuild; **the editor must write the new version too** |
 | 2.5.2 asset path seam | M | nothing, unless the game wants a writable base |
 | 2.5.3 blob lifetime rules | S | nothing — documentation |
 | 2.6.1 engine mixer | M | nothing |
@@ -168,21 +168,51 @@ release already fell through.
    circle colliders are marked done in the status block at the top of
    "After 2.0.0 ships". The stale "IsAlive walks freeIds" claim under
    "Carried, not blocking" was corrected the same day.
-4. **One canonical source list.** `examples/nx-platformer/Makefile` and the
-   Android CMake glob have both been non-recursive before, and the recurring fix
-   written down twice was "emit the canonical source list once and have every
-   build path read it". Nothing has. That is one file, and it retires a whole
-   class of defect rather than an instance.
-5. **State the verification matrix.** Done for this file — see "What CI
-   actually verifies, and what ships green" under [Build and CI](#build-and-ci).
-   The remaining half is the release checklist, so "all targets build" can never
-   again be written from intent.
-6. **A layout/measurement harness for the examples.** The engine ships 14
-   examples with UI and no way to look at one without playing to it. The flagship
-   game's `tools/layout_shot.cpp` renders the real font at the positions the
-   layout code computes and writes a PNG under Xvfb. One tool serves every
-   example, and the rule it enforces — *look at a screen you changed* — has caught
-   four layout defects in one session in the game that adopted it.
+4. **One canonical source list.** ✅ **Done 2026-09-23.** `engine-sources.txt`
+   at the repo root is the single enumeration; `Makefile.debian`, `Makefile.win`,
+   `examples/nx-platformer/Makefile` and the Android CMake all read it instead
+   of globbing `common/` themselves. The Switch Makefile's non-recursive wildcard
+   (which silently dropped all seven `common/net/` TUs) and Android's
+   `GLOB_RECURSE`-without-`CONFIGURE_DEPENDS` both die when the list is the only
+   source of truth. `make check-engine-sources` and a `pr-validate.yml` step fail
+   if the list drifts from `find common -name '*.cpp'`; `Dockerfile.debian` copies
+   the list so the CI image builds. Retires P6's source-list half (and the
+   recurring "fix the glob again" write-up) outright. P7
+   (`socketInitializeDefault`) was what 2.7.2 still carried; it landed
+   2026-10-04, and taking it found two more Switch breaks that had been
+   waiting behind the missing sources.
+5. **State the verification matrix.** ✅ **Done 2026-10-04.** Both halves. The
+   matrix for this file is "What CI actually verifies, and what ships green"
+   under [Build and CI](#build-and-ci); the release checklist that makes it
+   actionable is [`docs/RELEASING.md`](RELEASING.md), and its executable half
+   is `scripts/release-check.py`. That script is the half that stops rotting:
+   it asserts the four hand-written version sites agree (`Makefile.debian`,
+   `Makefile.win`, and the seven `data-ver` elements in `web/index.html` —
+   the release workflow's pre-release gate reads only the first of those, so a
+   tag could ship with the website advertising the previous release), that the
+   canonical source list matches `find common`, that the compat probe is fresh,
+   and that the coverage claims in the checklist are still true — a workflow
+   gaining a devkitPro or NDK invocation, or losing the `build-windows` /
+   `build-linux` job ids, fails the gate rather than leaving the matrix
+   quietly wrong. Verified by sabotaging each check in both directions.
+6. **A layout/measurement harness for the examples.** ✅ **Done 2026-10-04**
+   as `tools/screen-sweep.py`. It drives any example under a private Xvfb,
+   presses **one key per fresh process**, and reports the changed-pixel count
+   and the bounding box of the change against a measured idle baseline. One
+   tool serves every example, and the rule it enforces is *look at a screen you
+   changed* — the sweep on `examples/platformer` and `examples/puzzle` is what
+   found the stale-binary and dead-jump-reading problems described in
+   `tools/screen-sweep.py`'s own header, neither of which any spec or build
+   could see. Not in CI: the image has no Xvfb and every example needs an
+   installed engine, so it is a local tool by construction.
+
+   **What it deliberately does not do is conclude that a key is broken.** The
+   measured reason is in the tool: `examples/puzzle` draws its PAUSED overlay in
+   1,039 px against a 6,144 px idle floor, so a pixel threshold calls a pause
+   that visibly works dead. The count is a lead and the box is the evidence; a
+   human looks at the frame. The flagship game's `layout_shot.cpp` renders at
+   computed positions, which is the stronger tool for pure layout arithmetic —
+   the sweep is the complement for anything that needs a key pressed.
 
 ### 2.4.0 — frame and presentation seams (additive)
 
@@ -190,9 +220,10 @@ Nothing here changes a public signature, a struct layout or a member. The layout
 pins in `specs/layout.spec.cpp` are the gate: a size that moves in a minor is a
 bug in this plan, not a licence.
 
-1. **`GameState::Present()`.** A non-virtual method with no new member, which is
-exactly the trick `CapFrameRate` already uses in that header — "Non-virtual and
-adds no member, so it changes neither `GameState`'s layout nor its vtable." It
+1. **`GameState::Present()`.** ✅ **Done 2026-10-04.** A non-virtual method with
+no new member, which is exactly the trick `CapFrameRate` already uses in that
+header — "Non-virtual and adds no member, so it changes neither `GameState`'s
+layout nor its vtable." It
 draws the registered overlays and then calls `SDL_RenderPresent` once. The
 motivation is specific: on Android the touch overlay must be drawn *before* the
 present, and a state that calls `SDL_RenderPresent` itself ships a menu with
@@ -207,68 +238,326 @@ convention, and the engine is where it belongs.
    itself is spec'd rather than implied. What it must not become is a second
    convention a game can bypass by calling `SDL_RenderPresent` directly, because
    a convention is what failed the first time.
-2. **`stormengine2/ui/scale.h`.** `UiScale(windowHeight)` / `Px(v, h)` /
-`FontPt(basePt, h)` — pure, SDL-free, spec'd. A game that scales its fonts but
-not its literal offsets gets a 4K layout whose halves drift apart; a game that
-scales both by different factors gets the same thing more slowly. One function is
-what makes them agree by construction.
-3. **`text.h` grows the drawing verbs it is missing.** Centre and right
-alignment, a measured fit that *marks* a truncated string rather than clipping it
-silently, and a footer built from a list of parts so it can wrap between verbs.
-All additive statics; the existing four keep their signatures. The engine's own
-`text.h` comment already documents why this matters — three example copies
-diverged until one of them re-opened the font per call.
-4. **`stormengine2/version.h`.** A compile-time `kEngineVersion` and
-`VersionString()`, so a binary can answer for itself which engine it was built
-against, and the release number gets **one source** instead of a hand-bump in
-`Makefile.debian`, `Makefile.win` and eight places in `web/index.html`. A compile
-flag is not a property of the artifact; this is the smallest fix for that. Being
-a library, the engine cannot print — the header is the answer, and the examples
-adopt it in a `--version` switch so at least one built binary in the tree does.
-The mechanism is a generated header, not a second hand-edited copy of the
-number, or it has moved the problem rather than fixed it.
-5. **A debug overlay.** The cheapest item on the previous list and still the
-right one: FPS, frame time, entity count, per-system timings and the last few
-`Err` lines, toggled with a key. It is also the only diagnostic surface a game
-ships to a player, which the logger is not.
+
+   **The decision, as implemented: the GAME owns the list and `GameState` only
+   borrows it.** `OverlayList` is a standalone type in `gameStateBase.h` and
+   `Present(SDL_Renderer*, const OverlayList& = OverlayList())` takes it by
+   reference. That is what makes "no new member" and "draws the registered
+   overlays" compatible at all — the storage lives in the derived class that
+   actually has overlays, so `GameState`'s size and vtable are untouched and no
+   game pays a layout change for a feature most of them never use. A member
+   would have been easier to write.
+
+   Draw order is **registration order**, spec'd in pixels: two overlays painting
+   the same rect come out with the later one on top. Re-adding an existing name
+   **replaces the callback in place** and keeps its position, so a HUD that
+   re-registers every frame cannot climb the stack every frame. `Add` refuses
+   an empty name and a null callback.
+
+   **On the last constraint above — "must not become a convention a game can
+   bypass" — the honest answer is that it partly cannot be met, and the code
+   says so rather than pretending.** Nothing in C++ stops a state calling
+   `SDL_RenderPresent` directly short of owning the renderer. What `Present()`
+   buys is that the correct call is the shortest one and the overlay ordering is
+   a property of the call instead of the caller's memory; a state that keeps
+   calling `SDL_RenderPresent` keeps today's behaviour, including the invisible
+   Android menu. Adopting it is the fix, and `tools/screen-sweep.py` is what
+   tells you a state has not adopted it.
+
+   `examples/platformer` adopted it, which is the "an item is done when an
+   in-tree example uses it" half. 615 specs, up from 604.
+
+2. **`stormengine2/ui/scale.h`.** ✅ **Done 2026-10-04.** `UiScale(windowHeight)` /
+`Px(v, h)` / `FontPt(basePt, h)` — pure, SDL-free, header-only, spec'd in 11
+cases. A game that scales its fonts but not its literal offsets gets a 4K
+layout whose halves drift apart; a game that scales both by different factors
+gets the same thing more slowly. One function is what makes them agree by
+construction. The decisions worth recording, because each is one a plausible
+implementation gets wrong: the reference is **720** and scaling is the identity
+there; rounding is **half away from zero** (truncation makes every odd pixel at
+1.5× lose half a pixel, and a column of them drifts visibly); a **positive**
+value never rounds to 0, so a 1px border does not vanish at 480p, while 0 stays
+0 and negatives keep their sign; the result is **monotonic**, so adjacent
+columns cannot swap widths between resolutions; a non-positive window height is
+**clamped to the reference** rather than trusted, because a factor of zero makes
+every `Px()` come back as `INT_MIN`; and the free functions **must agree with
+the type exactly**, since a layout that picks up two scalings depending on
+which call site wrote it has the original bug wearing a disguise. No consumer
+action: it is a new header, opt in.
+3. **`text.h` grows the drawing verbs it is missing.** ✅ **Done 2026-10-04.**
+`DrawRight`, `FitText`/`DrawFitted` (a measured fit that *marks* a truncated
+string rather than clipping it silently), and `FitFooter`/`DrawFooter` (a
+footer built from a list of parts so it can wrap between verbs). All additive
+statics; the existing signatures are untouched. 20 specs in
+`specs/textVerbs.spec.cpp`, driven against the real `specs/assets/fonts/font.ttf`
+— a fake measurer would prove nothing, since every decision here is about
+MEASURED width.
+
+   The decisions, because each is one a plausible implementation gets wrong:
+   the truncation **mark is inside the limit** (cut to the limit and then append
+   the mark overflows by the mark's width — that is the off-by-a-glyph this
+   exists to not have); cutting happens on a **character** boundary, because a
+   byte-wise cut of UTF-8 leaves a lone continuation byte TTF renders as a
+   replacement box; text that already fits is returned **byte-for-byte
+   unchanged**; if not even the mark fits the result is **empty and still
+   truncated**, because returning a mark that overflows contradicts the limit
+   and returning the text unmarked claims it fit; the footer breaks **only
+   between parts** and a part too wide for the limit gets a line to itself
+   **whole and flagged** (`overflow`), never cut, because a control name sliced
+   in half is worse than one that overhangs; the separator sits **between**
+   parts, never at the end of a broken line; and `width` is the **widest line**,
+   which is what a caller right-aligns against.
+
+   **This item found a real bug in its own first implementation**, which is the
+   most useful thing to record. `FitText` started its cut at the *empty* prefix
+   and only ever decremented, so it tested `""`, found the mark fit, and
+   returned a bare `…` for every width from 40px to 120px — a function that
+   truncates a 180px string to one glyph and calls it a fit. The
+   "never wider than the limit" case passed happily, because `…` really is
+   narrower than the limit. Only a case pinning the *surviving text* caught it.
+   `keeps_MORE_text_as_the_limit_grows` now asserts the relationship directly.
+
+   A second lesson, in the other direction: the codepoint-boundary case
+   originally asserted "the last byte is not a continuation byte", which is
+   false for every complete multi-byte character (`C3 A9` ends in `A9`). The
+   spec was wrong and the code was right.
+4. **`stormengine2/version.h`.** ✅ **Done 2026-10-04.** A compile-time
+`kEngineVersion` plus a major/minor/patch triple, `kEngineVersionString`
+("v2.3.1") and `VersionString()`, so a binary can answer for itself which engine
+it was built against. A compile flag is not a property of the artifact; this is
+the smallest fix for that. Being a library, the engine cannot print — the header
+is the answer, and `examples/platformer` adopted it in a `--version` switch, so
+the built binary answers `v2.3.1` and at least one artifact in the tree reports
+its own version instead of leaving it to a makefile on the reporter's machine.
+
+   **The number is now written once.** `Makefile.debian`'s `VERSION ?=` is the
+   single source, and `scripts/generate-version.py` generates
+   `common/version.h`, `Makefile.win` and the seven `data-ver` values in
+   `web/index.html` from it. The header is generated rather than hand-written,
+   or this would have moved the problem rather than fixed it. `--check` runs in
+   `pr-validate.yml` and in `scripts/release-check.py`.
+
+   **Why `Makefile.debian` and not a root `VERSION` file**, which is the tidier
+   answer and the wrong one here: the release workflow's "Refuse to release a
+   pre-release version" step reads `Makefile.debian` with a sed, and that step's
+   own comment records that it used to fail OPEN on a parse it did not
+   recognise. A root `VERSION` file means `VERSION ?= $(shell cat VERSION)`,
+   which that sed would capture as the literal `$(shell` — so a policy gate
+   documented as having to fail closed would be weakened to accommodate a
+   tidier layout. One source, chosen at the site the release already trusts.
+
+   The web page is stamped through its `data-ver` attributes, which exist for
+   this: a blanket regex over `2\.\d+\.\d+` would also rewrite the page's 2.0.0
+   migration notes, which are correct history. Verified by bumping to 2.4.0 —
+   all three sites moved, both 2.0.0 references stayed, and the `data-copy`
+   payload (a second copy of the version nobody remembers) was rewritten too.
+
+   `scripts/release-check.py`'s own version check was **deleted** and replaced
+   by a call to the generator's `--check`. It used to parse the four sites
+   itself, which was two implementations of one rule: they agreed until they
+   did not, and then a bump could satisfy the gate while the generated header
+   said something else. One owner per decision.
+
+   5 specs, and deliberately **none of them pins the literal number** — a spec
+   that pins "2.3.1" fails every release and gets deleted. What is asserted is
+   that the triple agrees with the string, that the "v" form is exactly the
+   string with a prefix, and that the comparison is exact rather than
+   prefix-accepting (a consumer that treats "2.3" as equal to 2.3.1 is a
+   consumer that believes it is talking to a build it is not).
+5. **A debug overlay.** ✅ **Done 2026-10-04** as `common/debugOverlay.h`.
+FPS, frame time, entity count, per-system timings and the last few `Err` lines,
+toggled with a key. It is also the only diagnostic surface a game ships to a
+player, which the logger is not.
+
+   **The numbers are pure and take their clock from the caller** — `DebugStats`
+   never calls `SDL_GetTicks`. If the clock were inside, every case would be a
+   timing assertion, and a timing assertion is a flaky assertion that gets
+   deleted. 11 specs, none of which sleeps.
+
+   The decisions, each of which a plausible implementation gets wrong: fps is a
+   **window average over the samples actually fed**, not over the window size
+   (dividing by the full window on frame one reports 1/64th of the real rate,
+   so a freshly toggled overlay opens showing a wrong number); the window is a
+   **ring**, so one 200ms hitch ages out instead of poisoning the rate until the
+   developer turns the overlay off for good; a window with no elapsed time
+   reports **0, not infinity**; a **negative** delta (a clock that jumped
+   backwards on resume) counts as zero rather than being subtracted; only the
+   **slowest** system is named, because "which system is slow" is the question
+   per-system timings exist to answer; a `BeginSystem` with no matching
+   `EndSystem` is **dropped**, because printing the time since it opened is a
+   confidently wrong number; and the last errors are the **most recent, newest
+   first**, so a developer reads the live one at a fixed position.
+
+   **The overlay does not poll for its toggle key.** The engine's input layer
+   is edge-triggered and deliberately does not poll — the active state owns all
+   polling — so the state calls `Toggle()` from its own `processInput()`.
+
+   It is also **2.4.1's first real consumer**: a game registers the overlay in
+   the `OverlayList` it already has, so the lines are drawn *before* the
+   present. An overlay drawn after the present is an overlay nobody ever sees,
+   which is a diagnostic worse than none because it looks configured.
 
 ### 2.5.0 — data and asset seams (additive, plus one format change)
 
-1. **Version the `.map`.** A header line carrying a format version, one parser
-instead of two, and a round-trip spec. The rule being adopted is the flagship
-game's config contract: *unknown keys are ignored* covers a key being added or
-removed, and does **not** cover a key that still parses and now means something
-else. A `.map` with no version cannot tell a reader which of those it is, and
-2.0.0's `Tile` change is the proof that this format does move.
+1. **Version the `.map`.** ✅ **Done 2026-10-04, version half** — the record
+   half is still open, see the end of this item. `common/tilemapFormat.h` is
+   the single owner of the header: `ReadTileMapVersion` (pure, takes a
+   `std::istream`, so a spec needs no file) and `TileMapVersionLine()` (the line
+   a writer emits, newline included). `loadFilemapEditor` reads it and refuses
+   what it cannot read; `SaveMap` and `SaveColliders` write it with the same
+   function the reader validates, so the writer cannot stamp a version the
+   engine would reject.
 
-   Two consumers, and the second is the one that gets forgotten: the engine's
-   `TileMapLoader`, and `editor/src/utilities/FileLoader.cpp`, which writes the
-   format with its own stream of `<<` and is a separate binary that has to be
-   rebuilt and repackaged in the same release. **A map written before the version
-   existed must keep loading** — the absent header reads as version 1 — and a map
-   declaring a version the build does not know must be refused with a
-   diagnostic, which is the half that costs anything. Neither parser bounds the
-   record it is reading beyond the stream's own conversions, so the version line
-   is also the place to state what a malformed record does.
-2. **The asset path seam, written down and completed.** `AssetPath` (the game
-path a pack-aware loader consumes) and `AssetFilePath` (the path a real file is
-opened at) are already two functions and already the source of a shipped defect —
-`PackEntryName` gained a `./` strip because a game handed the second one's shape
-to the first and the pack was skipped. Add the third piece: a writable base and a
-readable-override resolver, so "shipped content is read-only, the player's
-replacement lives beside the save" is one call rather than a per-game convention.
-Document all three together in `docs/assets.md`, including the pack-vs-loose
-fallback.
-3. **Raw bytes for the loads the store does not cache.** `ReadBlob` is on the
-branch and **unreleased** (`68b3940`, after the `v2.3.1` tag), and it is **absent
-from `CHANGELOG.md` altogether** — zero hits, while `LoadPack` from the commit
-before it has an entry. That is the repo's own rule broken in the commit that
-added the API: "a public API change is documented in the same branch that makes
-it." Add the entry, and add the second half this item is about: the statement of
-which loads are synchronous and which are lazy, because the two have different
-lifetime rules. A font opened over memory reads its bytes at render time; an
-image decoded through `IMG_Load` does not. That rule currently lives in a game's
-header comment. It belongs next to `ReadBlob`.
+   **The refusal is the half that costs anything**, and it is the reason the
+   item existed. A map declaring a version this build does not know is refused
+   with a diagnostic naming the declared number and the supported range — not
+   half-read, because half-reading produces a level that renders and is wrong,
+   which is the worst outcome available: nothing about it looks broken. A map
+   with **no** header is version 1 and loads unchanged, which is what keeps
+   every map written before this existed working. That is 17 cases in
+   `specs/tilemapFormat.spec.cpp` plus 6 loader cases, 12 sabotages all caught.
+
+   Three things the implementation had to get right, each of which a spec now
+   holds:
+
+   - **The header is two tokens, not a line.** Reading it as a line is the
+     obvious implementation and the wrong one — a hand-edit that joined the
+     header to the first record, or a writer that forgot the newline, would drop
+     that record silently, and a level missing its first tile is not a visible
+     bug.
+   - **The reader must not consume what it probed.** It reads the first token to
+     see whether it is the magic; on the unversioned path that token is the
+     first record's group name, and eating it parses every record one field to
+     the left — group name becomes asset id, asset id becomes tile width, and
+     nothing complains because every field is still a valid int or string. The
+     first draft of this had exactly that bug, and the round-trip spec is what
+     caught it.
+   - **`std::strtol`, not `std::stoi`.** The latter throws on `"next"`, and this
+     is parsed from a file on the load path. Switch also builds `-fno-exceptions`,
+     where that throw is an `abort`.
+
+   **A data-loss bug the header exposed.** The optional trailing animation flag
+   was read as `fmap >> animatedFlag`, and an int extraction that hits the next
+   record's group token sets failbit exactly as one that hits EOF does — so the
+   only test available was `eof()`, which fires on the **last** record and
+   nowhere else. Measured on a 3-record file: **0 of 3 tiles loaded**, with a
+   diagnostic blaming truncation. One hand-edit, or one writer that skipped a
+   zero flag, cost a whole level. Fixed by reading the token as a string and
+   pushing back one that is not numeric; a record that legitimately omits the
+   flag is now not an *error* either, which is the direction the fix could
+   easily have overshot.
+
+   **Still open, and it is the larger half:** the 22-field record is still
+   parsed twice, by hand — `loadFilemapEditor` and the editor's `LoadMap` — and
+   `SaveMap` is still the sole writer with no spec that calls it. P39's
+   `TileRecord` plus `readTileRecord`/`writeTileRecord` is not written. Left for
+   its own branch deliberately: it refactors three functions in a binary that
+   cannot be linked here (no libnfd), so it would be the one change in the slice
+   with no test able to observe it. Verified this slice: the editor's
+   `FileLoader.cpp` **compiles** against the new header, and the object contains
+   the `storm-map` string; the link failure is the documented libnfd gap.
+
+2. **The asset path seam, written down and completed.** ✅ **Done 2026-10-04.**
+   This item's own premise turned out to be wrong, and that is the first thing
+   worth recording: it says `AssetPath` and `AssetFilePath` "are already two
+   functions". `grep -rn 'AssetPath\|AssetFilePath' --include=*.h --include=*.cpp`
+   returns **zero hits** outside this document. There is no such pair. What
+   exists is ONE function, `AssetStore::PackEntryName`, and it is **private**.
+
+   That reframes the item, and the reframe is the fix. A game cannot reuse a
+   convention it cannot see, so a game reimplemented it, spelled one path
+   `"./assets/gfx/x.png"`, and the strip looked for `"assets/"` at position 0,
+   did not find it, and the pack was silently skipped for that asset — which
+   reads as "the pack is broken" and sends the next person to debug the wrong
+   thing. **Visibility was the defect, not the arity.**
+
+   And there is not two concepts here either. There is **one** path, relative
+   to the assets root, and it is simultaneously the game's logical asset path
+   and the pack's entry name — because a pack's entries *are* relative to the
+   assets root. `common/assetPath.h` says so in one function:
+
+   ```
+   "assets/gfx/player.png"    what a game writes
+            |  AssetPath()
+            v
+   "gfx/player.png"           the pack entry name == the logical asset path
+            +-- AssetFilePath(.., "assets")       -> "assets/gfx/player.png"
+            +-- AssetOverridePath(.., "userdata") -> "userdata/gfx/player.png"
+   ```
+
+   `AssetStore::PackEntryName` is now a one-line delegation to `AssetPath`, so
+   the store and a game's own loader cannot disagree about what a path means.
+   19 specs, 13 sabotages all caught.
+
+   **The third piece the item asks for** — a writable base and a
+   readable-override resolver — is `ResolveAssetFile(gamePath, readableBase,
+   writableBase, &which)`. "Shipped content is read-only, the player's
+   replacement lives beside the save" is one call instead of a per-game
+   convention, and it creates and writes nothing: an empty `writableBase` means
+   "no override support" and gets the shipped file. The `which` out-parameter
+   reports `"override"` or `"shipped"`, and it is worth keeping: a loader that
+   silently prefers a replacement is a support ticket nobody can answer,
+   because the game shows the wrong art and nothing records that it looked.
+
+   Two rules in `AssetPath` that were not in the roadmap and that a
+   reimplementation would get wrong:
+
+   - **Backslashes become forward slashes.** A pack is built on whatever
+     machine its author used and its entry names are forward-slashed whatever
+     built them. Without this, a game loads from the pack on the author's
+     Windows machine and falls back to loose files everywhere else — the same
+     class of bug as the missing `./` strip, and just as invisible.
+   - **At most one `assets/` prefix.** Repeat stripping would be thoroughness
+     as a bug: a real directory can be called `assets`, so
+     `assets/assets/x.png` means `assets/assets/x.png`. `..` is deliberately
+     NOT resolved — a pack entry name is a key, not a location, and collapsing
+     the two would let a name address outside the pack.
+
+   **All of it is written down** in [`docs/assets.md`](assets.md), including
+   the pack-versus-loose fallback and the blob lifetime rule from item 3 —
+   which is the half that turns "a broken pack is a performance problem, not a
+   correctness one" into something a reader can act on.
+
+3. **Raw bytes for the loads the store does not cache.** ✅ **Done 2026-10-04.**
+   Two halves, and the first was a plain gap in this repo's own rule.
+
+   **The missing entry.** `ReadBlob` landed on the branch after the `v2.3.1`
+   tag (`68b3940`) and had **no `CHANGELOG.md` entry at all** — zero hits — in
+   the same commit that added a public API, which is the rule this repo states
+   for itself ("a public API change is documented in the same branch that makes
+   it") broken by the commit that made the API. The entry is written now, next
+   to `LoadPack`'s, which is the entry it belongs beside.
+
+   **The statement of which loads are synchronous and which are lazy**, which
+   is the half this item is actually about. It used to live in a downstream
+   game's header comment; it is now a table next to `ReadBlob` in
+   `common/assetStore.h`, **measured from the implementations** rather than
+   assumed:
+
+   | load | call | decode | blob must |
+   |---|---|---|---|
+   | texture, file | `IMG_Load(path)` | synchronous | — |
+   | texture, pack | `IMG_Load_RW(src, freesrc=1)` | synchronous | ends here |
+   | sound, file | `Mix_LoadWAV(path)` | synchronous | — |
+   | sound, pack | `Mix_LoadWAV_RW(src, 1)` | synchronous | ends here |
+   | **font**, file | `TTF_OpenFont(path)` | **lazy** | until the font dies |
+   | **font**, pack | `TTF_OpenFontRW(src, 1)` | **lazy** | until the font dies |
+
+   SDL_image and SDL_mixer decode inside the call and free the RWops on every
+   path. **SDL_ttf does not** — it keeps the RWops (`font->freesrc = 1`) and
+   reads glyphs at *render* time, so a font's bytes must outlive the font. The
+   failure is garbage glyphs or a crash minutes after the load, with nothing
+   pointing back at it, which is exactly why the rule is worth writing down
+   rather than rediscovering. The rule for a caller of `ReadBlob` follows
+   directly: a texture or sound can let the vector go immediately, a
+   `TTF_Font` cannot.
+
+   The bytes are a **copy**, and both halves of that claim are now spec'd —
+   a blob outlives the store, and two reads of one entry never alias. The
+   aliasing case guards a contract rather than a defect that exists today: a
+   `std::vector` out-parameter cannot alias by construction, so it would fire
+   on a future "optimisation" that turned the copy into a shared view. Said so
+   in the spec rather than left to look like a bug catch.
 
 ### 2.6.0 — audio and input (additive)
 
@@ -305,20 +594,111 @@ own 627 lines.
 
 ### 2.7.0 — net polish
 
-1. **Host address enumeration**, engine-side and per platform, with the ranking
-rule split into a pure header the way the flagship game already did it. A net
-layer that cannot tell the host its own LAN address leaves every game to solve
-it.
-2. **The Switch halves.** `NetSocketsInit()` needs a `socketInitializeDefault()`
-arm, and `examples/nx-platformer/Makefile` needs a recursive source glob
-(`SOURCES := src src/states src/components include/stormengine2`, where
-`include/stormengine2` is a symlink to `common/` and therefore reaches the six
-top-level `.cpp` files and none of the seven under `common/net/`). These must land
-together: the first is masked by the second and surfaces the moment it is fixed.
-**Neither has been built here** — devkitPro is not on this machine — so both are
-ledger claims verified only as *still present in the source*, which is a weaker
-thing than verified as *broken*, and should be repeated to whoever builds it next
-rather than asserted.
+1. **Host address enumeration.** ✅ **Done 2026-10-04.** `common/net/hostAddress.h`
+plus `hostAddress.cpp`. The split is the one the flagship game arrived at: the
+RANKING rule is pure, header-only and spec'd; the enumeration is a thin platform
+layer over it (`getifaddrs` on POSIX, Winsock hostname resolution on Windows). A
+net layer that cannot tell the host its own LAN address leaves every game to
+solve it.
+
+**One claim in this entry was wrong and 2.7.2 caught it.** It said
+`hostAddress.cpp` was "in `engine-sources.txt`, so it reaches Switch and
+Android". Being in the list is what gets it *compiled*, not what makes it
+*work*, and the first real Switch compile showed there is no `getifaddrs` on
+Switch at all. It now has a `__SWITCH__` arm that returns no candidates — see
+2.7.2. Android is genuinely fine: the NDK is Bionic and has `ifaddrs.h`.
+
+   14 specs, and the reason there is a *rule* rather than "the first
+   non-loopback": every machine has several addresses and they are not equally
+   useful. A developer laptop carries 127.0.0.1, a docker0, a veth pair, a VPN
+   tunnel, and exactly one interface a player on the same network can reach.
+   `getifaddrs` returns interfaces in kernel order, so "first non-loopback"
+   picks the docker bridge on most Linux machines and the symptom is "it works
+   on my machine" pointing nowhere near the cause.
+
+   **Measured on the machine this was written on**, which is the argument:
+
+   | interface | address | class | score |
+   |---|---|---|---|
+   | `lo` | 127.0.0.1 | Loopback | 0 — excluded |
+   | `br-7f6408d14de4` | 172.18.0.1 | Virtual | 10 |
+   | `docker0` | 172.17.0.1 | Virtual | 10 |
+   | `wlp82s0` | 172.20.2.65 | Private + wireless | **105 — chosen** |
+
+   The rules: loopback is **never** returned (a lobby advertising 127.0.0.1
+   only works on the host); **public ranks below private**, because a public
+   address on an interface is usually the WAN side or a VPN endpoint and the
+   player on the sofa reaches neither; a **candidate with no address** is not a
+   candidate (an interface can be up with none yet); the **wireless** flag is a
+   nudge *within* a class and never across one; and both `Ranked()` (for a
+   lobby UI — a player on a different subnet may only reach the second card)
+   and `ChooseBest()` (for a default) exist, because "one default" is right for
+   a default and wrong for a list.
+
+   The spec asserts **order independence**, which is what makes the rule worth
+   having: the answer cannot depend on the order the OS handed the list over
+   in. It deliberately does NOT assert that 192.168.x outranks 10.x — both
+   are Private, there is no honest rule separating them, and encoding "192.168
+   is the home-router range" as policy would only ever be right about developer
+   machines.
+2. **The Switch halves — all three done 2026-10-04.** ✅ **Done.** This item was
+   filed as "the source-list half plus `NetSocketsInit`". Running the Switch
+   build for the first time found a **third** half that no one had filed,
+   because nobody had run the build — see the two latent breaks below.
+
+   **The `socketInitializeDefault` half.** `NetSocketsInit()` now has an
+   `#elif defined(__SWITCH__)` arm calling `socketInitializeDefault()` behind
+   the same once-only latch the Windows arm uses, and `#include <switch.h>`
+   goes above the newlib headers, which it has to (libnx redefines parts of
+   them). The Result is latched too, so the failure line carries the code —
+   `libnx result 0x0559 (module 345, description 2)` — instead of "socket init
+   failed", which is four guesses and a reboot. `NetResultModule` /
+   `NetResultDescription` are `inline constexpr` so the Switch build can
+   `static_assert` the bit layout against libnx's own `R_MODULE` /
+   `R_DESCRIPTION`; the layout is 9 bits and a shift of 9, **not** the 0x3FF
+   and `>>10` a person would guess, and a wrong decode is worse than none
+   because it looks confident.
+
+   **The diagnostic half, which is the part that would have mattered anyway.**
+   `NetSocket::Open` reported all three of its failure stages with one line —
+   "failed to create non-blocking UDP socket" — which is a true statement
+   about the middle stage and a false one about the other two. A missing
+   platform init therefore *looked* like a socket problem, which looks like a
+   firewall. There are now three: `PlatformInit` (names `WSAStartup` and
+   `socketInitializeDefault`, and deliberately does not claim a socket
+   failure), `Socket`, and `Bind` (carries the port, and says "OS-assigned"
+   rather than "port 0" when the port was ephemeral). The three are spec'd for
+   **distinctness**, because the property being bought is the distinction and
+   not any particular wording — collapse them back and the specs fail. The
+   syscalls themselves are not spec'd and cannot be: the suite runs where
+   `socket()` never fails.
+
+   **The third half, found by building.** devkitPro is on this machine, so
+   this was cross-compiled rather than dry-run:
+
+   | check | before | after |
+   |---|---|---|
+   | `common/net/netSocket.cpp` | **did not compile** — `INET_ADDRSTRLEN` undeclared; devkitA64 has no such define | guarded `#ifndef`, compiles |
+   | `common/net/hostAddress.cpp` | **did not compile** — no `ifaddrs.h` on Switch, and no libnx equivalent | `__SWITCH__` arm returns no candidates |
+   | all 14 engine TUs | — | compile clean |
+   | `examples/nx-platformer` | — | links, 8.4 MB `.nro` |
+
+   `hostAddress.cpp` is the one to note: 2.7.1 landed it and this roadmap
+   claimed it "reaches Switch and Android" on the strength of being in
+   `engine-sources.txt`. Being in the list is what gets it *compiled*, and
+   compiling it on Switch is what showed there is no `getifaddrs` to call.
+   Switch now returns an empty candidate list — a lobby saying "no address
+   found", which is true, rather than a stale DHCP guess, which is the exact
+   "an address nobody can connect to" failure the ranking exists to prevent.
+   The ranking half is pure and still works there, so a Switch game supplying
+   candidates some other way gets the same `ChooseBest()`.
+
+   **What this does NOT prove:** that the arm *works* on hardware. The example
+   never opens a socket, `-ffunction-sections` plus `--gc-sections` drops the
+   whole net path from the final `.nro`, and there is no console here. What is
+   proven is that `netSocket.o` for aarch64 contains a real call to
+   `socketInitialize` and `socketGetLastResult`. A hardware run is still owed
+   and is worth doing before anyone relies on Switch LAN play.
 
 ### 3.0.0 — the ECS wave (breaking, reserved, unscheduled)
 
@@ -1157,7 +1537,9 @@ from that notebook are **not** repeated here.
 | P67 | `libstormenginev2.so` has no `-Wl,-soname`, so the AssetStore ABI break has no package guard behind it. (The tinyxml2 story in `base.mk` is about *its* soname in `NEEDED`, not this.) | 🔴 Open |
 | Traps 10/11 | Field-site docs: no comment on `SpriteComponent::width/height` (source rect) or `AnimationComponent::vertical` (wrong flag draws nothing / wrong frames). Runtime diagnostic exists (`35877e1`). | 🟡 Partial |
 
-Already scheduled elsewhere — do not re-file: P6/P7 → 2.7.2, P39 (`.map`
+Already scheduled elsewhere — do not re-file: P7 (`socketInitializeDefault`,
+Switch half of P6's platform-init) — **resolved 2026-10-04 in 2.7.2**, which
+also fixed the two latent Switch compile breaks it had been masking — P39 (`.map`
 version) → 2.5.1, `Makefile.win` `-pthread` → "What we will not do" / layout
 wave carry list.
 

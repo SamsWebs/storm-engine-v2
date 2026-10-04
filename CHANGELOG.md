@@ -4,6 +4,329 @@
 
 ### Added
 
+- **`common/tilemapFormat.h`** (2.5.1) — `.map` files can declare a format
+  version, and one build refuses a version it does not know instead of
+  half-reading it.
+
+  New: `kTileMapFormatMagic`, `kTileMapFormatVersion`,
+  `kTileMapFormatMinVersion`, `TileMapVersionState`, `TileMapVersion`,
+  `ReadTileMapVersion`, `TileMapVersionLine`, `TileMapVersionRefusal`.
+
+  The header is written and read by the *same* function: `SaveMap` and
+  `SaveColliders` in the editor call `TileMapVersionLine()` and the engine's
+  loader validates exactly what it emits, so the writer cannot stamp a version
+  the reader would reject. A map with **no** header reads as version 1 and loads
+  unchanged, so every map written before this existed keeps working.
+
+  Header-only and pure — the reader takes a `std::istream`, so no `.cpp` was
+  added under `common/` and nothing had to be added to `engine-sources.txt`.
+  23 new specs (18 in `specs/tilemapFormat.spec.cpp`, 5 in the loader's), 717
+  total. Bridged in `compat/global.h` (188 names).
+
+### Fixed
+
+- **A `.map` whose animation flag was omitted on any record but the last loaded
+  as an EMPTY MAP** (2.5.1). The flag is the only optional field in a record,
+  and reading it as an int could not tell "this record omitted it" from "the
+  file ended" — an int extraction that hits the next record's group token
+  (`tiles`) sets failbit exactly as one that hits EOF does, so the only test
+  available was `eof()`, which fires on the last record only. Measured on a
+  3-record file before the fix: 0 of 3 tiles loaded, with a diagnostic blaming
+  truncation. The token is now read as a string and one that is not numeric is
+  pushed back as the next record's group. A record that legitimately omits the
+  flag is no longer reported as an error either.
+
+
+- **`NetSocket::Open` failure classification, and a Switch platform init**
+  (2.7.2) — `NetSocketsInit()` gains an `#elif defined(__SWITCH__)` arm
+  calling `socketInitializeDefault()`, so `socket()` no longer returns -1 on a
+  Switch where the `bsd:` service was never started. `Open`'s three failure
+  stages now report separately — `PlatformInit`, `Socket`, `Bind` — where one
+  shared line made a missing platform init read as a socket problem, which
+  reads as a firewall problem. The platform-init line also carries the decoded
+  libnx `Result` (`NetResultModule` / `NetResultDescription` /
+  `NetResultText`), because "socket init failed" without the code is four
+  guesses and a reboot.
+
+  New: `NetSocketOpenFailure`, `NetClassifySocketSetup`,
+  `NetSocketOpenFailureMessage`, `NetResultModule`, `NetResultDescription`,
+  `NetResultText`. 18 new specs, 694 total. Bridged in `compat/global.h`
+  (180 names).
+
+  **Two latent Switch build breaks fixed, both hidden behind `common/net/`
+  being excluded from that build until 2026-09-23:**
+  `common/net/netSocket.cpp` used `INET_ADDRSTRLEN`, which devkitA64's headers
+  do not define, so the file had never compiled for Switch at all; and
+  `common/net/hostAddress.cpp` called `getifaddrs` with no Switch
+  implementation. The second one falsifies the 2.7.1 entry's claim that
+  `hostAddress.cpp` "reaches Switch and Android" — being in
+  `engine-sources.txt` gets a file *compiled*, not working. `hostAddress.cpp`
+  now has a `__SWITCH__` arm returning no candidates (there is no `ifaddrs.h`
+  and no libnx equivalent), so a Switch lobby reports "no address found" rather
+  than a stale DHCP guess. The ranking half is pure and still works there.
+
+  Verified: all 14 engine TUs cross-compile under devkitA64 and
+  `examples/nx-platformer` links an 8.4 MB `.nro`. **Not** verified: behaviour
+  on hardware. Nothing here has run on a console.
+
+- **`common/net/hostAddress.h` / `.cpp`** (2.7.1) — the engine can now tell
+  the host its own LAN address, with the ranking rule split into a pure,
+  header-only, spec'd header and the enumeration left as a thin platform layer
+  (`getifaddrs` on POSIX, Winsock hostname resolution on Windows).
+
+  The rule exists because "the first non-loopback address" is wrong. Every
+  machine has several and they are not equally useful: a developer laptop
+  carries 127.0.0.1, a docker0, a veth pair, a VPN tunnel, and exactly one
+  interface a player on the same network can reach. `getifaddrs` returns them
+  in kernel order, so that rule picks the docker bridge on most Linux machines
+  and the symptom is "it works on my machine" pointing nowhere near the cause.
+  On the machine this was written on the rule picks `wlp82s0` (172.20.2.65)
+  over loopback and two container bridges.
+
+  Loopback is never returned. **Public ranks below private**, because a public
+  address on an interface is usually the WAN side or a VPN endpoint and the
+  player on the sofa reaches neither. A candidate with no address is not a
+  candidate. The wireless flag is a nudge *within* a class and never across
+  one. `Ranked()` (for a lobby UI — a player on a different subnet may only
+  reach the second card) and `ChooseBest()` (for a default) both exist, and the
+  spec asserts the answer is **order-independent**.
+
+  14 new specs, 676 total. `.cpp` added to `engine-sources.txt` so it is
+  compiled into the Switch and Android builds — see the 2.7.2 entry above:
+  compiling it for Switch is what showed there is no `getifaddrs` there, and
+  it now returns no candidates rather than pretending to work. Bridged in `compat/global.h` (174 names) — note that
+  `Score`, `Ranked` and `Classify` are short and generic, so a 1.x game that
+  force-includes the bridge and has its own `Score` must qualify this one.
+
+- **`common/debugOverlay.h`** (2.4.5) — `DebugStats` (the numbers) and
+  `DebugOverlay` (the numbers plus visibility and a `Draw()`). FPS, frame time,
+  entity count, per-system timings and the last few `Err` lines, toggled by the
+  state calling `Toggle()`.
+
+  **`DebugStats` is pure and takes its clock from the caller** — it never calls
+  `SDL_GetTicks`. If the clock were inside, every spec would be a timing
+  assertion, and a timing assertion is a flaky assertion that gets deleted.
+
+  The rules that are easy to get wrong, all spec'd: fps is a window average
+  over the samples **actually fed**, not over the window size (dividing by the
+  full window on frame one reports 1/64th of the real rate); the window is a
+  **ring**, so one 200ms hitch ages out rather than poisoning the rate forever;
+  no elapsed time reports **0, not infinity**; a **negative** delta (a clock
+  that jumped backwards on resume) counts as zero rather than being subtracted;
+  only the **slowest** system is named; a `BeginSystem` with no `EndSystem` is
+  **dropped**, because printing the time since it opened is a confidently wrong
+  number; and the last errors are the **most recent, newest first**.
+
+  Register it in the `OverlayList` from 2.4.1 and it is drawn *before* the
+  present — an overlay drawn after the present is one nobody ever sees, which
+  is a diagnostic worse than none because it looks configured. 11 new specs, 662
+  total. Bridged in `compat/global.h` (160 names).
+
+- **`stormengine2/version.h`** (2.4.4), and the release number is now written
+  **once**. `Makefile.debian`'s `VERSION ?=` is the single source;
+  `scripts/generate-version.py` generates `common/version.h`, `Makefile.win` and
+  the seven `data-ver` values in `web/index.html` from it, and `--check` runs in
+  `pr-validate.yml` and `scripts/release-check.py`.
+
+  The header gives a binary the ability to answer which engine it was built
+  against: `kEngineVersion`, a major/minor/patch triple, `kEngineVersionString`
+  ("v2.3.1"), `VersionString()` and an exact `VersionEquals()`. Being a library
+  the engine cannot print, so this is the answer a consumer gets;
+  `examples/platformer` adopted it in a `--version` switch and the built binary
+  reports `v2.3.1`.
+
+  This closes a gap that was live until now: the number was hand-written in four
+  places and the release workflow's pre-release gate reads only `Makefile.debian`,
+  so a tag could ship green while the project page advertised the previous
+  release and its download button copied a package filename that did not exist.
+  The page is stamped through its `data-ver` attributes, so the 2.0.0 migration
+  notes on the same page stay as the history they are.
+
+  `Makefile.debian` is the source rather than a root `VERSION` file on purpose:
+  the release workflow parses that line with a sed, and its own comment records
+  that the step once failed *open* on a parse it did not recognise. Rewriting a
+  gate documented as having to fail closed, to accommodate a tidier layout, is
+  the wrong trade.
+
+  5 new specs, 651 total. **None of them pins the literal version** — a spec
+  that pins "2.3.1" fails every release and gets deleted. Bridged in
+  `compat/global.h` (158 names).
+
+- **`text.h` grows three verb groups** (2.4.3). All additive; existing
+  signatures untouched.
+  - **`Text::DrawRight`** — the third alignment, so left/centre/right all exist
+    and nobody computes the offset by hand. A hand-computed right offset is off
+    by the difference between the measured width and the guess, which is
+    invisible until the string changes.
+  - **`Text::FitText` / `Text::DrawFitted`** — a measured fit that *marks* a
+    truncated string. Drawing a long string anyway and letting it run off the
+    edge, or clipping it, both leave the player looking at something that looks
+    deliberate. Returns `FittedText{size, text, truncated}` so the drawn pixels
+    and the reported truncation cannot disagree. The mark is inside the limit
+    (cutting to the limit and *then* appending the mark overflows by the mark's
+    width); cutting is on a character boundary (a byte-wise UTF-8 cut leaves a
+    lone continuation byte TTF renders as a replacement box); text that fits is
+    returned byte-for-byte unchanged; and if not even the mark fits the result
+    is empty and still flagged truncated.
+  - **`Text::FitFooter` / `Text::DrawFooter`** — a footer as a list of parts,
+    broken **only between parts**, with the separator between parts and never at
+    the end of a line. A part too wide for the limit gets a line to itself
+    whole and is flagged `overflow` rather than cut — a control name sliced in
+    half is worse than one that overhangs. Parts past the line budget are
+    dropped and flagged. `FooterLayout::width` is the widest line, which is what
+    a caller right-aligns against.
+
+  20 new specs against the real font fixture, 646 total. Bridged in
+  `compat/global.h` (151 names). **This item found a real bug in its own first
+  implementation**: `FitText` began its cut at the empty prefix and only ever
+  shrank, so it returned a bare `…` for every width from 40px to 120px. The
+  "never wider than the limit" case passed, because `…` is narrower than the
+  limit — only a case pinning the surviving text caught it.
+
+- **`stormengine2/ui/scale.h`** (2.4.2). `UiScale(windowHeight)` with `Px(v)` /
+  `FontPt(basePt)`, plus the free-function forms `Px(v, h)` / `FontPt(pt, h)` for
+  call sites too deep to want a scale object. Pure, SDL-free, header-only, and
+  exception-free (Switch compiles with exceptions off).
+
+  It exists because a layout's halves can drift apart on a screen nobody tested
+  on: a game that scales fonts but not literal offsets gets a 4K layout whose
+  two halves disagree, and a game that scales both by separately-computed
+  factors gets the same thing more slowly. Neither announces itself — the layout
+  is correct at the resolution it was authored at.
+
+  Reference height **720**, and scaling is the identity there. Rounding is half
+  away from zero, so no pixel column loses half a pixel at 1.5×. A positive
+  value never rounds to 0 (a 1px border does not vanish at 480p) while 0 stays
+  0 and negatives keep their sign (a negative offset is an edge running off the
+  screen; clamping it would push it on-screen). The result is monotonic, so
+  adjacent columns cannot swap widths between resolutions. A non-positive window
+  height is clamped to the reference rather than trusted. The free functions
+  agree with the type exactly — a layout picking up two scalings depending on
+  which call site wrote it is the original bug in disguise. 11 new specs, 626
+  total. Bridged in `compat/global.h` (149 names). No consumer action: opt in.
+
+- **`GameState::Present()` and `OverlayList`** (2.4.1). `Present(renderer_,
+  overlays)` draws every registered overlay and then presents the frame, in one
+  call, so the ordering cannot be got wrong by the caller. The motivating
+  defect: on Android the touch overlay must be drawn *before* the present, and
+  a state calling `SDL_RenderPresent` itself ships a menu with invisible
+  controls that looks correct on every other platform.
+
+  The overlay list is the **game's** member, not `GameState`'s — `Present`
+  takes it by reference and `OverlayList` is a standalone type. That is what
+  keeps `Present` non-virtual with no new member, so `GameState`'s size and
+  vtable are unchanged and a 2.4.x minor costs no game a layout change it did
+  not ask for. Draw order is registration order (later on top); re-adding a
+  name replaces in place and keeps its position, so a HUD re-registering every
+  frame cannot climb the stack every frame. `Add` refuses an empty name and a
+  null callback; `Present` tolerates a null renderer.
+
+  It cannot stop a state calling `SDL_RenderPresent` directly — nothing in C++
+  can, short of owning the renderer — and the header says so rather than
+  overclaiming. Adopting it is the fix. `OverlayList` is bridged in
+  `compat/global.h` (145 names). 11 new specs, 615 total. `examples/platformer`
+  adopted it.
+
+- **`tools/screen-sweep.py`** — a controls sweep for the examples. It drives
+  any example under a private Xvfb, presses one key per fresh process (a
+  keypress that opens a screen otherwise leaves you measuring the next one), and
+  reports the changed-pixel count and bounding box against a measured idle
+  baseline. Its purpose is to make looking cheap and to catch byte-identical
+  frame pairs automatically, because a dead input path is invisible to the spec
+  suite, which asserts on state and never presses a key. It reports rather than
+  concludes: `examples/puzzle` draws its PAUSED overlay in 1,039 px against a
+  6,144 px idle floor, so a threshold would call a working feature dead. Local
+  tool, not in CI — the CI image has no Xvfb. No public API change.
+
+- **`docs/RELEASING.md` and `scripts/release-check.py`** — the release
+  checklist, and the gate that keeps it honest. The version is hand-written in
+  four places and the release workflow validated one of them, so a tag could go
+  out green with `web/index.html` advertising the previous release. The script
+  asserts the four sites agree, that `engine-sources.txt` still matches
+  `find common`, that the compat probe is fresh, and that the checklist's
+  coverage claims are still true — a workflow gaining a devkitPro or NDK build,
+  or losing a release job, fails the gate instead of leaving the matrix
+  quietly wrong. No public API change.
+
+  `sizeof(AssetStore)` 256 → 272 (two `unique_ptr`s); `layout.spec.cpp`
+  updated with the reason.
+
+- **`common/assetPath.h` and `docs/assets.md`** (2.5.2) — the asset path
+  convention, made public, written down, and completed with the third piece.
+
+  `AssetStore::PackEntryName` was **private**, and that was the whole defect: a
+  game cannot reuse a convention it cannot see, so a game reimplemented it,
+  spelled one path `"./assets/gfx/x.png"`, and the pack was silently skipped
+  for that asset — which reads as "the pack is broken" and sends the next
+  person to debug the pack instead of the path. It is now a one-line delegation
+  to the shared rule.
+
+  New: `AssetPath`, `AssetFilePath`, `AssetOverridePath`,
+  `AssetOverrideExists`, `ResolveAssetFile`, `JoinAssetPath`.
+
+  There is **one** asset path, not several that happen to agree: relative to the
+  assets root, and simultaneously the game's logical path and the pack's entry
+  name, because a pack's entries *are* relative to the assets root. Two rules a
+  reimplementation would get wrong, and both are spec'd: backslashes are
+  normalised to forward slashes (a pack built on Windows otherwise misses on
+  every other platform), and at most one `assets/` prefix is stripped (a real
+  directory can be called `assets`). `..` is deliberately not resolved — a pack
+  entry name is a key, not a location.
+
+  `ResolveAssetFile(gamePath, readableBase, writableBase, &which)` is the third
+  piece: "shipped content is read-only, the player's replacement lives beside
+  the save" as one call instead of a per-game convention. It creates and writes
+  nothing, and an empty `writableBase` means "no override support".
+
+  22 new specs, 741 total, 13 sabotages all caught. Bridged in
+  `compat/global.h` (194 names). No behavioural change to an existing caller.
+
+- **`AssetStore::ReadBlob` — raw bytes for loads the store does not cache.**
+  For a caller that needs a surface, or any loader `AssetStore` does not wrap:
+  a pixel-processing pipeline, the window icon, a font the game opens itself.
+  `ReadBlob("assets/gfx/x.png", &bytes)` returns the same bytes the texture
+  path would have loaded, from the pack when the pack holds the entry and from
+  the loose file when it does not — the same `assets/`-stripping convention as
+  the `Add*` calls, and the same automatic fallback for anything a built pack
+  cannot contain, such as the player's `data/` cache. The bytes are a **copy**:
+  two reads of one entry never alias, and a blob outlives the store.
+
+  The bytes are a copy *because* a `std::vector` out-parameter cannot alias,
+  which makes it a contract worth stating rather than a fact worth assuming —
+  so both halves are now spec'd (`specs/assetStorePack.spec.cpp`).
+
+  **Whose lifetime is the blob?** Every load in the store is either synchronous
+  or lazy, and the two have different rules. SDL_image and SDL_mixer decode
+  inside the call and free the RWops on every path, so their blobs are dead the
+  moment the call returns. **SDL_ttf does not** — it keeps the RWops and reads
+  glyphs at *render* time, so a font's bytes must outlive the font, and the
+  failure surfaces minutes later as garbage glyphs or a crash with nothing
+  pointing back at the load. So: a texture or sound built from a `ReadBlob`
+  result can let the vector go immediately; a `TTF_Font` cannot. That rule used
+  to live in a downstream game's header comment; it is now a table next to the
+  function, measured from the implementations rather than assumed.
+
+- **`AssetStore::AddTextureFromSurface` — the missing half of `ReadBlob`**
+  (#81) — `AddTextureFromSurface(renderer, assetId, surface)` takes an
+  `SDL_Surface *` you already built and stores it as a texture, so the
+  `ReadBlob` → process → load path finally closes.
+
+  `ReadBlob` documents itself as existing for "pixel-processing pipelines", and
+  before this a caller that processed the bytes had nowhere to put the result:
+  every `Add*` takes a **path**, and the surface-taking `StoreTexture` is
+  private. So a palette recolour, a palette swap, or a window icon built from a
+  pack entry was reachable up to the last step and blocked on it — a promise in
+  a doc comment that the API did not let anyone keep.
+
+  **Ownership: it takes the surface and frees it.** `SDL_CreateTextureFromSurface`
+  copies, so the surface is dead the moment the call returns; pass one you own,
+  not one you intend to keep. Replace-and-free for the id is unchanged — this is
+  a door onto the store's one rule, not a second copy of it.
+
+  Documented here because the entry was missing, not because the API is new:
+  the commit that added it landed without a `CHANGELOG.md` line, which is the
+  same gap `ReadBlob` had and this file had to be reopened for twice in a day.
+
 - **`AssetStore::LoadPack` — the one-choke-point pack wiring.**
   A game calls `LoadPack("assets.pak")` once at startup; afterwards every
   path-based `AddTexture`/`AddFont`/`AddSound` whose blob is in the pack
@@ -17,6 +340,17 @@
   updated with the reason.
 
 ### Fixed
+
+- **One canonical engine source list** (`engine-sources.txt` at the repo
+  root). `Makefile.debian`, `Makefile.win`, `examples/nx-platformer` and
+  `examples/android-platformer` all read it instead of globbing `common/`
+  themselves. The Switch Makefile's non-recursive wildcard used to compile
+  only the six top-level `common/*.cpp` files and silently drop all seven
+  under `common/net/`; the list has all 13. Adding a `.cpp` under `common/`
+  means one line in one file (or a regenerate), not a fix in four build
+  systems. `make -f Makefile.debian check-engine-sources` and a
+  `pr-validate.yml` step fail the build if the list drifts from
+  `find common -name '*.cpp'`. 604 specs.
 
 - **`TileMapLoader` no longer stops mid-file in silence (P17 residual).**
   The editor-format reader put every header field in the `while` condition

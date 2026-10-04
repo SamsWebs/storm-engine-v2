@@ -362,10 +362,38 @@ its own version instead of leaving it to a makefile on the reporter's machine.
    string with a prefix, and that the comparison is exact rather than
    prefix-accepting (a consumer that treats "2.3" as equal to 2.3.1 is a
    consumer that believes it is talking to a build it is not).
-5. **A debug overlay.** The cheapest item on the previous list and still the
-right one: FPS, frame time, entity count, per-system timings and the last few
-`Err` lines, toggled with a key. It is also the only diagnostic surface a game
-ships to a player, which the logger is not.
+5. **A debug overlay.** ✅ **Done 2026-10-04** as `common/debugOverlay.h`.
+FPS, frame time, entity count, per-system timings and the last few `Err` lines,
+toggled with a key. It is also the only diagnostic surface a game ships to a
+player, which the logger is not.
+
+   **The numbers are pure and take their clock from the caller** — `DebugStats`
+   never calls `SDL_GetTicks`. If the clock were inside, every case would be a
+   timing assertion, and a timing assertion is a flaky assertion that gets
+   deleted. 11 specs, none of which sleeps.
+
+   The decisions, each of which a plausible implementation gets wrong: fps is a
+   **window average over the samples actually fed**, not over the window size
+   (dividing by the full window on frame one reports 1/64th of the real rate,
+   so a freshly toggled overlay opens showing a wrong number); the window is a
+   **ring**, so one 200ms hitch ages out instead of poisoning the rate until the
+   developer turns the overlay off for good; a window with no elapsed time
+   reports **0, not infinity**; a **negative** delta (a clock that jumped
+   backwards on resume) counts as zero rather than being subtracted; only the
+   **slowest** system is named, because "which system is slow" is the question
+   per-system timings exist to answer; a `BeginSystem` with no matching
+   `EndSystem` is **dropped**, because printing the time since it opened is a
+   confidently wrong number; and the last errors are the **most recent, newest
+   first**, so a developer reads the live one at a fixed position.
+
+   **The overlay does not poll for its toggle key.** The engine's input layer
+   is edge-triggered and deliberately does not poll — the active state owns all
+   polling — so the state calls `Toggle()` from its own `processInput()`.
+
+   It is also **2.4.1's first real consumer**: a game registers the overlay in
+   the `OverlayList` it already has, so the lines are drawn *before* the
+   present. An overlay drawn after the present is an overlay nobody ever sees,
+   which is a diagnostic worse than none because it looks configured.
 
 ### 2.5.0 — data and asset seams (additive, plus one format change)
 

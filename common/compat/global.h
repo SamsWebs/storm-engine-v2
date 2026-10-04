@@ -25,6 +25,7 @@
 
 #include "../assetStore.h"
 #include "../collision/shapes.h"
+#include "../debugOverlay.h"
 #include "../ecs.h"
 #include "../gameStateMachine.h"
 #include "../lighting.h"
@@ -158,6 +159,8 @@ using storm::RenderColliderSystem;
 using storm::RenderSystem;
 
 // ── State machine ───────────────────────────────────────────────────────────
+using storm::DebugOverlay;
+using storm::DebugStats;
 using storm::FPS;
 using storm::GameState;
 using storm::GameStateMachine;

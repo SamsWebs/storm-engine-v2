@@ -45,4 +45,7 @@ item's real content — are still open.)
 - Code slice: failing BDD spec first; suite green after fix.
 - Public API change: `TUTORIAL.md` + `CHANGELOG.md` in the same branch.
 - New public name: `python3 scripts/generate-compat-probes.py --check`.
-- Adversarial review + regression check before PR.
+- Adversarial review + regression check before PR. **The regression check is
+  mechanical now:** `python3 tools/sabotage-<area>.py` proves the new specs can
+  fail, and a `*** 0 ***` line means the spec is not doing its job. CLAUDE.md
+  explains the tool and its two traps.

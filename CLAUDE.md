@@ -61,6 +61,35 @@ make -f Makefile.debian memcheck TARGET=./bin/tests   # valgrind; TARGET default
 
 Run `./bin/tests` from anywhere other than the repo root and it **segfaults** — several specs hardcode `./specs/assets/...` paths, and `common/tilemapLoader.cpp` logs the missing file and returns an empty map, which a later spec dereferences.
 
+### Sabotaging a slice's own specs
+
+`tools/sabotage-<area>.py` proves a slice's specs can fail, one defect at a
+time, and reports how many specs each defect breaks. A sabotage reporting **0
+failures** is a spec that cannot see the bug it was written for — which is the
+whole reason the tool exists rather than a note claiming the specs were read
+carefully. Three exist: `sabotage-netSocket.py`, `sabotage-tilemapFormat.py`,
+`sabotage-assetPath.py`.
+
+```bash
+python3 tools/sabotage-assetPath.py      # restores the file on exit, including on failure
+```
+
+Read them before trusting a slice's numbers. Two things they have each caught,
+both of which were mine:
+
+- **Specs that pass on the first run are not yet verified.** Several sabotage
+  rounds needed a new spec or a corrected assertion before the sabotage landed.
+- **Anchors go stale the moment `clang-format` runs**, and a harness that
+  cannot find its anchor reports as *passing* without having tested anything.
+  `sabotage-assetPath.py` matches whitespace-insensitively for that reason; the
+  other two do not, so **format first, then anchor**. A `SKIPPED` line in the
+  output is a broken harness, not a clean result.
+
+A sabotage that *cannot* fail on this platform should be left out and said so in
+the harness docstring rather than kept to pad the count — `sabotage-assetPath.py`
+keeps a spec for the empty-path guard with no matching sabotage, because
+`ifstream("").good()` is already false here.
+
 ### Running a single test
 
 Igloo has **no CLI filtering**. `--filter`, test names, tags — none exist; a non-flag argv is silently ignored and the full suite runs. Two real options:
@@ -178,7 +207,25 @@ export DEVKITPRO=/opt/devkitpro && cd examples/nx-platformer && make   # also: m
 cd examples/android-platformer && ./gradlew assembleDebug installDebug
 ```
 
-Toolchain install (devkitPro packages, `sdkmanager`, submodule init, `adb logcat` filters) is in README.md. On this machine devkitPro **is** present at `/opt/devkitpro` and the Switch build works; there is no NDK, so the Android build is still unrun and claims about it stay theoretical.
+Toolchain install (devkitPro packages, `sdkmanager`, submodule init, `adb logcat` filters) is in README.md.
+
+**Building the editor or a desktop example without `make install`.** `install`
+writes to `/usr/local/include` and `/usr/local/lib`, which are root-owned, and
+this machine has no passwordless sudo — so the documented install-then-build
+path cannot run and the nine desktop examples cannot be built through it. The
+workaround is to point the include path at the working tree instead:
+
+```bash
+mkdir -p /tmp/eng-inc && ln -sfn "$PWD/common" /tmp/eng-inc/stormengine2
+R="$PWD"
+cd editor && make INCLUDE="-I/tmp/eng-inc -I$R/vendor -I$R/vendor/android/tinyxml2"
+```
+
+`INCLUDE` is a plain `=` in `base.mk`, so a command-line value **replaces** it
+rather than adding to it — passing `-I/tmp/eng-inc` alone loses `-Ivendor` and
+the build dies on `imgui/imgui.h`. Re-state all three. This compiles
+`editor/` to objects, which is what CI checks; the link still fails on `-lnfd`,
+which is the documented gap and not a regression. On this machine devkitPro **is** present at `/opt/devkitpro` and the Switch build works; there is no NDK, so the Android build is still unrun and claims about it stay theoretical.
 
 All six git submodules are Android-only third-party deps under `vendor/android/` (SDL2 2.30.11, SDL_image 2.8.8, SDL_ttf 2.22.0, SDL_mixer 2.8.1, tinyxml2 10.0.0, glm 1.0.1) — a bare clone builds and tests fine without them. SDL2/SDL_image must stay SHARED because SDLActivity `dlopen`s them by name. Two submodule *names* don't match their *paths* (`vendor/android/SDL` → `vendor/android/SDL2`, `vendor/android/SDL_image` → `vendor/android/SDL_image2`).
 

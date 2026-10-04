@@ -251,6 +251,36 @@
   `sizeof(AssetStore)` 256 → 272 (two `unique_ptr`s); `layout.spec.cpp`
   updated with the reason.
 
+- **`common/assetPath.h` and `docs/assets.md`** (2.5.2) — the asset path
+  convention, made public, written down, and completed with the third piece.
+
+  `AssetStore::PackEntryName` was **private**, and that was the whole defect: a
+  game cannot reuse a convention it cannot see, so a game reimplemented it,
+  spelled one path `"./assets/gfx/x.png"`, and the pack was silently skipped
+  for that asset — which reads as "the pack is broken" and sends the next
+  person to debug the pack instead of the path. It is now a one-line delegation
+  to the shared rule.
+
+  New: `AssetPath`, `AssetFilePath`, `AssetOverridePath`,
+  `AssetOverrideExists`, `ResolveAssetFile`, `JoinAssetPath`.
+
+  There is **one** asset path, not several that happen to agree: relative to the
+  assets root, and simultaneously the game's logical path and the pack's entry
+  name, because a pack's entries *are* relative to the assets root. Two rules a
+  reimplementation would get wrong, and both are spec'd: backslashes are
+  normalised to forward slashes (a pack built on Windows otherwise misses on
+  every other platform), and at most one `assets/` prefix is stripped (a real
+  directory can be called `assets`). `..` is deliberately not resolved — a pack
+  entry name is a key, not a location.
+
+  `ResolveAssetFile(gamePath, readableBase, writableBase, &which)` is the third
+  piece: "shipped content is read-only, the player's replacement lives beside
+  the save" as one call instead of a per-game convention. It creates and writes
+  nothing, and an empty `writableBase` means "no override support".
+
+  22 new specs, 741 total, 13 sabotages all caught. Bridged in
+  `compat/global.h` (194 names). No behavioural change to an existing caller.
+
 - **`AssetStore::ReadBlob` — raw bytes for loads the store does not cache.**
   For a caller that needs a surface, or any loader `AssetStore` does not wrap:
   a pixel-processing pipeline, the window icon, a font the game opens itself.

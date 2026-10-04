@@ -457,15 +457,67 @@ player, which the logger is not.
    `FileLoader.cpp` **compiles** against the new header, and the object contains
    the `storm-map` string; the link failure is the documented libnfd gap.
 
-2. **The asset path seam, written down and completed.** `AssetPath` (the game
-path a pack-aware loader consumes) and `AssetFilePath` (the path a real file is
-opened at) are already two functions and already the source of a shipped defect —
-`PackEntryName` gained a `./` strip because a game handed the second one's shape
-to the first and the pack was skipped. Add the third piece: a writable base and a
-readable-override resolver, so "shipped content is read-only, the player's
-replacement lives beside the save" is one call rather than a per-game convention.
-Document all three together in `docs/assets.md`, including the pack-vs-loose
-fallback.
+2. **The asset path seam, written down and completed.** ✅ **Done 2026-10-04.**
+   This item's own premise turned out to be wrong, and that is the first thing
+   worth recording: it says `AssetPath` and `AssetFilePath` "are already two
+   functions". `grep -rn 'AssetPath\|AssetFilePath' --include=*.h --include=*.cpp`
+   returns **zero hits** outside this document. There is no such pair. What
+   exists is ONE function, `AssetStore::PackEntryName`, and it is **private**.
+
+   That reframes the item, and the reframe is the fix. A game cannot reuse a
+   convention it cannot see, so a game reimplemented it, spelled one path
+   `"./assets/gfx/x.png"`, and the strip looked for `"assets/"` at position 0,
+   did not find it, and the pack was silently skipped for that asset — which
+   reads as "the pack is broken" and sends the next person to debug the wrong
+   thing. **Visibility was the defect, not the arity.**
+
+   And there is not two concepts here either. There is **one** path, relative
+   to the assets root, and it is simultaneously the game's logical asset path
+   and the pack's entry name — because a pack's entries *are* relative to the
+   assets root. `common/assetPath.h` says so in one function:
+
+   ```
+   "assets/gfx/player.png"    what a game writes
+            |  AssetPath()
+            v
+   "gfx/player.png"           the pack entry name == the logical asset path
+            +-- AssetFilePath(.., "assets")       -> "assets/gfx/player.png"
+            +-- AssetOverridePath(.., "userdata") -> "userdata/gfx/player.png"
+   ```
+
+   `AssetStore::PackEntryName` is now a one-line delegation to `AssetPath`, so
+   the store and a game's own loader cannot disagree about what a path means.
+   19 specs, 13 sabotages all caught.
+
+   **The third piece the item asks for** — a writable base and a
+   readable-override resolver — is `ResolveAssetFile(gamePath, readableBase,
+   writableBase, &which)`. "Shipped content is read-only, the player's
+   replacement lives beside the save" is one call instead of a per-game
+   convention, and it creates and writes nothing: an empty `writableBase` means
+   "no override support" and gets the shipped file. The `which` out-parameter
+   reports `"override"` or `"shipped"`, and it is worth keeping: a loader that
+   silently prefers a replacement is a support ticket nobody can answer,
+   because the game shows the wrong art and nothing records that it looked.
+
+   Two rules in `AssetPath` that were not in the roadmap and that a
+   reimplementation would get wrong:
+
+   - **Backslashes become forward slashes.** A pack is built on whatever
+     machine its author used and its entry names are forward-slashed whatever
+     built them. Without this, a game loads from the pack on the author's
+     Windows machine and falls back to loose files everywhere else — the same
+     class of bug as the missing `./` strip, and just as invisible.
+   - **At most one `assets/` prefix.** Repeat stripping would be thoroughness
+     as a bug: a real directory can be called `assets`, so
+     `assets/assets/x.png` means `assets/assets/x.png`. `..` is deliberately
+     NOT resolved — a pack entry name is a key, not a location, and collapsing
+     the two would let a name address outside the pack.
+
+   **All of it is written down** in [`docs/assets.md`](assets.md), including
+   the pack-versus-loose fallback and the blob lifetime rule from item 3 —
+   which is the half that turns "a broken pack is a performance problem, not a
+   correctness one" into something a reader can act on.
+
 3. **Raw bytes for the loads the store does not cache.** ✅ **Done 2026-10-04.**
    Two halves, and the first was a plain gap in this repo's own rule.
 

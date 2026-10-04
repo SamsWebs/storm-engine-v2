@@ -23,6 +23,7 @@
 // It includes the whole engine by design - a compatibility shim cannot know
 // which parts a game uses. Reach for the individual headers in your own code.
 
+#include "../assetPath.h"
 #include "../assetStore.h"
 #include "../collision/shapes.h"
 #include "../debugOverlay.h"
@@ -91,10 +92,15 @@ using storm::Signature;
 using storm::System;
 
 // ── Assets, text, loaders ───────────────────────────────────────────────────
+using storm::AssetFilePath;
+using storm::AssetOverrideExists;
+using storm::AssetOverridePath;
+using storm::AssetPath;
 using storm::AssetStore;
 using storm::AssetStore_Ptr;
 using storm::FittedText;
 using storm::FooterLayout;
+using storm::JoinAssetPath;
 using storm::kEngineVersion;
 using storm::kEngineVersionMajor;
 using storm::kEngineVersionMinor;
@@ -108,6 +114,7 @@ using storm::LoadTexturesFromXml;
 using storm::Map;
 using storm::Ranked;
 using storm::ReadTileMapVersion;
+using storm::ResolveAssetFile;
 using storm::Score;
 using storm::Text;
 using storm::Tile;

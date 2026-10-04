@@ -192,6 +192,17 @@ void FileLoader::SaveMap(std::filesystem::path filename) {
     return;
   }
 
+  // The format version, written by the SAME function the engine reads it with.
+  //
+  // This used to be the second parser of this format in a second binary, which
+  // is the failure mode the roadmap named: the editor is a separate artifact
+  // that has to be rebuilt and repackaged in the same release as the engine, so
+  // a change to the header had to be made twice and the second time was the one
+  // that got forgotten. Now the number exists once, in
+  // <stormengine2/tilemapFormat.h>, and this file cannot stamp a version the
+  // engine would refuse.
+  mapFile << TileMapVersionLine();
+
   auto tiles = Registry::Instance().GetEntitiesByGroup("tiles");
 
   for (const auto &tile : tiles) {
@@ -257,6 +268,12 @@ void FileLoader::SaveColliders(std::filesystem::path filename) {
     //            filename);
     return;
   }
+
+  // Same reason as SaveMap: the collider map is read back through the same
+  // loader, so it carries the same header from the same function. A map whose
+  // two files disagreed about their version would be the exact confusion the
+  // header was added to remove.
+  mapFile << TileMapVersionLine();
 
   auto colliders = Registry::Instance().GetEntitiesByGroup("colliders");
 

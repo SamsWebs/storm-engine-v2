@@ -4,6 +4,39 @@
 
 ### Added
 
+- **`common/tilemapFormat.h`** (2.5.1) — `.map` files can declare a format
+  version, and one build refuses a version it does not know instead of
+  half-reading it.
+
+  New: `kTileMapFormatMagic`, `kTileMapFormatVersion`,
+  `kTileMapFormatMinVersion`, `TileMapVersionState`, `TileMapVersion`,
+  `ReadTileMapVersion`, `TileMapVersionLine`, `TileMapVersionRefusal`.
+
+  The header is written and read by the *same* function: `SaveMap` and
+  `SaveColliders` in the editor call `TileMapVersionLine()` and the engine's
+  loader validates exactly what it emits, so the writer cannot stamp a version
+  the reader would reject. A map with **no** header reads as version 1 and loads
+  unchanged, so every map written before this existed keeps working.
+
+  Header-only and pure — the reader takes a `std::istream`, so no `.cpp` was
+  added under `common/` and nothing had to be added to `engine-sources.txt`.
+  23 new specs (18 in `specs/tilemapFormat.spec.cpp`, 5 in the loader's), 717
+  total. Bridged in `compat/global.h` (188 names).
+
+### Fixed
+
+- **A `.map` whose animation flag was omitted on any record but the last loaded
+  as an EMPTY MAP** (2.5.1). The flag is the only optional field in a record,
+  and reading it as an int could not tell "this record omitted it" from "the
+  file ended" — an int extraction that hits the next record's group token
+  (`tiles`) sets failbit exactly as one that hits EOF does, so the only test
+  available was `eof()`, which fires on the last record only. Measured on a
+  3-record file before the fix: 0 of 3 tiles loaded, with a diagnostic blaming
+  truncation. The token is now read as a string and one that is not numeric is
+  pushed back as the next record's group. A record that legitimately omits the
+  flag is no longer reported as an error either.
+
+
 - **`NetSocket::Open` failure classification, and a Switch platform init**
   (2.7.2) — `NetSocketsInit()` gains an `#elif defined(__SWITCH__)` arm
   calling `socketInitializeDefault()`, so `socket()` no longer returns -1 on a

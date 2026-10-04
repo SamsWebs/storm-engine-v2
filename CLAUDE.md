@@ -190,7 +190,7 @@ All six git submodules are Android-only third-party deps under `vendor/android/`
 
 `<stormengine2/compat/global.h>` is the bridge: one `using storm::X;` per public name, pulling them all back into the global namespace so a 1.x game compiles unchanged. It is a bridge, not an API — a game that keeps it forever gains nothing from the change, and a future major removes it. Use it to get green, then drop it and qualify the names.
 
-`specs/compat/bridgedNames.h` is **generated** from the engine headers by `scripts/generate-compat-probes.py` (currently 180 names) and compiled by `specs/compat/global.spec.cpp`, so a public name added to the engine and not to the bridge fails the build. CI runs the generator with `--check`. Run it after adding any public name.
+`specs/compat/bridgedNames.h` is **generated** from the engine headers by `scripts/generate-compat-probes.py` (currently 188 names) and compiled by `specs/compat/global.spec.cpp`, so a public name added to the engine and not to the bridge fails the build. CI runs the generator with `--check`. Run it after adding any public name.
 
 ## ECS model
 
@@ -293,7 +293,11 @@ cd editor && make clean
 
 The editor is a standalone SDL2 + ImGui + sol2/Lua tilemap/collider painter that *links* the engine and reuses its `Registry::Instance()`, Logger and component structs — it is not an engine subsystem. It also declares its own `RenderSystem`/`AnimationSystem` under `editor/src/rendering/` that shadow the engine's same-named systems. It must run with CWD=`editor/` (it reads `fonts/fontawesome-webfont.ttf` and `./assets/mouse_hand.png`; `editor/README.md`'s claim that assets live in `bin/assets/` is stale).
 
-It writes three files: `<name>.lua` (project: canvas size, tile size, tileset id→path), `<name>.map` (tiles), `<name>_colliders.map`. `TileMapLoader` reads the `.map` and auto-detects format by peeking the first non-space char — alpha means editor format, digit means legacy CSV. That flips the meaning of the constructor's second argument: editor maps embed srcX/srcY so you pass `""`; legacy CSV needs the PNG (only `examples/strategy` still does this). **No example ever reads the `.lua` file** — it's an editor project file, despite sitting next to the `.map` in every `assets/tilemaps/`.
+It writes three files: `<name>.lua` (project: canvas size, tile size, tileset id→path), `<name>.map` (tiles), `<name>_colliders.map`. `TileMapLoader` reads the `.map` and auto-detects format by peeking the first non-space char — alpha means editor format, digit means legacy CSV. **The magic is alpha-leading for that reason**: a version header starting with a digit would be sniffed as CSV and take the other branch entirely.
+
+**A `.map` carries a version header** (`common/tilemapFormat.h`, 2.5.1): `storm-map 1`. A file with no header reads as version 1 and loads unchanged, so every map written before the header existed keeps working; a file declaring a version this build does not know is **refused** with a diagnostic, not half-read. The editor's `SaveMap`/`SaveColliders` and the engine's `loadFilemapEditor` both call the same two functions, so the writer cannot stamp a version the reader rejects. Two traps in that header, both spec'd: it is read as **two tokens, not a line** (a line read silently drops the first record if the newline is lost), and the reader **rewinds** after probing for the magic (eating that token parses every record one field to the left, and nothing complains because every field is still a valid int or string).
+
+The 22-field **record** is still parsed twice by hand — `loadFilemapEditor` and the editor's `LoadMap` — and `SaveMap` is still the only writer with no spec that calls it. That is P39, open; the version half is done, the record half is not. That flips the meaning of the constructor's second argument: editor maps embed srcX/srcY so you pass `""`; legacy CSV needs the PNG (only `examples/strategy` still does this). **No example ever reads the `.lua` file** — it's an editor project file, despite sitting next to the `.map` in every `assets/tilemaps/`.
 
 ## Conventions
 

@@ -3,6 +3,7 @@
 #include "SDL2/SDL_image.h"
 #include "glm/glm.hpp"
 #include "logger.h"
+#include "tilemapFormat.h"
 #include <cstdlib>
 #include <fstream>
 #include <iostream>

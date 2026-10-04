@@ -123,7 +123,7 @@ used by nobody, and nothing anywhere said so.
 | 2.4.3 `text.h` verbs | S | nothing — additive statics |
 | 2.4.4 `version.h` | S | nothing; examples adopt `--version` |
 | 2.4.5 debug overlay | S | nothing — opt in |
-| 2.5.1 version the `.map` | M | rebuild; **the editor must write the new version too** |
+| 2.5.1 version the `.map` (header done; record parser still open) | M | rebuild; **the editor must write the new version too** |
 | 2.5.2 asset path seam | M | nothing, unless the game wants a writable base |
 | 2.5.3 blob lifetime rules | S | nothing — documentation |
 | 2.6.1 engine mixer | M | nothing |
@@ -399,22 +399,64 @@ player, which the logger is not.
 
 ### 2.5.0 — data and asset seams (additive, plus one format change)
 
-1. **Version the `.map`.** A header line carrying a format version, one parser
-instead of two, and a round-trip spec. The rule being adopted is the flagship
-game's config contract: *unknown keys are ignored* covers a key being added or
-removed, and does **not** cover a key that still parses and now means something
-else. A `.map` with no version cannot tell a reader which of those it is, and
-2.0.0's `Tile` change is the proof that this format does move.
+1. **Version the `.map`.** ✅ **Done 2026-10-04, version half** — the record
+   half is still open, see the end of this item. `common/tilemapFormat.h` is
+   the single owner of the header: `ReadTileMapVersion` (pure, takes a
+   `std::istream`, so a spec needs no file) and `TileMapVersionLine()` (the line
+   a writer emits, newline included). `loadFilemapEditor` reads it and refuses
+   what it cannot read; `SaveMap` and `SaveColliders` write it with the same
+   function the reader validates, so the writer cannot stamp a version the
+   engine would reject.
 
-   Two consumers, and the second is the one that gets forgotten: the engine's
-   `TileMapLoader`, and `editor/src/utilities/FileLoader.cpp`, which writes the
-   format with its own stream of `<<` and is a separate binary that has to be
-   rebuilt and repackaged in the same release. **A map written before the version
-   existed must keep loading** — the absent header reads as version 1 — and a map
-   declaring a version the build does not know must be refused with a
-   diagnostic, which is the half that costs anything. Neither parser bounds the
-   record it is reading beyond the stream's own conversions, so the version line
-   is also the place to state what a malformed record does.
+   **The refusal is the half that costs anything**, and it is the reason the
+   item existed. A map declaring a version this build does not know is refused
+   with a diagnostic naming the declared number and the supported range — not
+   half-read, because half-reading produces a level that renders and is wrong,
+   which is the worst outcome available: nothing about it looks broken. A map
+   with **no** header is version 1 and loads unchanged, which is what keeps
+   every map written before this existed working. That is 17 cases in
+   `specs/tilemapFormat.spec.cpp` plus 6 loader cases, 12 sabotages all caught.
+
+   Three things the implementation had to get right, each of which a spec now
+   holds:
+
+   - **The header is two tokens, not a line.** Reading it as a line is the
+     obvious implementation and the wrong one — a hand-edit that joined the
+     header to the first record, or a writer that forgot the newline, would drop
+     that record silently, and a level missing its first tile is not a visible
+     bug.
+   - **The reader must not consume what it probed.** It reads the first token to
+     see whether it is the magic; on the unversioned path that token is the
+     first record's group name, and eating it parses every record one field to
+     the left — group name becomes asset id, asset id becomes tile width, and
+     nothing complains because every field is still a valid int or string. The
+     first draft of this had exactly that bug, and the round-trip spec is what
+     caught it.
+   - **`std::strtol`, not `std::stoi`.** The latter throws on `"next"`, and this
+     is parsed from a file on the load path. Switch also builds `-fno-exceptions`,
+     where that throw is an `abort`.
+
+   **A data-loss bug the header exposed.** The optional trailing animation flag
+   was read as `fmap >> animatedFlag`, and an int extraction that hits the next
+   record's group token sets failbit exactly as one that hits EOF does — so the
+   only test available was `eof()`, which fires on the **last** record and
+   nowhere else. Measured on a 3-record file: **0 of 3 tiles loaded**, with a
+   diagnostic blaming truncation. One hand-edit, or one writer that skipped a
+   zero flag, cost a whole level. Fixed by reading the token as a string and
+   pushing back one that is not numeric; a record that legitimately omits the
+   flag is now not an *error* either, which is the direction the fix could
+   easily have overshot.
+
+   **Still open, and it is the larger half:** the 22-field record is still
+   parsed twice, by hand — `loadFilemapEditor` and the editor's `LoadMap` — and
+   `SaveMap` is still the sole writer with no spec that calls it. P39's
+   `TileRecord` plus `readTileRecord`/`writeTileRecord` is not written. Left for
+   its own branch deliberately: it refactors three functions in a binary that
+   cannot be linked here (no libnfd), so it would be the one change in the slice
+   with no test able to observe it. Verified this slice: the editor's
+   `FileLoader.cpp` **compiles** against the new header, and the object contains
+   the `storm-map` string; the link failure is the documented libnfd gap.
+
 2. **The asset path seam, written down and completed.** `AssetPath` (the game
 path a pack-aware loader consumes) and `AssetFilePath` (the path a real file is
 opened at) are already two functions and already the source of a shipped defect —

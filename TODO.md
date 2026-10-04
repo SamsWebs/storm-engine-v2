@@ -16,7 +16,7 @@ slices checked) and continue.
 | 5 | Track 0.6 Example layout/measurement harness | `chore/example-layout-harness` | done |
 | 6 | 2.4.1 `GameState::Present()` | `feat/gamestate-present` | done |
 | 7 | 2.4.2 `ui/scale.h` | `feat/ui-scale` | done |
-| 8 | 2.4.3 `text.h` verbs | pending | pending |
+| 8 | 2.4.3 `text.h` verbs | `feat/text-verbs` | done |
 | 9 | 2.4.4 `version.h` | pending | pending |
 | 10 | 2.4.5 debug overlay | pending | pending |
 | 11 | 2.5.1 Version the `.map` (+ editor writer) | pending | pending |

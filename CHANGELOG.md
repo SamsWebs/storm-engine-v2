@@ -4,6 +4,37 @@
 
 ### Added
 
+- **`text.h` grows three verb groups** (2.4.3). All additive; existing
+  signatures untouched.
+  - **`Text::DrawRight`** — the third alignment, so left/centre/right all exist
+    and nobody computes the offset by hand. A hand-computed right offset is off
+    by the difference between the measured width and the guess, which is
+    invisible until the string changes.
+  - **`Text::FitText` / `Text::DrawFitted`** — a measured fit that *marks* a
+    truncated string. Drawing a long string anyway and letting it run off the
+    edge, or clipping it, both leave the player looking at something that looks
+    deliberate. Returns `FittedText{size, text, truncated}` so the drawn pixels
+    and the reported truncation cannot disagree. The mark is inside the limit
+    (cutting to the limit and *then* appending the mark overflows by the mark's
+    width); cutting is on a character boundary (a byte-wise UTF-8 cut leaves a
+    lone continuation byte TTF renders as a replacement box); text that fits is
+    returned byte-for-byte unchanged; and if not even the mark fits the result
+    is empty and still flagged truncated.
+  - **`Text::FitFooter` / `Text::DrawFooter`** — a footer as a list of parts,
+    broken **only between parts**, with the separator between parts and never at
+    the end of a line. A part too wide for the limit gets a line to itself
+    whole and is flagged `overflow` rather than cut — a control name sliced in
+    half is worse than one that overhangs. Parts past the line budget are
+    dropped and flagged. `FooterLayout::width` is the widest line, which is what
+    a caller right-aligns against.
+
+  20 new specs against the real font fixture, 646 total. Bridged in
+  `compat/global.h` (151 names). **This item found a real bug in its own first
+  implementation**: `FitText` began its cut at the empty prefix and only ever
+  shrank, so it returned a bare `…` for every width from 40px to 120px. The
+  "never wider than the limit" case passed, because `…` is narrower than the
+  limit — only a case pinning the surviving text caught it.
+
 - **`stormengine2/ui/scale.h`** (2.4.2). `UiScale(windowHeight)` with `Px(v)` /
   `FontPt(basePt)`, plus the free-function forms `Px(v, h)` / `FontPt(pt, h)` for
   call sites too deep to want a scale object. Pure, SDL-free, header-only, and

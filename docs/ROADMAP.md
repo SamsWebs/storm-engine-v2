@@ -282,12 +282,43 @@ every `Px()` come back as `INT_MIN`; and the free functions **must agree with
 the type exactly**, since a layout that picks up two scalings depending on
 which call site wrote it has the original bug wearing a disguise. No consumer
 action: it is a new header, opt in.
-3. **`text.h` grows the drawing verbs it is missing.** Centre and right
-alignment, a measured fit that *marks* a truncated string rather than clipping it
-silently, and a footer built from a list of parts so it can wrap between verbs.
-All additive statics; the existing four keep their signatures. The engine's own
-`text.h` comment already documents why this matters — three example copies
-diverged until one of them re-opened the font per call.
+3. **`text.h` grows the drawing verbs it is missing.** ✅ **Done 2026-10-04.**
+`DrawRight`, `FitText`/`DrawFitted` (a measured fit that *marks* a truncated
+string rather than clipping it silently), and `FitFooter`/`DrawFooter` (a
+footer built from a list of parts so it can wrap between verbs). All additive
+statics; the existing signatures are untouched. 20 specs in
+`specs/textVerbs.spec.cpp`, driven against the real `specs/assets/fonts/font.ttf`
+— a fake measurer would prove nothing, since every decision here is about
+MEASURED width.
+
+   The decisions, because each is one a plausible implementation gets wrong:
+   the truncation **mark is inside the limit** (cut to the limit and then append
+   the mark overflows by the mark's width — that is the off-by-a-glyph this
+   exists to not have); cutting happens on a **character** boundary, because a
+   byte-wise cut of UTF-8 leaves a lone continuation byte TTF renders as a
+   replacement box; text that already fits is returned **byte-for-byte
+   unchanged**; if not even the mark fits the result is **empty and still
+   truncated**, because returning a mark that overflows contradicts the limit
+   and returning the text unmarked claims it fit; the footer breaks **only
+   between parts** and a part too wide for the limit gets a line to itself
+   **whole and flagged** (`overflow`), never cut, because a control name sliced
+   in half is worse than one that overhangs; the separator sits **between**
+   parts, never at the end of a broken line; and `width` is the **widest line**,
+   which is what a caller right-aligns against.
+
+   **This item found a real bug in its own first implementation**, which is the
+   most useful thing to record. `FitText` started its cut at the *empty* prefix
+   and only ever decremented, so it tested `""`, found the mark fit, and
+   returned a bare `…` for every width from 40px to 120px — a function that
+   truncates a 180px string to one glyph and calls it a fit. The
+   "never wider than the limit" case passed happily, because `…` really is
+   narrower than the limit. Only a case pinning the *surviving text* caught it.
+   `keeps_MORE_text_as_the_limit_grows` now asserts the relationship directly.
+
+   A second lesson, in the other direction: the codepoint-boundary case
+   originally asserted "the last byte is not a continuation byte", which is
+   false for every complete multi-byte character (`C3 A9` ends in `A9`). The
+   spec was wrong and the code was right.
 4. **`stormengine2/version.h`.** A compile-time `kEngineVersion` and
 `VersionString()`, so a binary can answer for itself which engine it was built
 against, and the release number gets **one source** instead of a hand-bump in

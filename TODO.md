@@ -6,9 +6,15 @@ file conflicts after another agent's push, resolve by union (keep both
 slices checked) and continue.
 
 **Released 2.7.0 (2026-10-04).** Slices 1–13 and 17–18 all shipped in that one
-tag, so 2.6 shipped empty and the numbering no longer matches the plan — see
-the note at the top of `docs/ROADMAP.md`. Slice 11 is still partial and still
-open; the 2.6.1/2.6.2/2.6.3 rows below are the queue.
+tag, so no 2.6 was ever cut and the numbering no longer matches the original
+plan — see the note at the top of `docs/ROADMAP.md`.
+
+**The remaining rows were re-versioned 2026-10-04, after that release.** The
+old 2.6 line is now **2.8.0**, and the open half of row 11 (the `.map` record
+parser, P39) is now its own slice **2.8.4** rather than a partial 2.5.1. So the
+queue is 2.8.1 → 2.8.4, and 3.0.0 stays reserved and unscheduled. Row 11 below
+is kept as the record of what 2.5.1 actually shipped; the open half is
+tracked in row 19.
 
 **Three unplanned repairs, not roadmap slices, all landed in the same window**
 and recorded in `CHANGELOG.md` → 2.7.0 → Fixed: the PR gate's source-list
@@ -34,16 +40,19 @@ the canonical-source-list slice — the pipeline was red from the top down.
 | 8 | 2.4.3 `text.h` verbs | `feat/text-verbs` | done |
 | 9 | 2.4.4 `version.h` | `feat/version-header` | done |
 | 10 | 2.4.5 debug overlay | `feat/debug-overlay` | done |
-| 11 | 2.5.1 Version the `.map` — version header + editor writer landed; the 22-field record parser is still hand-rolled twice (P39) | `feat/map-format-version` | partial |
+| 11 | 2.5.1 Version the `.map` — version header + editor writer landed in 2.7.0; the 22-field record half moved to row 19 | `feat/map-format-version` | partial → split |
 | 12 | 2.5.2 Asset path seam — `assetPath.h` + `docs/assets.md`; the `./` defect made public | `feat/asset-path-seam` | done |
 | 13 | 2.5.3 Blob lifetime rules (docs) — missing `ReadBlob` entry + measured sync/lazy table | `docs/blob-lifetime` | done |
-| 14 | 2.6.1 Engine mixer | pending | pending |
-| 15 | 2.6.2 `input/inputHub.h` | pending | pending |
-| 16 | 2.6.3 Example adopts input hub | pending | pending |
+| 14 | 2.8.1 Engine mixer (was 2.6.1) | pending | pending |
+| 15 | 2.8.2 `input/inputHub.h` (was 2.6.2) — blocks row 16 | pending | pending |
+| 16 | 2.8.3 Example adopts input hub (was 2.6.3) | pending | pending |
 | 17 | 2.7.1 Host address enumeration | `feat/host-addresses` | done |
 | 18 | 2.7.2 Switch halves — `socketInitializeDefault`, three-stage `Open` diagnostics, and the two latent Switch compile breaks it unmasked | `fix/switch-socket-init` | done |
+| 19 | 2.8.4 The `.map` record parser (P39) — 22 fields parsed twice by hand, `SaveMap` is the only writer with no spec calling it. **Blocked on deciding how to make it observable**: the editor cannot be linked here (no libnfd), so a behaviour change in `LoadMap` has no test watching it. | pending | pending |
 
 **Skipped (unscheduled):** 3.0.0 ECS wave — trigger-based, not in the queue.
+2.6 is retired as a number: 2.7.0 shipped 2.4, 2.5 and 2.7 at once, so rows
+14–16 moved to 2.8.x rather than leaving an empty line.
 
 ## Carried TECH_DEBT (not scheduled releases; pick up opportunistically)
 

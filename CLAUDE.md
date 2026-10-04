@@ -43,7 +43,7 @@ Binary name matches the directory name for `platformer`, `jrpg`, `netchat`, `net
 
 ## Tests
 
-Framework is **Igloo + snowhouse** (BDD `Describe`/`It`, snowhouse `Assert::That`), not gtest/Catch2. 662 tests. Specs live in `specs/` mirroring the source tree; they `#include "../common/ecs.h"` by relative path, so the suite always tests the working tree, never the installed library. `specs/main.cpp` is the sole `main()`.
+Framework is **Igloo + snowhouse** (BDD `Describe`/`It`, snowhouse `Assert::That`), not gtest/Catch2. 676 tests. Specs live in `specs/` mirroring the source tree; they `#include "../common/ecs.h"` by relative path, so the suite always tests the working tree, never the installed library. `specs/main.cpp` is the sole `main()`.
 
 **The suite covers `common/` only.** `TESTSRCS` is `find specs` plus the engine sources read from `engine-sources.txt` (via `ENGINE_SOURCES`), so nothing under `editor/` or `examples/` is compiled into `./bin/tests` and no spec can reach it. Wiring either in is not a small job: both include the engine as `<stormengine2/...>`, which resolves to the *installed* headers rather than the working tree the specs deliberately test. Bugs in editor and example code are caught by compilation (CI builds both, see below) and by running them — not by specs.
 

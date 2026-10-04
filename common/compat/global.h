@@ -49,6 +49,7 @@
 #include "../input/touchControls.h"
 #include "../input/virtualGamepad.h"
 
+#include "../net/hostAddress.h"
 #include "../net/net.h"
 #include "../net/netClient.h"
 #include "../net/netConnection.h"
@@ -102,6 +103,8 @@ using storm::kEngineVersionString;
 using storm::LightingOverlay;
 using storm::LoadTexturesFromXml;
 using storm::Map;
+using storm::Ranked;
+using storm::Score;
 using storm::Text;
 using storm::Tile;
 using storm::TileMapLoader;
@@ -203,9 +206,21 @@ using storm::VPadState;
 using storm::VPadStyle;
 
 // ── Networking ──────────────────────────────────────────────────────────────
+using storm::AddressClass;
+using storm::BestLocalAddress;
+using storm::BetterThan;
+using storm::ChooseBest;
+using storm::Classify;
+using storm::FirstOctet;
+using storm::IsLinkLocalV4;
+using storm::IsLoopbackV4;
+using storm::IsPrivateV4;
+using storm::IsUsable;
+using storm::LocalCandidates;
 using storm::NetAddress;
 using storm::NetAddressFromParts;
 using storm::NetAddressToString;
+using storm::NetCandidate;
 using storm::NetChunk;
 using storm::NetChunkHeader;
 using storm::NetClient;

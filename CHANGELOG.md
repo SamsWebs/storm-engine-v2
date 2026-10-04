@@ -4,6 +4,33 @@
 
 ### Added
 
+- **`common/net/hostAddress.h` / `.cpp`** (2.7.1) — the engine can now tell
+  the host its own LAN address, with the ranking rule split into a pure,
+  header-only, spec'd header and the enumeration left as a thin platform layer
+  (`getifaddrs` on POSIX, Winsock hostname resolution on Windows).
+
+  The rule exists because "the first non-loopback address" is wrong. Every
+  machine has several and they are not equally useful: a developer laptop
+  carries 127.0.0.1, a docker0, a veth pair, a VPN tunnel, and exactly one
+  interface a player on the same network can reach. `getifaddrs` returns them
+  in kernel order, so that rule picks the docker bridge on most Linux machines
+  and the symptom is "it works on my machine" pointing nowhere near the cause.
+  On the machine this was written on the rule picks `wlp82s0` (172.20.2.65)
+  over loopback and two container bridges.
+
+  Loopback is never returned. **Public ranks below private**, because a public
+  address on an interface is usually the WAN side or a VPN endpoint and the
+  player on the sofa reaches neither. A candidate with no address is not a
+  candidate. The wireless flag is a nudge *within* a class and never across
+  one. `Ranked()` (for a lobby UI — a player on a different subnet may only
+  reach the second card) and `ChooseBest()` (for a default) both exist, and the
+  spec asserts the answer is **order-independent**.
+
+  14 new specs, 676 total. `.cpp` added to `engine-sources.txt` so it reaches
+  Switch and Android. Bridged in `compat/global.h` (174 names) — note that
+  `Score`, `Ranked` and `Classify` are short and generic, so a 1.x game that
+  force-includes the bridge and has its own `Score` must qualify this one.
+
 - **`common/debugOverlay.h`** (2.4.5) — `DebugStats` (the numbers) and
   `DebugOverlay` (the numbers plus visibility and a `Draw()`). FPS, frame time,
   entity count, per-system timings and the last few `Err` lines, toggled by the

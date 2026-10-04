@@ -21,10 +21,11 @@ storm-engine-v2 is a C++17 game engine built on SDL2 that uses the **Entity Comp
 15. [Gamepad](#gamepad)
 16. [Engine Version](#engine-version)
 17. [Debug Overlay](#debug-overlay)
-18. [Networking](#networking)
-19. [Logger](#logger)
-20. [Tags and Groups](#tags-and-groups)
-21. [Putting It Together](#putting-it-together)
+18. [Audio](#audio)
+19. [Networking](#networking)
+20. [Logger](#logger)
+21. [Tags and Groups](#tags-and-groups)
+22. [Putting It Together](#putting-it-together)
 
 ## Core Concepts
 
@@ -884,6 +885,96 @@ void PlayState::render(SDL_Renderer *renderer, const AssetStore &assets) {
 `Toggle()` flips visibility and is usually bound to a key. `DebugStats` on its
 own is the pure part - no drawing - if you want the numbers without the
 overlay.
+
+## Audio
+
+`AssetStore` decodes and caches sounds, and stops there. Everything after
+`GetSound` was the game's problem, and the usual shape of that problem is
+`Mix_PlayChannel(-1, chunk, 0)`. The `-1` means "first free channel", so a
+sound lands wherever it happens to fit, and there is no volume model anywhere
+above SDL_mixer. `SoundMixer` (`<stormengine2/audio/soundMixer.h>`) is that
+layer, and the policy it decides with (`<stormengine2/audio/mixer.h>`) is pure:
+no audio device, so it is the part you can test.
+
+```cpp
+#include <stormengine2/audio/soundMixer.h>
+
+class PlayState : public GameState {
+  SoundMixer mixer_;   // opens nothing on construction
+  AssetStore_Ptr assetStore_;
+};
+```
+
+**Open it, and keep going if it fails.** `Open()` returns false and logs when
+there is no device, and every other call then stays safe and silent - a game
+that runs fine without sound should not have to branch on it.
+
+```cpp
+void PlayState::onEnter() {
+  assetStore_ = std::make_unique<AssetStore>();
+  mixer_.Open();
+
+  assetStore_->AddSound("move", "assets/sfx/move.wav");
+  assetStore_->AddSound("win", "assets/sfx/win.wav");
+}
+```
+
+**Give sounds a priority, because they are not equal.** This is the part
+`Mix_PlayChannel(-1, ...)` cannot express. A move fires on every ply; a win is
+the payoff. Unranked, a burst of moves can hold every channel and the win is
+the sound you never hear.
+
+```cpp
+// A win outranks a capture, which outranks a move. A sound that cannot get a
+// channel better than what is already playing is dropped rather than
+// interrupting it.
+mixer_.Play(assetStore_.get(), "win",     kHighestPriority);
+mixer_.Play(assetStore_.get(), "capture", kNormalPriority + 10);
+mixer_.Play(assetStore_.get(), "move",    kLowestPriority);
+```
+
+`Play` is pack-aware for free: the store is what knows whether the bytes came
+from a pack or a loose file, and `Play` only asks it for the chunk.
+
+**Volume, and one number to mute everything.** Three buses - master, music,
+sfx - each `0..1`, with the master multiplying both.
+
+```cpp
+mixer_.Volumes().SetMaster(0.5f);
+mixer_.Volumes().SetSfx(0.8f);
+mixer_.ApplySfxVolume();   // Play() does this for you; a settings screen
+                           // wants it after changing the model.
+```
+
+Values are clamped on the way in, and a NaN becomes silence rather than
+poisoning both buses - it would otherwise reach `Mix_Volume`'s int conversion
+with no diagnostic anywhere.
+
+**The engine does not own music.** There is no `PlayMusic`, and that is a
+decision rather than a gap: SDL_mixer has one music channel, and a game with a
+score or dynamic music needs to hold that handle itself. What the mixer gives
+you is the *volume*, so a game calling `Mix_PlayMusic` itself still obeys the
+same settings screen:
+
+```cpp
+mixer_.Volumes().SetMusic(0.4f);
+mixer_.ApplyMusicVolume();
+Mix_PlayMusic(music_);   // yours; the mixer's only part is the volume
+```
+
+**Ordering, because the wrong way is a double free.** `Close()` closes the
+device and `Mix_CloseAudio` frees every open chunk, and the `AssetStore` owns
+those chunks. Clear the store first:
+
+```cpp
+void PlayState::onExit() {
+  assetStore_->ClearAssets();   // frees the Mix_Chunk*s
+  mixer_.Close();               // closes the device
+}
+```
+
+`AssetStore` is an engine member, so `~SoundMixer` also calls `Close()`; the
+explicit call is about ordering against the store, not about tidiness.
 
 ## Networking
 

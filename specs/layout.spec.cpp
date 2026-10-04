@@ -1,4 +1,5 @@
 #include "../common/assetStore.h"
+#include "../common/audio/soundMixer.h"
 #include "../common/ecs.h"
 #include "../common/tilemapLoader.h"
 #include <igloo/igloo_alt.h>
@@ -38,6 +39,20 @@ Describe(LayoutSpec) {
     Assert::That(sizeof(Entity), Equals(static_cast<std::size_t>(24)));
     Assert::That(sizeof(System), Equals(static_cast<std::size_t>(40)));
     Assert::That(sizeof(Signature), Equals(static_cast<std::size_t>(8)));
+
+    // Audio, 2.8.1. Pinned for a different reason than the four above: a
+    // game holds a SoundMixer as a member or allocates one, and the policy
+    // types are small enough to embed in a game's own settings struct. None
+    // of these crosses a .so boundary, so nothing here is an inter-library
+    // ABI -- the exposure is a game compiled against one header set holding a
+    // mixer built with another, which is the 1.3.0 story one level down.
+    // VolumeModel and ChannelPolicy are the ones to watch: both are
+    // trivially copyable value types, so a change to either is the kind that
+    // can pass a smoke test and fail in a save file.
+    Assert::That(sizeof(SoundMixer), Equals(static_cast<std::size_t>(112)));
+    Assert::That(sizeof(VolumeModel), Equals(static_cast<std::size_t>(12)));
+    Assert::That(sizeof(ChannelPolicy), Equals(static_cast<std::size_t>(4)));
+    Assert::That(sizeof(ChannelDecision), Equals(static_cast<std::size_t>(8)));
 
     // The size pin above cannot see MAX_COMPONENTS: sizeof(std::bitset<N>) is
     // 8 for every N from 1 to 64, so it reads the same at 32 and at 64. Pin

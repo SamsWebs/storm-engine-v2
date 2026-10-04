@@ -718,10 +718,34 @@ this file. The argument in item 2 below is unchanged and is why the work stays
 in a minor instead of drifting into 3.0 — that is still the load-bearing claim
 here.
 
-1. **An engine mixer.** Music versus sfx channel ownership, a pure volume model,
-pack-aware loads, and a seam for a game to hold its own music. The engine already
-links `SDL2_mixer` and already caches `Mix_Chunk`, so this adds a policy layer,
-not a dependency.
+1. **An engine mixer.** ✅ **Done 2026-10-04.** Music versus sfx channel
+   ownership, a pure volume model, pack-aware loads, and a seam for a game to
+   hold its own music. The engine already linked `SDL2_mixer` and already
+   cached `Mix_Chunk`, so this added a policy layer, not a dependency.
+
+   Shipped as the split the rest of the engine uses: `common/audio/mixer.h` is
+   the policy — pure, header-only, no SDL_mixer, 20 specs that need no sound
+   card — and `common/audio/soundMixer.h` is a thin layer of calls SDL_mixer
+   already has. `common/net/hostAddress.h` set the precedent and the reason is
+   the same: the ranking rule was worth testing and the socket was not.
+
+   **The measurement that justified it.** `grep -rn 'Mix_PlayChannel' examples/`
+   returns exactly three call sites, all in `netplay-checkers`, all
+   `Mix_PlayChannel(-1, chunk, 0)`. `-1` is "first free channel", so the
+   channel a sound lands on is whatever happened to be free, and the three
+   sounds are not equal — a move fires on every ply and a win is the payoff.
+   Unranked, a burst of moves can hold every channel and the win is the sound
+   you never hear. That example now ranks them win > capture > move, which is
+   also what makes this not another `actionMap.h`: a header with specs and no
+   consumer is the scar this repo already has.
+
+   **The engine does not own music**, and the absence of a `PlayMusic` is the
+   decision rather than the gap. SDL_mixer's music channel is singular; a game
+   with a score or dynamic music needs to hold that handle itself. What ships
+   is `ApplyMusicVolume`, so such a game still obeys the same settings screen.
+   This mirrors the argument in item 2 below — the abstraction is convenient
+   right up until the game needs the thing it cannot get.
+
 2. **Make the input layer usable — add, do not rewrite.** `actionMap.h` has no
 consumer anywhere in the repo, and it is not because nobody found it: the three
 defects the flagship game's own reader documents are the reason a game wrote its

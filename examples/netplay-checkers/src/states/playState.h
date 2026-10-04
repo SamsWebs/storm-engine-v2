@@ -10,6 +10,7 @@
 #include <vector>
 
 #include <stormengine2/assetStore.h>
+#include <stormengine2/audio/soundMixer.h>
 #include <stormengine2/ecs.h>
 #include <stormengine2/logger.h>
 #include <stormengine2/net/net.h>
@@ -164,6 +165,12 @@ private:
   bool hasPrev_ = false;
 
   // ── Audio ─────────────────────────────────────────────────────────────
+  // The mixer owns the device and the sfx channels; the game still owns its
+  // chunks, via assetStore_. The three sounds below are given priorities
+  // because a move fires on every ply and a win is the payoff: with
+  // Mix_PlayChannel(-1, ...) the moves can hold every channel and leave the
+  // win with nowhere to go.
+  SoundMixer mixer_;
   bool audioDisabled_ = false;
 
   // ── Scripted input ────────────────────────────────────────────────────

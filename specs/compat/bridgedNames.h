@@ -8,7 +8,7 @@
 // third of the exports, so a name missing from the bridge was missing
 // from the spec too.
 //
-// 194 names.
+// 204 names.
 #pragma once
 
 namespace storm_compat_probe {
@@ -28,6 +28,9 @@ using ::BestLocalAddress;
 using ::BetterThan;
 using ::BoundsOf;
 using ::BoxColliderComponent;
+using ::ChannelDecision;
+using ::ChannelPolicy;
+using ::ChannelVerdict;
 using ::ChooseBest;
 using ::CircleColliderComponent;
 using ::Classify;
@@ -145,6 +148,8 @@ using ::ResolveAssetFile;
 using ::RigidBodyComponent;
 using ::Score;
 using ::Signature;
+using ::SoundMixer;
+using ::SoundPriority;
 using ::SpriteComponent;
 using ::System;
 using ::Text;
@@ -168,6 +173,7 @@ using ::VPadState;
 using ::VPadStyle;
 using ::VersionEquals;
 using ::VersionString;
+using ::VolumeModel;
 using ::XmlLoader;
 using ::XmlObjectDef;
 using ::XmlTextureDef;
@@ -176,6 +182,9 @@ using ::kEngineVersionMajor;
 using ::kEngineVersionMinor;
 using ::kEngineVersionPatch;
 using ::kEngineVersionString;
+using ::kFullVolume;
+using ::kHighestPriority;
+using ::kLowestPriority;
 using ::kNetChunkResend;
 using ::kNetChunkVital;
 using ::kNetControlAccept;
@@ -202,6 +211,7 @@ using ::kNetResendMs;
 using ::kNetSequenceBits;
 using ::kNetTimeoutMs;
 using ::kNetVarIntMaxBytes;
+using ::kNormalPriority;
 using ::kTileMapFormatMagic;
 using ::kTileMapFormatMinVersion;
 using ::kTileMapFormatVersion;

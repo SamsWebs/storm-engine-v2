@@ -33,6 +33,15 @@ jobs:
       # of defect this file exists to kill (non-recursive Switch glob, Android
       # GLOB that used to miss net/, Windows example fork). Runs on the host
       # next to the compat probe: no toolchain needed, fail before Docker.
+      # The version is hand-bumped in Makefile.debian and generated into
+      # common/version.h, Makefile.win and web/index.html from there. A bump
+      # that misses a site ships a page advertising the wrong release, and the
+      # release workflow's pre-release gate reads ONLY Makefile.debian, so
+      # nothing else would notice. Same arrangement as the compat probe: run on
+      # the host, stdlib Python, fail before Docker.
+      - name: Check the generated version sites are not stale
+        run: python3 scripts/generate-version.py --check
+
       - name: Check the engine source list is not stale
         run: |
           find common -name '*.cpp' | sort > /tmp/actual-sources.txt

@@ -89,52 +89,20 @@ DATA_VER_BLOCK = re.compile(
     r"<(\w+)[^>]*\bdata-ver\b[^>]*>(.*?)</\1>", re.DOTALL)
 
 
-@check("version: the four hand-written sites agree")
+@check("version: the generated sites agree with Makefile.debian")
 def _version_sites():
-    deb = extract_version(read("Makefile.debian"), MAKEFILE_VERSION,
-                          "Makefile.debian")
-    win = extract_version(read("Makefile.win"), MAKEFILE_VERSION,
-                          "Makefile.win")
-
-    web = read("web/index.html")
-    found = {}
-    elements = 0
-    for m in DATA_VER_BLOCK.finditer(web):
-        elements += 1
-        # Search the whole element -- its text AND its attributes, since the
-        # version lives in a data-copy payload as often as in the text.
-        #
-        # The leading assertion is `(?<![\d.])`, NOT `\b`. A word boundary
-        # fails on `libstormenginev2_2.3.1_amd64.deb`, because `_` is a word
-        # character and so is the `2` after it, so there is no boundary -- which
-        # silently dropped the Debian install command from the check, the very
-        # string a visitor copies. What must be excluded is a version that is
-        # itself a continuation of a longer dotted number, not a preceding
-        # underscore.
-        for v in re.findall(r"(?<![\d.])v?(\d+\.\d+\.\d+)", m.group(0)):
-            found[v] = found.get(v, 0) + 1
-    if not found:
-        raise Fail("web/index.html: no data-ver element carried a version -- "
-                   "either the attribute was removed or every copy is empty; "
-                   "the site would ship without a version at all")
-
-    distinct = sorted(found)
-    if distinct != [deb]:
-        raise Fail(
-            f"web/index.html advertises {distinct} but Makefile.debian "
-            f"says {deb}. data-ver occurrences: {found}. "
-            "The release workflow reads Makefile.debian ONLY, so a tag can "
-            "ship with the website advertising the wrong release.")
-
-    if win != deb:
-        raise Fail(f"Makefile.win says {win}, Makefile.debian says {deb}. "
-                   "Makefile.win feeds DISTNAME and the .zip name, so a local "
-                   "`make dist` would produce a zip labelled for another "
-                   "release. CI passes VERSION= on the command line, which is "
-                   "why this never showed up there.")
-    return f"{deb} across Makefile.debian, Makefile.win and web/index.html " \
-           f"({elements} data-ver elements, {sum(found.values())} version " \
-           f"strings)"
+    # Delegated, not reimplemented. This check used to parse the four sites
+    # itself, which meant two implementations of the same rule: the one here
+    # and the generator's. They agreed until they did not, and then a version
+    # bump could satisfy the gate while the generated header said something
+    # else. One owner per decision.
+    p = subprocess.run(
+        [sys.executable, "scripts/generate-version.py", "--check"],
+        cwd=ROOT, capture_output=True, text=True)
+    if p.returncode != 0:
+        raise Fail((p.stderr or p.stdout).strip().splitlines()[0]
+                   if (p.stderr or p.stdout).strip() else "generator failed")
+    return (p.stdout.strip().splitlines() or ["ok"])[-1]
 
 
 @check("version: not a pre-release, and not ahead of the last tag")

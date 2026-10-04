@@ -4,6 +4,36 @@
 
 ### Added
 
+- **`stormengine2/version.h`** (2.4.4), and the release number is now written
+  **once**. `Makefile.debian`'s `VERSION ?=` is the single source;
+  `scripts/generate-version.py` generates `common/version.h`, `Makefile.win` and
+  the seven `data-ver` values in `web/index.html` from it, and `--check` runs in
+  `pr-validate.yml` and `scripts/release-check.py`.
+
+  The header gives a binary the ability to answer which engine it was built
+  against: `kEngineVersion`, a major/minor/patch triple, `kEngineVersionString`
+  ("v2.3.1"), `VersionString()` and an exact `VersionEquals()`. Being a library
+  the engine cannot print, so this is the answer a consumer gets;
+  `examples/platformer` adopted it in a `--version` switch and the built binary
+  reports `v2.3.1`.
+
+  This closes a gap that was live until now: the number was hand-written in four
+  places and the release workflow's pre-release gate reads only `Makefile.debian`,
+  so a tag could ship green while the project page advertised the previous
+  release and its download button copied a package filename that did not exist.
+  The page is stamped through its `data-ver` attributes, so the 2.0.0 migration
+  notes on the same page stay as the history they are.
+
+  `Makefile.debian` is the source rather than a root `VERSION` file on purpose:
+  the release workflow parses that line with a sed, and its own comment records
+  that the step once failed *open* on a parse it did not recognise. Rewriting a
+  gate documented as having to fail closed, to accommodate a tidier layout, is
+  the wrong trade.
+
+  5 new specs, 651 total. **None of them pins the literal version** — a spec
+  that pins "2.3.1" fails every release and gets deleted. Bridged in
+  `compat/global.h` (158 names).
+
 - **`text.h` grows three verb groups** (2.4.3). All additive; existing
   signatures untouched.
   - **`Text::DrawRight`** — the third alignment, so left/centre/right all exist

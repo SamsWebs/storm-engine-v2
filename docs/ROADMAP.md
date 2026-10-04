@@ -319,15 +319,49 @@ MEASURED width.
    originally asserted "the last byte is not a continuation byte", which is
    false for every complete multi-byte character (`C3 A9` ends in `A9`). The
    spec was wrong and the code was right.
-4. **`stormengine2/version.h`.** A compile-time `kEngineVersion` and
-`VersionString()`, so a binary can answer for itself which engine it was built
-against, and the release number gets **one source** instead of a hand-bump in
-`Makefile.debian`, `Makefile.win` and eight places in `web/index.html`. A compile
-flag is not a property of the artifact; this is the smallest fix for that. Being
-a library, the engine cannot print — the header is the answer, and the examples
-adopt it in a `--version` switch so at least one built binary in the tree does.
-The mechanism is a generated header, not a second hand-edited copy of the
-number, or it has moved the problem rather than fixed it.
+4. **`stormengine2/version.h`.** ✅ **Done 2026-10-04.** A compile-time
+`kEngineVersion` plus a major/minor/patch triple, `kEngineVersionString`
+("v2.3.1") and `VersionString()`, so a binary can answer for itself which engine
+it was built against. A compile flag is not a property of the artifact; this is
+the smallest fix for that. Being a library, the engine cannot print — the header
+is the answer, and `examples/platformer` adopted it in a `--version` switch, so
+the built binary answers `v2.3.1` and at least one artifact in the tree reports
+its own version instead of leaving it to a makefile on the reporter's machine.
+
+   **The number is now written once.** `Makefile.debian`'s `VERSION ?=` is the
+   single source, and `scripts/generate-version.py` generates
+   `common/version.h`, `Makefile.win` and the seven `data-ver` values in
+   `web/index.html` from it. The header is generated rather than hand-written,
+   or this would have moved the problem rather than fixed it. `--check` runs in
+   `pr-validate.yml` and in `scripts/release-check.py`.
+
+   **Why `Makefile.debian` and not a root `VERSION` file**, which is the tidier
+   answer and the wrong one here: the release workflow's "Refuse to release a
+   pre-release version" step reads `Makefile.debian` with a sed, and that step's
+   own comment records that it used to fail OPEN on a parse it did not
+   recognise. A root `VERSION` file means `VERSION ?= $(shell cat VERSION)`,
+   which that sed would capture as the literal `$(shell` — so a policy gate
+   documented as having to fail closed would be weakened to accommodate a
+   tidier layout. One source, chosen at the site the release already trusts.
+
+   The web page is stamped through its `data-ver` attributes, which exist for
+   this: a blanket regex over `2\.\d+\.\d+` would also rewrite the page's 2.0.0
+   migration notes, which are correct history. Verified by bumping to 2.4.0 —
+   all three sites moved, both 2.0.0 references stayed, and the `data-copy`
+   payload (a second copy of the version nobody remembers) was rewritten too.
+
+   `scripts/release-check.py`'s own version check was **deleted** and replaced
+   by a call to the generator's `--check`. It used to parse the four sites
+   itself, which was two implementations of one rule: they agreed until they
+   did not, and then a bump could satisfy the gate while the generated header
+   said something else. One owner per decision.
+
+   5 specs, and deliberately **none of them pins the literal number** — a spec
+   that pins "2.3.1" fails every release and gets deleted. What is asserted is
+   that the triple agrees with the string, that the "v" form is exactly the
+   string with a prefix, and that the comparison is exact rather than
+   prefix-accepting (a consumer that treats "2.3" as equal to 2.3.1 is a
+   consumer that believes it is talking to a build it is not).
 5. **A debug overlay.** The cheapest item on the previous list and still the
 right one: FPS, frame time, entity count, per-system timings and the last few
 `Err` lines, toggled with a key. It is also the only diagnostic surface a game

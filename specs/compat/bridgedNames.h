@@ -8,7 +8,7 @@
 // third of the exports, so a name missing from the bridge was missing
 // from the spec too.
 //
-// 151 names.
+// 158 names.
 #pragma once
 
 namespace storm_compat_probe {
@@ -133,9 +133,16 @@ using ::VPadControl;
 using ::VPadLayout;
 using ::VPadState;
 using ::VPadStyle;
+using ::VersionEquals;
+using ::VersionString;
 using ::XmlLoader;
 using ::XmlObjectDef;
 using ::XmlTextureDef;
+using ::kEngineVersion;
+using ::kEngineVersionMajor;
+using ::kEngineVersionMinor;
+using ::kEngineVersionPatch;
+using ::kEngineVersionString;
 using ::kNetChunkResend;
 using ::kNetChunkVital;
 using ::kNetControlAccept;

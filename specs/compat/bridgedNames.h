@@ -8,20 +8,25 @@
 // third of the exports, so a name missing from the bridge was missing
 // from the spec too.
 //
-// 160 names.
+// 174 names.
 #pragma once
 
 namespace storm_compat_probe {
 using ::ActionBinding;
 using ::ActionMap;
 using ::ActionSources;
+using ::AddressClass;
 using ::AnimationComponent;
 using ::AnimationSystem;
 using ::AssetStore;
 using ::AssetStore_Ptr;
+using ::BestLocalAddress;
+using ::BetterThan;
 using ::BoundsOf;
 using ::BoxColliderComponent;
+using ::ChooseBest;
 using ::CircleColliderComponent;
+using ::Classify;
 using ::ClosestPointOn;
 using ::Component;
 using ::ComponentMiss;
@@ -44,6 +49,7 @@ using ::EntityOrder;
 using ::EvalTouches;
 using ::EvalVPad;
 using ::FPS;
+using ::FirstOctet;
 using ::FittedText;
 using ::FontPt;
 using ::FooterLayout;
@@ -59,12 +65,17 @@ using ::GamepadState;
 using ::IComponent;
 using ::IPool;
 using ::IsFinite;
+using ::IsLinkLocalV4;
+using ::IsLoopbackV4;
+using ::IsPrivateV4;
+using ::IsUsable;
 using ::Keyboard;
 using ::LOG_ERROR;
 using ::LOG_INFO;
 using ::LOG_WARNING;
 using ::LightingOverlay;
 using ::LoadTexturesFromXml;
+using ::LocalCandidates;
 using ::LogEntry;
 using ::LogType;
 using ::Logger;
@@ -80,6 +91,7 @@ using ::MovementSystem;
 using ::NetAddress;
 using ::NetAddressFromParts;
 using ::NetAddressToString;
+using ::NetCandidate;
 using ::NetChunk;
 using ::NetChunkFlag;
 using ::NetChunkHeader;
@@ -113,10 +125,12 @@ using ::PackReader;
 using ::PackWriter;
 using ::Pool;
 using ::Px;
+using ::Ranked;
 using ::Registry;
 using ::RenderColliderSystem;
 using ::RenderSystem;
 using ::RigidBodyComponent;
+using ::Score;
 using ::Signature;
 using ::SpriteComponent;
 using ::System;

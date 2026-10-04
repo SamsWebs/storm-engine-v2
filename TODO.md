@@ -25,7 +25,7 @@ slices checked) and continue.
 | 14 | 2.6.1 Engine mixer | pending | pending |
 | 15 | 2.6.2 `input/inputHub.h` | pending | pending |
 | 16 | 2.6.3 Example adopts input hub | pending | pending |
-| 17 | 2.7.1 Host address enumeration | pending | pending |
+| 17 | 2.7.1 Host address enumeration | `feat/host-addresses` | done |
 | 18 | 2.7.2 Switch halves (`common/net/` on nx-platformer, `socketInitializeDefault`) | pending | pending |
 
 **Skipped (unscheduled):** 3.0.0 ECS wave — trigger-based, not in the queue.

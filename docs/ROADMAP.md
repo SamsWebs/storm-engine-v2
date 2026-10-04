@@ -468,10 +468,46 @@ own 627 lines.
 
 ### 2.7.0 — net polish
 
-1. **Host address enumeration**, engine-side and per platform, with the ranking
-rule split into a pure header the way the flagship game already did it. A net
-layer that cannot tell the host its own LAN address leaves every game to solve
-it.
+1. **Host address enumeration.** ✅ **Done 2026-10-04.** `common/net/hostAddress.h`
+plus `hostAddress.cpp` (in `engine-sources.txt`, so it reaches Switch and
+Android). The split is the one the flagship game arrived at: the RANKING rule is
+pure, header-only and spec'd; the enumeration is a thin platform layer over it
+(`getifaddrs` on POSIX, Winsock hostname resolution on Windows). A net layer
+that cannot tell the host its own LAN address leaves every game to solve it.
+
+   14 specs, and the reason there is a *rule* rather than "the first
+   non-loopback": every machine has several addresses and they are not equally
+   useful. A developer laptop carries 127.0.0.1, a docker0, a veth pair, a VPN
+   tunnel, and exactly one interface a player on the same network can reach.
+   `getifaddrs` returns interfaces in kernel order, so "first non-loopback"
+   picks the docker bridge on most Linux machines and the symptom is "it works
+   on my machine" pointing nowhere near the cause.
+
+   **Measured on the machine this was written on**, which is the argument:
+
+   | interface | address | class | score |
+   |---|---|---|---|
+   | `lo` | 127.0.0.1 | Loopback | 0 — excluded |
+   | `br-7f6408d14de4` | 172.18.0.1 | Virtual | 10 |
+   | `docker0` | 172.17.0.1 | Virtual | 10 |
+   | `wlp82s0` | 172.20.2.65 | Private + wireless | **105 — chosen** |
+
+   The rules: loopback is **never** returned (a lobby advertising 127.0.0.1
+   only works on the host); **public ranks below private**, because a public
+   address on an interface is usually the WAN side or a VPN endpoint and the
+   player on the sofa reaches neither; a **candidate with no address** is not a
+   candidate (an interface can be up with none yet); the **wireless** flag is a
+   nudge *within* a class and never across one; and both `Ranked()` (for a
+   lobby UI — a player on a different subnet may only reach the second card)
+   and `ChooseBest()` (for a default) exist, because "one default" is right for
+   a default and wrong for a list.
+
+   The spec asserts **order independence**, which is what makes the rule worth
+   having: the answer cannot depend on the order the OS handed the list over
+   in. It deliberately does NOT assert that 192.168.x outranks 10.x — both
+   are Private, there is no honest rule separating them, and encoding "192.168
+   is the home-router range" as policy would only ever be right about developer
+   machines.
 2. **The Switch halves — source-list half done, `NetSocketsInit` remains.**
    The recursive-source-glob half landed 2026-09-23 as part of Track 0.4:
    `examples/nx-platformer/Makefile` now reads `engine-sources.txt` (all 13

@@ -8,7 +8,7 @@
 // third of the exports, so a name missing from the bridge was missing
 // from the spec too.
 //
-// 188 names.
+// 194 names.
 #pragma once
 
 namespace storm_compat_probe {
@@ -18,6 +18,10 @@ using ::ActionSources;
 using ::AddressClass;
 using ::AnimationComponent;
 using ::AnimationSystem;
+using ::AssetFilePath;
+using ::AssetOverrideExists;
+using ::AssetOverridePath;
+using ::AssetPath;
 using ::AssetStore;
 using ::AssetStore_Ptr;
 using ::BestLocalAddress;
@@ -69,6 +73,7 @@ using ::IsLinkLocalV4;
 using ::IsLoopbackV4;
 using ::IsPrivateV4;
 using ::IsUsable;
+using ::JoinAssetPath;
 using ::Keyboard;
 using ::LOG_ERROR;
 using ::LOG_INFO;
@@ -136,6 +141,7 @@ using ::ReadTileMapVersion;
 using ::Registry;
 using ::RenderColliderSystem;
 using ::RenderSystem;
+using ::ResolveAssetFile;
 using ::RigidBodyComponent;
 using ::Score;
 using ::Signature;

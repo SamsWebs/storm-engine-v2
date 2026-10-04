@@ -25,19 +25,32 @@ using namespace storm;
 // The same declaration the generator emits, from Makefile.debian's VERSION.
 // Read the source rather than restating the number, so a version bump does not
 // make this file stale.
+//
+// Both names are tried, because CI only has one of them. Dockerfile.debian does
+// `COPY ./Makefile.debian /opt/library/Makefile` -- the rename is exactly what
+// lets bare `make` work in the image -- so inside the container the file is
+// `Makefile` and the single-name fopen returned null, failing the first
+// assertion below with "Expected: false, Actual: 1" and comparing nothing.
+//
+// That stayed hidden because the source-list gate above it in the same job was
+// failing first, and the job died before the suite ever ran.
 static std::string DeclaredVersion() {
   const std::string mk = [] {
-    FILE *f = std::fopen("Makefile.debian", "r");
-    std::string out;
-    if (f == nullptr) {
+    static const char *const kCandidates[] = {"Makefile.debian", "Makefile"};
+    for (const char *name : kCandidates) {
+      FILE *f = std::fopen(name, "r");
+      if (f == nullptr) {
+        continue;
+      }
+      std::string out;
+      char buf[512];
+      while (std::fgets(buf, sizeof(buf), f) != nullptr) {
+        out += buf;
+      }
+      std::fclose(f);
       return out;
     }
-    char buf[512];
-    while (std::fgets(buf, sizeof(buf), f) != nullptr) {
-      out += buf;
-    }
-    std::fclose(f);
-    return out;
+    return std::string();
   }();
   const std::string key = "VERSION ?= ";
   const std::size_t at = mk.find(key);

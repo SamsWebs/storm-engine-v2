@@ -11,6 +11,12 @@
 #endif
 #endif
 
+// libnx first: its switch.h redefines parts of the newlib headers this file
+// includes below, so it has to come before them. P7/2.7.2.
+#ifdef __SWITCH__
+#include <switch.h>
+#endif
+
 #include <chrono>
 #include <cstdio>
 #include <cstring>
@@ -41,13 +47,33 @@ using SocketHandle = int;
 #define NET_GETPID getpid
 #endif
 
+// POSIX guarantees INET_ADDRSTRLEN, but devkitA64's headers do not define it,
+// so NetAddressToString did not compile for Switch at all -- a latent break
+// that sat behind P6's missing common/net/ sources for as long as nobody ran
+// the Switch build. 16 is the length POSIX fixes for IPv4 (46 would be
+// overkill and hides a real overflow if inet_ntop ever changed family).
+#ifndef INET_ADDRSTRLEN
+#define INET_ADDRSTRLEN 16
+#endif
+
 namespace storm {
 
-// ws2_32 refuses every entry point with WSANOTINITIALISED until WSAStartup has
-// succeeded once in the process — name resolution included, not just socket().
-// So every function here that touches winsock calls this first, and it has to
-// be idempotent: the function-local static runs its initializer exactly once,
-// on whichever call gets there first, and is thread-safe by construction.
+// Windows refuses every entry point with WSANOTINITIALISED until WSAStartup
+// has succeeded once in the process — name resolution included, not just
+// socket(). Switch is the same shape with a different cause: libnx routes BSD
+// sockets through the bsd: service, which is inert until
+// socketInitializeDefault() has run, so socket(AF_INET, SOCK_DGRAM, 0) returns
+// -1 on a Switch that has never started it. So every function here that touches
+// the network calls this first, and it has to be idempotent: the function-local
+// static runs its initializer exactly once, on whichever call gets there first,
+// and is thread-safe by construction.
+//
+// No matching socketExit(), deliberately. The latch is process-wide and has
+// three callers with no shared teardown point, and neither arm releases its
+// handle today — WSAStartup has no matching WSACleanup here either. Adding a
+// Switch-only shutdown would make the two platforms behave differently about
+// something neither of them gets right yet; that is a 3.0 decision, not one to
+// smuggle in with a portability fix.
 static bool NetSocketsInit() {
 #ifdef _WIN32
   static const bool ok = [] {
@@ -55,8 +81,38 @@ static bool NetSocketsInit() {
     return WSAStartup(MAKEWORD(2, 2), &wsa) == 0;
   }();
   return ok;
+#elif defined(__SWITCH__)
+  static const bool ok = [] {
+    return R_SUCCEEDED(socketInitializeDefault());
+  }();
+  return ok;
 #else
   return true;
+#endif
+}
+
+#ifdef __SWITCH__
+// The libnx Result behind a failed init, so the log line can carry the code.
+// Zero on Windows and POSIX: those platforms report WSAGetLastError() and
+// errno at the point of failure instead, and a single latched code from a
+// different call site would be a lie.
+static uint32_t NetSocketsInitResult() {
+  // Rerun the latch's own work rather than duplicating it: a second
+  // socketInitializeDefault() would take a second bsd: session, and the
+  // function-local static is the only thing allowed to call it.
+  NetSocketsInit();
+  return socketGetLastResult();
+}
+#endif
+
+// What a failed platform init adds to its message. Platform-specific, and the
+// call site stays platform-blind: only libnx has a structured error code worth
+// printing, and Windows/POSIX have nothing extra to say here.
+static std::string NetPlatformInitDetail() {
+#ifdef __SWITCH__
+  return NetResultText(NetSocketsInitResult());
+#else
+  return std::string();
 #endif
 }
 
@@ -68,25 +124,114 @@ static bool NetWouldBlock() {
 #endif
 }
 
+// ── The pure half ───────────────────────────────────────────────────────────
+// The part of Open() that decides, as opposed to the part that calls the OS.
+// Split out so it can be spec'd on a machine whose socket() never fails, and
+// so the three log lines have one owner.
+
+NetSocketOpenFailure NetClassifySocketSetup(bool socketOk, bool nonBlockingOk) {
+  if (!socketOk || !nonBlockingOk)
+    return NetSocketOpenFailure::Socket;
+  return NetSocketOpenFailure::None;
+}
+
+std::string NetSocketOpenFailureMessage(NetSocketOpenFailure failure,
+                                        uint16_t port) {
+  switch (failure) {
+  case NetSocketOpenFailure::None:
+    return std::string();
+  case NetSocketOpenFailure::PlatformInit:
+    // Deliberately says nothing about sockets. This is the line a Switch
+    // developer sees when libnx was never started, and the whole reason the
+    // three messages are separate is that the old shared line sent them
+    // looking for a firewall.
+    return "NetSocket: networking stack init failed (WSAStartup on Windows, "
+           "socketInitializeDefault on Switch) before any socket call";
+  case NetSocketOpenFailure::Socket:
+    return "NetSocket: failed to create non-blocking UDP socket";
+  case NetSocketOpenFailure::Bind:
+    // Port 0 means "let the OS pick one", so "failed to bind UDP port 0" is a
+    // contradiction the reader has to stop and think about.
+    if (port == 0)
+      return "NetSocket: failed to bind an OS-assigned UDP port";
+    return "NetSocket: failed to bind UDP port " + std::to_string(port);
+  }
+  // A stage this build does not know about. Logging nothing here would put
+  // back the one failure mode this file exists to remove.
+  return "NetSocket: socket setup failed for an unrecognised reason";
+}
+
+// NetResultModule and NetResultDescription are inline constexpr in the header,
+// so the static_asserts below can constant-evaluate them.
+std::string NetResultText(uint32_t result) {
+  // 0, spelled out rather than via libnx's R_SUCCEEDED: this function is
+  // portable, and R_SUCCEEDED is a macro that only exists under __SWITCH__.
+  // The static_asserts below hold the two definitions of "success" together.
+  if (result == 0)
+    return std::string();
+  // Hex, because "0x" in front of a decimal number is a number you cannot look
+  // up. %s keeps the std::to_string conversions out of the format string.
+  char code[16];
+  std::snprintf(code, sizeof(code), "0x%04X", result);
+  return "libnx result " + std::string(code) + " (module " +
+         std::to_string(NetResultModule(result)) + ", description " +
+         std::to_string(NetResultDescription(result)) + ")";
+}
+
+#ifdef __SWITCH__
+// The bit layout above is transcribed from switch/result.h. If libnx ever moves
+// it, the decoded module and description in a user's log stop being true while
+// still looking confident — the exact failure this decoder exists to prevent.
+// So the Switch build checks the transcription against libnx's own macros, and
+// the spec suite (which does not run on Switch) checks it here.
+static_assert(NetResultModule(0x5A5Au) == R_MODULE(0x5A5Au),
+              "NetResultModule must match libnx R_MODULE");
+static_assert(NetResultDescription(0x5A5Au) == R_DESCRIPTION(0x5A5Au),
+              "NetResultDescription must match libnx R_DESCRIPTION");
+#endif
+
 NetSocket::~NetSocket() { Close(); }
 
 bool NetSocket::Open(uint16_t port) {
-  if (!NetSocketsInit())
-    return false;
+  // Close first, so a failed Open leaves the object in the state it claims:
+  // the platform-init check used to sit above this and return false with a
+  // previously-open socket still attached, which is a leak the caller has no
+  // way to know about.
   Close();
 
+  if (!NetSocketsInit()) {
+    logger_.Err(
+        NetSocketOpenFailureMessage(NetSocketOpenFailure::PlatformInit, port) +
+        NetPlatformInitDetail());
+    return false;
+  }
+
+  // The platform arms produce two outcomes and nothing else; the decision
+  // about what they mean is NetClassifySocketSetup's, and it is spec'd there.
+  // What this buys is that the #ifdef no longer straddles a condition and the
+  // log line is written once.
+  bool socketOk = false;
+  bool nonBlockingOk = false;
 #ifdef _WIN32
   fd_ = (int)socket(AF_INET, SOCK_DGRAM, 0);
-  u_long nonBlocking = 1;
-  if (fd_ == NET_INVALID_SOCKET ||
-      ioctlsocket((SOCKET)fd_, FIONBIO, &nonBlocking) != 0) {
+  socketOk = fd_ != NET_INVALID_SOCKET;
+  if (socketOk) {
+    u_long nonBlocking = 1;
+    nonBlockingOk = ioctlsocket((SOCKET)fd_, FIONBIO, &nonBlocking) == 0;
+  }
 #else
   fd_ = socket(AF_INET, SOCK_DGRAM, 0);
-  int flags = fcntl(fd_, F_GETFL, 0);
-  if (fd_ == NET_INVALID_SOCKET || flags == -1 ||
-      fcntl(fd_, F_SETFL, flags | O_NONBLOCK) == -1) {
+  socketOk = fd_ != NET_INVALID_SOCKET;
+  if (socketOk) {
+    int flags = fcntl(fd_, F_GETFL, 0);
+    nonBlockingOk =
+        flags != -1 && fcntl(fd_, F_SETFL, flags | O_NONBLOCK) != -1;
+  }
 #endif
-    logger_.Err("NetSocket: failed to create non-blocking UDP socket");
+  const NetSocketOpenFailure failure =
+      NetClassifySocketSetup(socketOk, nonBlockingOk);
+  if (failure != NetSocketOpenFailure::None) {
+    logger_.Err(NetSocketOpenFailureMessage(failure, port));
     Close();
     return false;
   }
@@ -108,7 +253,7 @@ bool NetSocket::Open(uint16_t port) {
   addr.sin_addr.s_addr = htonl(INADDR_ANY);
   addr.sin_port = htons(port);
   if (bind(fd_, (const sockaddr *)&addr, sizeof(addr)) != 0) {
-    logger_.Err("NetSocket: failed to bind UDP port " + std::to_string(port));
+    logger_.Err(NetSocketOpenFailureMessage(NetSocketOpenFailure::Bind, port));
     Close();
     return false;
   }

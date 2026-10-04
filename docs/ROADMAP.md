@@ -177,8 +177,10 @@ release already fell through.
    source of truth. `make check-engine-sources` and a `pr-validate.yml` step fail
    if the list drifts from `find common -name '*.cpp'`; `Dockerfile.debian` copies
    the list so the CI image builds. Retires P6's source-list half (and the
-   recurring "fix the glob again" write-up) outright; P7 (`socketInitializeDefault`)
-   remains and is what 2.7.2 still carries.
+   recurring "fix the glob again" write-up) outright. P7
+   (`socketInitializeDefault`) was what 2.7.2 still carried; it landed
+   2026-10-04, and taking it found two more Switch breaks that had been
+   waiting behind the missing sources.
 5. **State the verification matrix.** ✅ **Done 2026-10-04.** Both halves. The
    matrix for this file is "What CI actually verifies, and what ships green"
    under [Build and CI](#build-and-ci); the release checklist that makes it
@@ -469,11 +471,18 @@ own 627 lines.
 ### 2.7.0 — net polish
 
 1. **Host address enumeration.** ✅ **Done 2026-10-04.** `common/net/hostAddress.h`
-plus `hostAddress.cpp` (in `engine-sources.txt`, so it reaches Switch and
-Android). The split is the one the flagship game arrived at: the RANKING rule is
-pure, header-only and spec'd; the enumeration is a thin platform layer over it
-(`getifaddrs` on POSIX, Winsock hostname resolution on Windows). A net layer
-that cannot tell the host its own LAN address leaves every game to solve it.
+plus `hostAddress.cpp`. The split is the one the flagship game arrived at: the
+RANKING rule is pure, header-only and spec'd; the enumeration is a thin platform
+layer over it (`getifaddrs` on POSIX, Winsock hostname resolution on Windows). A
+net layer that cannot tell the host its own LAN address leaves every game to
+solve it.
+
+**One claim in this entry was wrong and 2.7.2 caught it.** It said
+`hostAddress.cpp` was "in `engine-sources.txt`, so it reaches Switch and
+Android". Being in the list is what gets it *compiled*, not what makes it
+*work*, and the first real Switch compile showed there is no `getifaddrs` on
+Switch at all. It now has a `__SWITCH__` arm that returns no candidates — see
+2.7.2. Android is genuinely fine: the NDK is Bionic and has `ifaddrs.h`.
 
    14 specs, and the reason there is a *rule* rather than "the first
    non-loopback": every machine has several addresses and they are not equally
@@ -508,20 +517,64 @@ that cannot tell the host its own LAN address leaves every game to solve it.
    are Private, there is no honest rule separating them, and encoding "192.168
    is the home-router range" as policy would only ever be right about developer
    machines.
-2. **The Switch halves — source-list half done, `NetSocketsInit` remains.**
-   The recursive-source-glob half landed 2026-09-23 as part of Track 0.4:
-   `examples/nx-platformer/Makefile` now reads `engine-sources.txt` (all 13
-   engine TUs, including `common/net/`) instead of the old non-recursive
-   `SOURCES := … include/stormengine2` wildcard. What is left for 2.7.2 is
-   `NetSocketsInit()`, which still needs a `socketInitializeDefault()` arm —
-   without it `socket(AF_INET, SOCK_DGRAM, 0)` returns -1 on Switch and the
-   engine logs "failed to open socket", which reads like a firewall problem.
-   **The source half has only been verified by dry-run (`make -n` listing all
-   13 engine TUs), not by a real devkitPro build here** — devkitPro is on this
-   machine but the Switch link has not been run as part of this change, so
-   treat the dry-run as weaker than a green build and re-verify with
-   `DEVKITPRO=… make` when convenient. The `NetSocketsInit` half has never been
-   built here either.
+2. **The Switch halves — all three done 2026-10-04.** ✅ **Done.** This item was
+   filed as "the source-list half plus `NetSocketsInit`". Running the Switch
+   build for the first time found a **third** half that no one had filed,
+   because nobody had run the build — see the two latent breaks below.
+
+   **The `socketInitializeDefault` half.** `NetSocketsInit()` now has an
+   `#elif defined(__SWITCH__)` arm calling `socketInitializeDefault()` behind
+   the same once-only latch the Windows arm uses, and `#include <switch.h>`
+   goes above the newlib headers, which it has to (libnx redefines parts of
+   them). The Result is latched too, so the failure line carries the code —
+   `libnx result 0x0559 (module 345, description 2)` — instead of "socket init
+   failed", which is four guesses and a reboot. `NetResultModule` /
+   `NetResultDescription` are `inline constexpr` so the Switch build can
+   `static_assert` the bit layout against libnx's own `R_MODULE` /
+   `R_DESCRIPTION`; the layout is 9 bits and a shift of 9, **not** the 0x3FF
+   and `>>10` a person would guess, and a wrong decode is worse than none
+   because it looks confident.
+
+   **The diagnostic half, which is the part that would have mattered anyway.**
+   `NetSocket::Open` reported all three of its failure stages with one line —
+   "failed to create non-blocking UDP socket" — which is a true statement
+   about the middle stage and a false one about the other two. A missing
+   platform init therefore *looked* like a socket problem, which looks like a
+   firewall. There are now three: `PlatformInit` (names `WSAStartup` and
+   `socketInitializeDefault`, and deliberately does not claim a socket
+   failure), `Socket`, and `Bind` (carries the port, and says "OS-assigned"
+   rather than "port 0" when the port was ephemeral). The three are spec'd for
+   **distinctness**, because the property being bought is the distinction and
+   not any particular wording — collapse them back and the specs fail. The
+   syscalls themselves are not spec'd and cannot be: the suite runs where
+   `socket()` never fails.
+
+   **The third half, found by building.** devkitPro is on this machine, so
+   this was cross-compiled rather than dry-run:
+
+   | check | before | after |
+   |---|---|---|
+   | `common/net/netSocket.cpp` | **did not compile** — `INET_ADDRSTRLEN` undeclared; devkitA64 has no such define | guarded `#ifndef`, compiles |
+   | `common/net/hostAddress.cpp` | **did not compile** — no `ifaddrs.h` on Switch, and no libnx equivalent | `__SWITCH__` arm returns no candidates |
+   | all 14 engine TUs | — | compile clean |
+   | `examples/nx-platformer` | — | links, 8.4 MB `.nro` |
+
+   `hostAddress.cpp` is the one to note: 2.7.1 landed it and this roadmap
+   claimed it "reaches Switch and Android" on the strength of being in
+   `engine-sources.txt`. Being in the list is what gets it *compiled*, and
+   compiling it on Switch is what showed there is no `getifaddrs` to call.
+   Switch now returns an empty candidate list — a lobby saying "no address
+   found", which is true, rather than a stale DHCP guess, which is the exact
+   "an address nobody can connect to" failure the ranking exists to prevent.
+   The ranking half is pure and still works there, so a Switch game supplying
+   candidates some other way gets the same `ChooseBest()`.
+
+   **What this does NOT prove:** that the arm *works* on hardware. The example
+   never opens a socket, `-ffunction-sections` plus `--gc-sections` drops the
+   whole net path from the final `.nro`, and there is no console here. What is
+   proven is that `netSocket.o` for aarch64 contains a real call to
+   `socketInitialize` and `socketGetLastResult`. A hardware run is still owed
+   and is worth doing before anyone relies on Switch LAN play.
 
 ### 3.0.0 — the ECS wave (breaking, reserved, unscheduled)
 
@@ -1361,8 +1414,8 @@ from that notebook are **not** repeated here.
 | Traps 10/11 | Field-site docs: no comment on `SpriteComponent::width/height` (source rect) or `AnimationComponent::vertical` (wrong flag draws nothing / wrong frames). Runtime diagnostic exists (`35877e1`). | 🟡 Partial |
 
 Already scheduled elsewhere — do not re-file: P7 (`socketInitializeDefault`,
-Switch half of P6's platform-init, only remaining piece after the 2026-09-23
-source-list landing) → 2.7.2, P39 (`.map`
+Switch half of P6's platform-init) — **resolved 2026-10-04 in 2.7.2**, which
+also fixed the two latent Switch compile breaks it had been masking — P39 (`.map`
 version) → 2.5.1, `Makefile.win` `-pthread` → "What we will not do" / layout
 wave carry list.
 

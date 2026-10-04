@@ -151,7 +151,7 @@ Most of this is invisible from any single makefile.
 Two modes exist in-repo. There is no `external/storm-engine-v2` submodule pattern here (that convention lives in downstream game repos).
 
 1. **Installed shared library** — all desktop examples and the editor. Headers resolve via `-I/usr/local/include`, the link is `-lstormenginev2`, and `base.mk` bakes `-Wl,-rpath=/usr/local/lib` so binaries run without `LD_LIBRARY_PATH`. On Linux the engine is only ever a `.so`, never a static `.a`. The MinGW build is the exception in form only: `Makefile.win` produces a DLL plus the `libstormenginev2.dll.a` import library the linker needs.
-2. **Engine as source** — `examples/nx-platformer` and `examples/android-platformer` compile engine translation units directly into the game and use a committed symlink `include/stormengine2 -> ../../../common` so `<stormengine2/...>` resolves identically. Invisible in a plain `find`; use `ls -la`. Both read the same canonical source list as the desktop builds (see build system below), so all 13 engine TUs (including `common/net/`) compile on every platform.
+2. **Engine as source** — `examples/nx-platformer` and `examples/android-platformer` compile engine translation units directly into the game and use a committed symlink `include/stormengine2 -> ../../../common` so `<stormengine2/...>` resolves identically. Invisible in a plain `find`; use `ls -la`. Both read the same canonical source list as the desktop builds (see build system below), so all 14 engine TUs (including `common/net/`) compile on every platform. Being *in* the list is what gets a file compiled, not what makes it work — Switch proved that, see Platforms.
 
 Games always include the engine with angle brackets (`#include <stormengine2/ecs.h>`); quoted/relative includes are reserved for the game's own headers.
 
@@ -166,7 +166,7 @@ Canonical game layout: `Makefile` (`NAME = <binname>` + `include ../examples.mk`
 Platform is chosen by **which build file you invoke**, not a `PLATFORM=` variable. There is no `DEBUG` variable; `PREFIX` and `DESTDIR` exist but only for `install`.
 
 - Debian: `make -f Makefile.debian` — g++, `-std=c++17`. The default profile is `-O0 -g`; `PROFILE=release` swaps that for `-O2` and no `-g`, which is what the release workflow passes, so the shipped `.deb` is no longer an `-O0` build.
-- Switch: devkitPro make in `examples/nx-platformer` — `-D__SWITCH__`, `-O2`, and `-fno-exceptions`. `DEVKITPRO` must be exported or the makefile hard-errors before any target is considered (including `clean` and `run`).
+- Switch: devkitPro make in `examples/nx-platformer` — `-D__SWITCH__`, `-O2`, and `-fno-exceptions`. `DEVKITPRO` must be exported or the makefile hard-errors before any target is considered (including `clean` and `run`). **This build now runs here and is worth running after any `common/` change** — it is the only compiler in this repo that will reject code the desktop build accepts, and it found two latent breaks (`INET_ADDRSTRLEN` undeclared, and a `getifaddrs` call with no Switch implementation) that had been hiding behind `common/net/` being excluded until 2026-09-23. It is a compile and link check only: no console, and `-ffunction-sections` + `--gc-sections` mean unreferenced net code never reaches the `.nro`.
 - Android: Gradle + NDK CMake in `examples/android-platformer`.
 
 `-fno-exceptions` on Switch matters: the ECS still throws through `std::map::at` (`Registry::GetSystem`, `GetEntityByTag`), which becomes `abort` there rather than a catchable error. Guard with `HasSystem()` / `DoesTagExist()` instead of relying on a catch. The component cap no longer throws — `EcsComponentIdIsValid` gates every id, and a system handed a type past the cap is **latched off** (`System::disabled`) so it matches nothing, rather than ending up with an empty signature that matches everything.
@@ -178,7 +178,7 @@ export DEVKITPRO=/opt/devkitpro && cd examples/nx-platformer && make   # also: m
 cd examples/android-platformer && ./gradlew assembleDebug installDebug
 ```
 
-Toolchain install (devkitPro packages, `sdkmanager`, submodule init, `adb logcat` filters) is in README.md.
+Toolchain install (devkitPro packages, `sdkmanager`, submodule init, `adb logcat` filters) is in README.md. On this machine devkitPro **is** present at `/opt/devkitpro` and the Switch build works; there is no NDK, so the Android build is still unrun and claims about it stay theoretical.
 
 All six git submodules are Android-only third-party deps under `vendor/android/` (SDL2 2.30.11, SDL_image 2.8.8, SDL_ttf 2.22.0, SDL_mixer 2.8.1, tinyxml2 10.0.0, glm 1.0.1) — a bare clone builds and tests fine without them. SDL2/SDL_image must stay SHARED because SDLActivity `dlopen`s them by name. Two submodule *names* don't match their *paths* (`vendor/android/SDL` → `vendor/android/SDL2`, `vendor/android/SDL_image` → `vendor/android/SDL_image2`).
 
@@ -190,7 +190,7 @@ All six git submodules are Android-only third-party deps under `vendor/android/`
 
 `<stormengine2/compat/global.h>` is the bridge: one `using storm::X;` per public name, pulling them all back into the global namespace so a 1.x game compiles unchanged. It is a bridge, not an API — a game that keeps it forever gains nothing from the change, and a future major removes it. Use it to get green, then drop it and qualify the names.
 
-`specs/compat/bridgedNames.h` is **generated** from the engine headers by `scripts/generate-compat-probes.py` (currently 144 names) and compiled by `specs/compat/global.spec.cpp`, so a public name added to the engine and not to the bridge fails the build. CI runs the generator with `--check`. Run it after adding any public name.
+`specs/compat/bridgedNames.h` is **generated** from the engine headers by `scripts/generate-compat-probes.py` (currently 180 names) and compiled by `specs/compat/global.spec.cpp`, so a public name added to the engine and not to the bridge fails the build. CI runs the generator with `--check`. Run it after adding any public name.
 
 ## ECS model
 
@@ -267,6 +267,7 @@ Rules you can only learn by tracing multiple files:
 - **`NetSnapshot` is two-phase:** `AddItem` only before `Finish()`, `FindItem`/`GetItemByIndex` only after. An in-place `AddItem` replace requires an identical field count. Even an empty delta base must have `Finish()` called on it — otherwise `FindItem` silently fails and every tick re-encodes the whole world as new items.
 - **A stalled handshake auto-bans the IP for 60 s** (CONNECT seen, CONNECT_READY never proven, 10 s timeout). Per-IP concurrent slots cap at 4, which limits local multi-client testing.
 - `NetServer`/`NetClient` install send lambdas capturing `this` (and a slot index), so they must never be copied — and as of 2.0.0 they cannot be: `NetServer`, `NetClient`, `NetConnection` and `NetSocket` all `= delete` their copy constructor and copy assignment (`KNOWN_ISSUES.md` item 6, fixed). Hold them by reference or `unique_ptr`, never by value and never in a resizing `std::vector`; both are also far too large for the stack (~372 KB and ~188 KB). Their destructors fire user callbacks, so explicitly `Stop()`/`Disconnect()` in `onExit()` before teardown.
+- **`NetSocket::Open` has three failure stages and reports them separately** — `PlatformInit` (WSAStartup / libnx `socketInitializeDefault` never ran), `Socket` (the fd or its non-blocking switch), `Bind` (the port, named in the message). They were one line until 2.7.2, which made a missing Switch platform init look like a firewall. libnx routes BSD sockets through the `bsd:` service, which is inert until `socketInitializeDefault()` runs, so a Switch build without that arm gets `socket()` → -1. The syscalls are not spec'd and cannot be; the *pure* half is, in `specs/net/netSocket.spec.cpp`.
 - Disconnect reasons are bare string literals with no enum, scattered across `netConnection.cpp` / `netServer.cpp` / `netClient.cpp` (`"timeout"`, `"server full"`, `"banned"`, …). Don't switch on them; if you must, grep all three files — the set is not centralized.
 
 Reference implementations, in increasing order of realism: `netchat` (minimal console host/join + reliable echo), `netrepl` (60 Hz authoritative host, per-client base snapshot, delta encode/apply — note bases advance on *send*, not ack, so the delta must be vital), `netplay-checkers` (graphical, ECS, but uses **full-state broadcast, not snapshots** — the right call for turn-based, and it doubles as late-joiner sync). `specs/net/netLoopback.spec.cpp`'s `PumpUntil` helper is the canonical verified pattern for driving both sides.

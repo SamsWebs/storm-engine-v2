@@ -26,14 +26,17 @@ slices checked) and continue.
 | 15 | 2.6.2 `input/inputHub.h` | pending | pending |
 | 16 | 2.6.3 Example adopts input hub | pending | pending |
 | 17 | 2.7.1 Host address enumeration | `feat/host-addresses` | done |
-| 18 | 2.7.2 Switch halves (`common/net/` on nx-platformer, `socketInitializeDefault`) | pending | pending |
+| 18 | 2.7.2 Switch halves — `socketInitializeDefault`, three-stage `Open` diagnostics, and the two latent Switch compile breaks it unmasked | `fix/switch-socket-init` | done |
 
 **Skipped (unscheduled):** 3.0.0 ECS wave — trigger-based, not in the queue.
 
 ## Carried TECH_DEBT (not scheduled releases; pick up opportunistically)
 
 Tracked in `docs/ROADMAP.md` → "Carried from the TECH_DEBT notebook":
-P19 residual, P28, P44 residual, P31, P65, P67, traps 10/11.
+P19 residual, P28, P44 residual, P65, P67, traps 10/11.
+(P31 partially addressed 2026-10-04 in slice 18: the first `netSocket` spec file,
+over the pure half only. The `netServer`/`netClient` and hostile-input cases — the
+item's real content — are still open.)
 (P17 residual closed 2026-09-22, slice 2.)
 
 ## Rules

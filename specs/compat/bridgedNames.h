@@ -8,7 +8,7 @@
 // third of the exports, so a name missing from the bridge was missing
 // from the spec too.
 //
-// 174 names.
+// 180 names.
 #pragma once
 
 namespace storm_compat_probe {
@@ -95,6 +95,7 @@ using ::NetCandidate;
 using ::NetChunk;
 using ::NetChunkFlag;
 using ::NetChunkHeader;
+using ::NetClassifySocketSetup;
 using ::NetClient;
 using ::NetConnection;
 using ::NetControlMessage;
@@ -110,12 +111,17 @@ using ::NetPacketHeaderUnpack;
 using ::NetPortToHost;
 using ::NetRandom32;
 using ::NetResolveAddress;
+using ::NetResultDescription;
+using ::NetResultModule;
+using ::NetResultText;
 using ::NetSendControl;
 using ::NetServer;
 using ::NetSnapshot;
 using ::NetSnapshotCache;
 using ::NetSnapshotDelta;
 using ::NetSocket;
+using ::NetSocketOpenFailure;
+using ::NetSocketOpenFailureMessage;
 using ::NetVarIntPack;
 using ::NetVarIntUnpack;
 using ::NonceToToken;

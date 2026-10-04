@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [2.7.0] - 2026-10-04
+
 ### Added
 
 - **`common/tilemapFormat.h`** (2.5.1) — `.map` files can declare a format
@@ -339,8 +341,6 @@
   `sizeof(AssetStore)` 256 → 272 (two `unique_ptr`s); `layout.spec.cpp`
   updated with the reason.
 
-### Fixed
-
 - **One canonical engine source list** (`engine-sources.txt` at the repo
   root). `Makefile.debian`, `Makefile.win`, `examples/nx-platformer` and
   `examples/android-platformer` all read it instead of globbing `common/`
@@ -365,6 +365,60 @@
   a last record that omits the animation flag), not an error. Division by
   zero when both the constructor `tileSize` and the record's tile width
   are zero is now reported instead of trapping. 604 specs.
+
+- **The PR gate's source-list check had never matched anything.**
+  `pr-validate.yml` filtered blank lines with `grep -v '^[[:space:]]*$$'`,
+  and in bash `$$` expands to the PID — so the pattern was
+  `^[[:space:]]*<pid>$` and matched nothing. It was latent until the
+  canonical-source-list slice regenerated `engine-sources.txt` with a
+  leading blank line, at which point **every PR failed** with a diff
+  reading "the list is stale" when the list was correct and the filter
+  was broken. Both halves fixed: `$$` → `$`, and the stray newline
+  removed. The repaired gate was sabotage-tested — deleting a real
+  source and appending a phantom one are each still caught.
+
+- **`VersionHeaderSpec` could not see the makefile in the CI image.**
+  The spec opened `Makefile.debian` relative to the CWD, but
+  `Dockerfile.debian` copies it to `/opt/library/Makefile` — the rename
+  being what lets bare `make` work in the image. The `fopen` returned
+  null, the helper returned `""`, and the first assertion failed with
+  "Expected: false, Actual: 1"; the assertion that actually compares
+  `kEngineVersion` never ran. Tried under both names now. It had been
+  invisible for as long as the gate above it was failing first, which
+  means **the suite had not executed in CI at all** since that slice
+  landed.
+
+- **`ci-build-examples.sh` carried a second copy of `LIB`.** The examples
+  were linked with a hand-written copy of `base.mk`'s flags that still
+  named `-ltinyxml2` and `-llua` after `base.mk` had deliberately dropped
+  both, and had lost the `pkg-config gtk+-3.0` half — so the first example
+  died on `cannot find -ltinyxml2` with a correct build list in
+  `base.mk`. The override existed to keep `-lnfd` off the examples' link
+  line, and `-lnfd` has been in `EDITOR_LIB` rather than `LIB` for a
+  while, so the reason was already stale when the copy was written. The
+  examples now link with `base.mk`'s `LIB`, unmodified.
+
+### Web
+
+- **Center Ice Hockey is now Rink Dynasty**, and it has shipped. The
+  hero figure's `alt` text, its tag and its caption all described a
+  game that no longer existed under that name.
+
+- **Total Futbol added** to the hero as a second figure, tagged
+  `In progress`, linking to its itch.io page. Both games now link to
+  itch.io.
+
+- **The two hero figures are one grid item.** `.hero-grid` is a
+  two-column grid at ≥1000px; the figures were siblings inside it, so
+  the second became a third grid child and wrapped to row 2, column 1 —
+  below the install block, in the wrong column. Wrapping them in one
+  `.hero-shots` div is what the `.reveal + .reveal` margin rule was
+  written for.
+
+- **The spec count on the page was 65 stale** — "676 specs" against a
+  suite that runs 741. Corrected here and in `CLAUDE.md`. The counts in
+  `docs/TECH_DEBT.md`, `docs/ROADMAP.md` and `PROJECT_REFERENCE.md` are
+  point-in-time records and are deliberately left alone.
 
 ## [2.3.1] - 2026-09-08
 

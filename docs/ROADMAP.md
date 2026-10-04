@@ -7,9 +7,23 @@ The point of this file is the *reasoning*. Anyone can re-derive a task list; wha
 gets lost between sessions is why the order is what it is, and which decisions
 were already argued and settled.
 
-**Current release:** 2.3.1. **Next:** 2.4.0. The forward-looking section is
+**Current release:** 2.7.0. The forward-looking section is
 [What's next — the 2.4 → 3.0 line](#whats-next--the-24--30-line), added
 2026-09-17; everything below it is history and stays as it is.
+
+**There is no "Next" line, and that is the finding.** 2.7.0 was cut from the
+2.3.1 tag with slices from three lines already landed and finished: 2.4.1
+through 2.4.5, 2.5.1, 2.5.2, and 2.7.1 and 2.7.2. So 2.7.0 carries 2.4 and
+2.5 work, and **2.6 ships empty** — the mixer (2.6.1) and `inputHub.h` (2.6.2)
+were never started, and 2.6.3 depends on 2.6.2. The version number was chosen to
+describe the content rather than to preserve the sequence; labelling this
+2.4.0 would have put 2.5.x and 2.7.x work on the website, in the `.deb`
+filename and in the pkg-config file under a 2.4.0 version.
+
+The open work is therefore 2.6.x and 3.0.0, and what it gets called is
+genuinely undecided: 2.8.0 if 2.6.x lands as its own additive release, or
+3.0.0 if 2.6.x is folded into the ECS wave. 3.0.0 stays reserved and
+unscheduled until that is argued rather than assumed.
 
 ---
 

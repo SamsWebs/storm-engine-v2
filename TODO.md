@@ -5,6 +5,21 @@ Cross-session roadmap slice tracker. One row per slice of
 file conflicts after another agent's push, resolve by union (keep both
 slices checked) and continue.
 
+**Released 2.7.0 (2026-10-04).** Slices 1–13 and 17–18 all shipped in that one
+tag, so 2.6 shipped empty and the numbering no longer matches the plan — see
+the note at the top of `docs/ROADMAP.md`. Slice 11 is still partial and still
+open; the 2.6.1/2.6.2/2.6.3 rows below are the queue.
+
+**Three unplanned repairs, not roadmap slices, all landed in the same window**
+and recorded in `CHANGELOG.md` → 2.7.0 → Fixed: the PR gate's source-list
+check was matching nothing (`$$` expanded to a PID in a `grep` pattern) which
+had been failing every PR and hiding the next two; `VersionHeaderSpec` could
+not read `Makefile.debian` in the CI image because `Dockerfile.debian` renames
+it; and `ci-build-examples.sh` carried a second copy of `LIB` with
+`-ltinyxml2`/`-llua` that `base.mk` had deliberately dropped. Worth knowing
+because together they mean **the spec suite had not run in CI at all** since
+the canonical-source-list slice — the pipeline was red from the top down.
+
 ## Slice order
 
 | # | Slice | Branch | Status |

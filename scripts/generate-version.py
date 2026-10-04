@@ -2,12 +2,17 @@
 """Generate common/version.h, and check the version sites that hand-bump it.
 
 2.4.4. The release number was hand-written in FOUR places -- Makefile.debian,
-Makefile.win, and eight `data-ver` elements in web/index.html -- and the
+Makefile.win, seven `data-ver` elements in web/index.html, and the `var BAKED`
+literal that element inside the page's version-catch-up script -- and the
 release workflow validated exactly ONE of them. Its "Refuse to release a
 pre-release version" step reads Makefile.debian, so a tag could ship green
 while the project page advertised the previous release and the download
 command on that page copied a package filename for a version that no longer
 existed.
+
+The eighth site was found during the 2.7.0 bump, when it had already drifted
+to 2.3.1: it is not inside a data-ver element, so the sweep that stamps the
+other seven never reached it. See stamp_web.
 
 Makefile.debian stays the single source, deliberately. It is the one site the
 release workflow already parses, with a gate that is documented as having to
@@ -138,7 +143,25 @@ def stamp_web(version: str, text: str) -> str:
         out.append(in_block(m))
         pos = m.end()
     out.append(text[pos:])
-    return "".join(out)
+    text = "".join(out)
+
+    # The page's live-update script searches each data-ver element for this
+    # literal and swaps it for whatever GitHub says the newest release is. It
+    # is not itself inside a data-ver element, so the loop above cannot reach
+    # it, and it was a hand-written eighth site that nothing kept in sync: it
+    # sat at 2.3.1 while the elements it was supposed to match read 2.7.0. The
+    # page still LOOKED right because the elements are stamped directly, but
+    # the catch-up path was dead -- split("2.3.1") inside text reading "2.7.0"
+    # matches nothing, so a release tagged without a page regen would have left
+    # the version frozen on the page forever.
+    text, n = re.subn(r"(var BAKED\s*=\s*')[^']*(')", rf"\g<1>{version}\g<2>",
+                      text)
+    if n != 1:
+        raise SystemExit(
+            f"generate-version: expected exactly one 'var BAKED' literal, "
+            f"found {n}. The page's version-catch-up script has changed shape; "
+            f"update stamp_web rather than letting the version drift again.")
+    return text
 
 
 def main() -> int:

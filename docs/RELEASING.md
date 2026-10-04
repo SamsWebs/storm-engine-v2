@@ -23,6 +23,17 @@ hand-written in **four** places, and the release workflow validates **one**:
 | `web/index.html` — 7 `data-ver` elements | what every visitor to the project page is told |
 | the pushed tag | which release GitHub builds |
 
+There is an eighth site inside the page, found during the 2.7.0 bump: `var
+BAKED`, the literal the page's version-catch-up script searches for inside each
+`data-ver` element and swaps for whatever GitHub reports as the newest release.
+It is not itself inside a `data-ver` element, so the sweep that stamps the
+other seven never reached it, and it had already drifted to 2.3.1 — the page
+still *looked* right because the elements are stamped directly, but the
+catch-up path was dead: `split("2.3.1")` inside text reading "2.7.0" matches
+nothing, so a release tagged without a page regen would have frozen the
+version on the page permanently. `stamp_web` now stamps it and fails loudly if
+the literal is ever renamed.
+
 So a tag can go out green with the website advertising the previous release.
 `scripts/release-check.py` closes that, and the version sites are marked with
 `data-ver` attributes precisely so the check can find them without regex-sweeping

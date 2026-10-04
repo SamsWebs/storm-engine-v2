@@ -342,6 +342,76 @@ Describe(AssetStorePackSpec) {
     std::remove(packPath.c_str());
   };
 
+  It(should_hand_back_bytes_that_outlive_the_store) {
+    // The whole basis of the advice in assetStore.h: "the
+    // bytes are a COPY, safe to hand to SDL_RWFromMem and to outlive however
+    // the caller uses them". A caller that reads a blob, destroys the store
+    // and then hands the bytes to a loader is the documented use, so the
+    // property has to hold rather than be assumed -- the pack is the store's
+    // own stream, and a view into it would be a dangling pointer the moment
+    // the store went out of scope.
+    std::vector<uint8_t> bytes;
+    std::size_t size = 0;
+    {
+      const std::string packPath = WriteTestPack("loadpack-test.pak");
+      AssetStore store;
+      Assert::That(store.LoadPack(packPath), Equals(true));
+      Assert::That(store.ReadBlob("assets/gfx/white8.bmp", &bytes),
+                   Equals(true));
+      size = bytes.size();
+      // Store destroyed here, pack stream and all.
+    }
+    Assert::That(size > 0u, Equals(true));
+    // Still readable, and still the same bytes: not freed, not truncated to 0.
+    Assert::That(bytes.size(), Equals(size));
+    bool allZero = true;
+    for (uint8_t b : bytes) {
+      if (b != 0) {
+        allZero = false;
+        break;
+      }
+    }
+    Assert::That(allZero, Equals(false));
+  };
+
+  It(should_hand_back_a_copy_and_not_a_view_into_pack_memory) {
+    // The other half of "it is a COPY". Two reads of the same entry must not
+    // alias, or a caller that scribbles on a decoded buffer -- the normal thing
+    // to do to bytes you are about to hand to an image pipeline -- would
+    // corrupt the next reader's view of the pack.
+    const std::string packPath = WriteTestPack("loadpack-test.pak");
+    AssetStore store;
+    Assert::That(store.LoadPack(packPath), Equals(true));
+
+    std::vector<uint8_t> first;
+    std::vector<uint8_t> second;
+    Assert::That(store.ReadBlob("assets/gfx/white8.bmp", &first), Equals(true));
+    Assert::That(store.ReadBlob("assets/gfx/white8.bmp", &second),
+                 Equals(true));
+    Assert::That(first.size(), Equals(second.size()));
+
+    // Scribble over the first, and compare against a third read rather than
+    // against `second` -- if the two aliased, `second` would have changed too,
+    // and comparing it to itself would prove nothing.
+    for (std::size_t i = 0; i < first.size(); ++i) {
+      first[i] = 0xAB;
+    }
+    std::vector<uint8_t> third;
+    Assert::That(store.ReadBlob("assets/gfx/white8.bmp", &third), Equals(true));
+    Assert::That(third.size(), Equals(second.size()));
+    bool differs = false;
+    for (std::size_t i = 0; i < third.size(); ++i) {
+      if (third[i] != second[i]) {
+        differs = true;
+        break;
+      }
+    }
+    Assert::That(differs, Equals(false));
+
+    store.ClearAssets();
+    std::remove(packPath.c_str());
+  };
+
   It(should_replace_the_pack_when_loadpack_is_called_again) {
     const std::string packPath = WriteTestPack("loadpack-test.pak");
     AssetStore store;

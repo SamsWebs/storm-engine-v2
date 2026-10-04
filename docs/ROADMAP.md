@@ -466,16 +466,46 @@ readable-override resolver, so "shipped content is read-only, the player's
 replacement lives beside the save" is one call rather than a per-game convention.
 Document all three together in `docs/assets.md`, including the pack-vs-loose
 fallback.
-3. **Raw bytes for the loads the store does not cache.** `ReadBlob` is on the
-branch and **unreleased** (`68b3940`, after the `v2.3.1` tag), and it is **absent
-from `CHANGELOG.md` altogether** — zero hits, while `LoadPack` from the commit
-before it has an entry. That is the repo's own rule broken in the commit that
-added the API: "a public API change is documented in the same branch that makes
-it." Add the entry, and add the second half this item is about: the statement of
-which loads are synchronous and which are lazy, because the two have different
-lifetime rules. A font opened over memory reads its bytes at render time; an
-image decoded through `IMG_Load` does not. That rule currently lives in a game's
-header comment. It belongs next to `ReadBlob`.
+3. **Raw bytes for the loads the store does not cache.** ✅ **Done 2026-10-04.**
+   Two halves, and the first was a plain gap in this repo's own rule.
+
+   **The missing entry.** `ReadBlob` landed on the branch after the `v2.3.1`
+   tag (`68b3940`) and had **no `CHANGELOG.md` entry at all** — zero hits — in
+   the same commit that added a public API, which is the rule this repo states
+   for itself ("a public API change is documented in the same branch that makes
+   it") broken by the commit that made the API. The entry is written now, next
+   to `LoadPack`'s, which is the entry it belongs beside.
+
+   **The statement of which loads are synchronous and which are lazy**, which
+   is the half this item is actually about. It used to live in a downstream
+   game's header comment; it is now a table next to `ReadBlob` in
+   `common/assetStore.h`, **measured from the implementations** rather than
+   assumed:
+
+   | load | call | decode | blob must |
+   |---|---|---|---|
+   | texture, file | `IMG_Load(path)` | synchronous | — |
+   | texture, pack | `IMG_Load_RW(src, freesrc=1)` | synchronous | ends here |
+   | sound, file | `Mix_LoadWAV(path)` | synchronous | — |
+   | sound, pack | `Mix_LoadWAV_RW(src, 1)` | synchronous | ends here |
+   | **font**, file | `TTF_OpenFont(path)` | **lazy** | until the font dies |
+   | **font**, pack | `TTF_OpenFontRW(src, 1)` | **lazy** | until the font dies |
+
+   SDL_image and SDL_mixer decode inside the call and free the RWops on every
+   path. **SDL_ttf does not** — it keeps the RWops (`font->freesrc = 1`) and
+   reads glyphs at *render* time, so a font's bytes must outlive the font. The
+   failure is garbage glyphs or a crash minutes after the load, with nothing
+   pointing back at it, which is exactly why the rule is worth writing down
+   rather than rediscovering. The rule for a caller of `ReadBlob` follows
+   directly: a texture or sound can let the vector go immediately, a
+   `TTF_Font` cannot.
+
+   The bytes are a **copy**, and both halves of that claim are now spec'd —
+   a blob outlives the store, and two reads of one entry never alias. The
+   aliasing case guards a contract rather than a defect that exists today: a
+   `std::vector` out-parameter cannot alias by construction, so it would fire
+   on a future "optimisation" that turned the copy into a shared view. Said so
+   in the spec rather than left to look like a bug catch.
 
 ### 2.6.0 — audio and input (additive)
 

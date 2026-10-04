@@ -21,7 +21,7 @@ slices checked) and continue.
 | 10 | 2.4.5 debug overlay | `feat/debug-overlay` | done |
 | 11 | 2.5.1 Version the `.map` — version header + editor writer landed; the 22-field record parser is still hand-rolled twice (P39) | `feat/map-format-version` | partial |
 | 12 | 2.5.2 Asset path seam | pending | pending |
-| 13 | 2.5.3 Blob lifetime rules (docs) | pending | pending |
+| 13 | 2.5.3 Blob lifetime rules (docs) — missing `ReadBlob` entry + measured sync/lazy table | `docs/blob-lifetime` | done |
 | 14 | 2.6.1 Engine mixer | pending | pending |
 | 15 | 2.6.2 `input/inputHub.h` | pending | pending |
 | 16 | 2.6.3 Example adopts input hub | pending | pending |

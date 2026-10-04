@@ -248,6 +248,34 @@
   or losing a release job, fails the gate instead of leaving the matrix
   quietly wrong. No public API change.
 
+  `sizeof(AssetStore)` 256 → 272 (two `unique_ptr`s); `layout.spec.cpp`
+  updated with the reason.
+
+- **`AssetStore::ReadBlob` — raw bytes for loads the store does not cache.**
+  For a caller that needs a surface, or any loader `AssetStore` does not wrap:
+  a pixel-processing pipeline, the window icon, a font the game opens itself.
+  `ReadBlob("assets/gfx/x.png", &bytes)` returns the same bytes the texture
+  path would have loaded, from the pack when the pack holds the entry and from
+  the loose file when it does not — the same `assets/`-stripping convention as
+  the `Add*` calls, and the same automatic fallback for anything a built pack
+  cannot contain, such as the player's `data/` cache. The bytes are a **copy**:
+  two reads of one entry never alias, and a blob outlives the store.
+
+  The bytes are a copy *because* a `std::vector` out-parameter cannot alias,
+  which makes it a contract worth stating rather than a fact worth assuming —
+  so both halves are now spec'd (`specs/assetStorePack.spec.cpp`).
+
+  **Whose lifetime is the blob?** Every load in the store is either synchronous
+  or lazy, and the two have different rules. SDL_image and SDL_mixer decode
+  inside the call and free the RWops on every path, so their blobs are dead the
+  moment the call returns. **SDL_ttf does not** — it keeps the RWops and reads
+  glyphs at *render* time, so a font's bytes must outlive the font, and the
+  failure surfaces minutes later as garbage glyphs or a crash with nothing
+  pointing back at the load. So: a texture or sound built from a `ReadBlob`
+  result can let the vector go immediately; a `TTF_Font` cannot. That rule used
+  to live in a downstream game's header comment; it is now a table next to the
+  function, measured from the implementations rather than assumed.
+
 - **`AssetStore::LoadPack` — the one-choke-point pack wiring.**
   A game calls `LoadPack("assets.pak")` once at startup; afterwards every
   path-based `AddTexture`/`AddFont`/`AddSound` whose blob is in the pack

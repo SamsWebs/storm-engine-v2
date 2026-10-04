@@ -8,7 +8,7 @@
 // third of the exports, so a name missing from the bridge was missing
 // from the spec too.
 //
-// 180 names.
+// 188 names.
 #pragma once
 
 namespace storm_compat_probe {
@@ -132,6 +132,7 @@ using ::PackWriter;
 using ::Pool;
 using ::Px;
 using ::Ranked;
+using ::ReadTileMapVersion;
 using ::Registry;
 using ::RenderColliderSystem;
 using ::RenderSystem;
@@ -143,6 +144,10 @@ using ::System;
 using ::Text;
 using ::Tile;
 using ::TileMapLoader;
+using ::TileMapVersion;
+using ::TileMapVersionLine;
+using ::TileMapVersionRefusal;
+using ::TileMapVersionState;
 using ::TokenToNonce;
 using ::TouchControl;
 using ::TouchInput;
@@ -191,5 +196,8 @@ using ::kNetResendMs;
 using ::kNetSequenceBits;
 using ::kNetTimeoutMs;
 using ::kNetVarIntMaxBytes;
+using ::kTileMapFormatMagic;
+using ::kTileMapFormatMinVersion;
+using ::kTileMapFormatVersion;
 using ::kUiReferenceHeight;
 } // namespace storm_compat_probe

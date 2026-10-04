@@ -218,6 +218,82 @@ Describe(TileMapLoaderEditorSpec) {
     Assert::That(errorsLogged(), Equals(before));
   };
 
+  It(should_load_a_versioned_map_identically_to_an_unversioned_one) {
+    // The round trip. editorVersioned.map is editor.map with the shared header
+    // line the editor now writes, so if the version line cost a tile or moved
+    // the stream, this is where it shows. Same four tiles, same fields.
+    TileMapLoader plain(editorMap, "", 8);
+    TileMapLoader versioned("./specs/assets/tilemaps/editorVersioned.map", "",
+                            8);
+    Assert::That(versioned.getMap().size(), Equals(plain.getMap().size()));
+    for (std::size_t i = 0; i < plain.getMap().size(); ++i) {
+      Assert::That(versioned.getMap()[i].assetId,
+                   Equals(plain.getMap()[i].assetId));
+      Assert::That(versioned.getMap()[i].pixelSrcPosition.x,
+                   Equals(plain.getMap()[i].pixelSrcPosition.x));
+      Assert::That(versioned.getMap()[i].zIndex,
+                   Equals(plain.getMap()[i].zIndex));
+      Assert::That(versioned.getMap()[i].numFrames,
+                   Equals(plain.getMap()[i].numFrames));
+    }
+  };
+
+  It(should_refuse_a_map_written_by_a_newer_engine_rather_than_half_read_it) {
+    // The whole reason for the header. Half-reading a newer format gives a
+    // level that renders and is wrong; refusing gives a build that says why.
+    int before = errorsLogged();
+
+    TileMapLoader loader("./specs/assets/tilemaps/editorFutureVersion.map", "",
+                         8);
+
+    Assert::That(loader.getMap().size(), Equals(0u));
+    Assert::That(errorsLogged() > before, Equals(true));
+  };
+
+  It(should_refuse_a_map_from_below_the_supported_floor) {
+    TileMapLoader loader("./specs/assets/tilemaps/editorAncientVersion.map", "",
+                         8);
+    Assert::That(loader.getMap().size(), Equals(0u));
+  };
+
+  It(should_refuse_a_header_whose_version_is_not_a_number) {
+    // Refused rather than treated as an old map. Falling through to the old
+    // parser is the silent misread the header exists to prevent.
+    int before = errorsLogged();
+
+    TileMapLoader loader("./specs/assets/tilemaps/editorMalformedVersion.map",
+                         "", 8);
+
+    Assert::That(loader.getMap().size(), Equals(0u));
+    Assert::That(errorsLogged() > before, Equals(true));
+  };
+
+  It(should_keep_loading_every_tile_when_one_record_omits_the_animation_flag) {
+    // The measured bug, not a hypothetical. The animation flag is the only
+    // optional field in a record, and the tolerance for a missing one was
+    // implemented as "clean EOF", which only ever fires on the LAST record.
+    // Anywhere else the parse of the next record's group token failed, the
+    // loader reported a truncated file and returned an EMPTY MAP -- so one
+    // hand-edit, or one writer that skipped a zero flag, cost a whole level.
+    int before = errorsLogged();
+
+    TileMapLoader loader(
+        "./specs/assets/tilemaps/editorAnimationFlagOptional.map", "", 8);
+
+    Assert::That(loader.getMap().size(), Equals(3u));
+    // And a record that legitimately omits the flag is not an ERROR either --
+    // the other direction of trigger-happy. The truncated-record cases above
+    // are what keep the two apart.
+    Assert::That(errorsLogged(), Equals(before));
+    // Record 1 omitted the flag, so it is not animated; records 2 and 3 kept
+    // theirs, including the one that carries real animation data.
+    Assert::That(loader.getMap()[0].assetId, Equals("grass"));
+    Assert::That(loader.getMap()[0].isAnimated, Equals(false));
+    Assert::That(loader.getMap()[2].assetId, Equals("water"));
+    Assert::That(loader.getMap()[2].isAnimated, Equals(true));
+    Assert::That(loader.getMap()[2].numFrames, Equals(4));
+  };
+
   It(should_report_tile_width_zero_instead_of_dividing_by_zero) {
     // Both the constructor tileSize and the record's tileW are zero, so the
     // grid-position divide has no divisor. Report rather than trap.

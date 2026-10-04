@@ -19,7 +19,7 @@ slices checked) and continue.
 | 8 | 2.4.3 `text.h` verbs | `feat/text-verbs` | done |
 | 9 | 2.4.4 `version.h` | `feat/version-header` | done |
 | 10 | 2.4.5 debug overlay | `feat/debug-overlay` | done |
-| 11 | 2.5.1 Version the `.map` (+ editor writer) | pending | pending |
+| 11 | 2.5.1 Version the `.map` — version header + editor writer landed; the 22-field record parser is still hand-rolled twice (P39) | `feat/map-format-version` | partial |
 | 12 | 2.5.2 Asset path seam | pending | pending |
 | 13 | 2.5.3 Blob lifetime rules (docs) | pending | pending |
 | 14 | 2.6.1 Engine mixer | pending | pending |

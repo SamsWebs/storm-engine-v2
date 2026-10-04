@@ -7,31 +7,55 @@ The point of this file is the *reasoning*. Anyone can re-derive a task list; wha
 gets lost between sessions is why the order is what it is, and which decisions
 were already argued and settled.
 
-**Current release:** 2.7.0. The forward-looking section is
-[What's next — the 2.4 → 3.0 line](#whats-next--the-24--30-line), added
+**Current release:** 2.7.0. **Next:** 2.8.0. The forward-looking section is
+[What's next — the 2.4 → 3.0 line, with 2.6 retired](#whats-next--the-24--30-line-with-26-retired), added
 2026-09-17; everything below it is history and stays as it is.
 
-**There is no "Next" line, and that is the finding.** 2.7.0 was cut from the
-2.3.1 tag with slices from three lines already landed and finished: 2.4.1
-through 2.4.5, 2.5.1, 2.5.2, and 2.7.1 and 2.7.2. So 2.7.0 carries 2.4 and
-2.5 work, and **2.6 ships empty** — the mixer (2.6.1) and `inputHub.h` (2.6.2)
-were never started, and 2.6.3 depends on 2.6.2. The version number was chosen to
-describe the content rather than to preserve the sequence; labelling this
-2.4.0 would have put 2.5.x and 2.7.x work on the website, in the `.deb`
-filename and in the pkg-config file under a 2.4.0 version.
+**Why the next release skips 2.6, and what 2.8.0 is.** 2.7.0 was cut from the
+2.3.1 tag carrying slices from three lines already landed and finished: 2.4.1
+through 2.4.5, 2.5.1, 2.5.2, and 2.7.1 and 2.7.2. So it carried 2.4 and 2.5
+work, and **2.6 shipped empty** — the mixer and `inputHub.h` were never
+started. The number described the content rather than preserving the sequence;
+labelling it 2.4.0 would have put 2.5.x and 2.7.x work on the website, in the
+`.deb` filename and in the pkg-config file under a 2.4.0 version.
 
-The open work is therefore 2.6.x and 3.0.0, and what it gets called is
-genuinely undecided: 2.8.0 if 2.6.x lands as its own additive release, or
-3.0.0 if 2.6.x is folded into the ECS wave. 3.0.0 stays reserved and
-unscheduled until that is argued rather than assumed.
+So the old 2.6 line is **renumbered to 2.8.0**, and 2.6 is retired as a number
+rather than left as an empty release nobody will ever cut:
+
+| Was | Now | Why |
+|---|---|---|
+| 2.6.1 engine mixer | **2.8.1** | renumbered, not started |
+| 2.6.2 `input/inputHub.h` | **2.8.2** | renumbered, not started; 2.8.3 depends on it |
+| 2.6.3 an example adopts it | **2.8.3** | renumbered, not started |
+| 2.5.1's open record half (P39) | **2.8.4** | see below |
+
+Renumbering rather than keeping 2.6.x is the point of the
+[versioning policy](#versioning-policy) below: an empty minor is legal but it
+advertises a line that has no content, and a consumer reading "2.6" would look
+for a mixer release that does not exist. **2.8.4 is new** — the 2.5.1 record
+parser never landed and its own line is historical, but the policy is explicit
+that a `.map` format change is a **minor**, and the version field and refusal
+path it needs are already shipped, so it rides the next minor rather than
+waiting on a major it does not warrant.
+
+**3.0.0 is unchanged: reserved and unscheduled.** It is the breaking ECS wave,
+its items are breaking by construction, and folding additive work into it to
+"fill" the numbering would spend the breaking budget for no reason. The
+earlier note here left it genuinely undecided between 2.8.0 and 3.0.0; the
+policy table settles it without needing a judgement call.
 
 ---
 
-## What's next — the 2.4 → 3.0 line
+## What's next — the 2.4 → 3.0 line, with 2.6 retired
 
-Added 2026-09-17. This is the first forward-looking section in this file. It was
-written against the tree at 2.3.1-6-g2430bf9 plus an audit of Center Ice Hockey's
-consumption of the engine.
+Added 2026-09-17 as "What's next — the 2.4 → 3.0 line"; renamed 2026-10-04 once
+2.7.0 shipped carrying three lines at once and no 2.6 was ever cut. The section
+and its reasoning are unchanged — only the span now has a hole in it, and
+saying so beats leaving a heading that implies a sequence nobody followed.
+
+This is the first forward-looking section in this file. It was written against
+the tree at 2.3.1-6-g2430bf9 plus an audit of Center Ice Hockey's consumption
+of the engine.
 
 ### The audience decides the order
 
@@ -137,14 +161,15 @@ used by nobody, and nothing anywhere said so.
 | 2.4.3 `text.h` verbs | S | nothing — additive statics |
 | 2.4.4 `version.h` | S | nothing; examples adopt `--version` |
 | 2.4.5 debug overlay | S | nothing — opt in |
-| 2.5.1 version the `.map` (header done; record parser still open) | M | rebuild; **the editor must write the new version too** |
+| 2.5.1 version the `.map` — **version half shipped in 2.7.0**; the record parser is now **2.8.4** | M | rebuild; **the editor must write the new version too** |
 | 2.5.2 asset path seam | M | nothing, unless the game wants a writable base |
 | 2.5.3 blob lifetime rules | S | nothing — documentation |
-| 2.6.1 engine mixer | M | nothing |
-| 2.6.2 `input/inputHub.h` | L | opt in; `ActionMap` unchanged |
-| 2.6.3 an example adopts it | S | nothing |
 | 2.7.1 host address enumeration | S | nothing |
 | 2.7.2 the Switch halves | S | Switch consumers rebuild |
+| 2.8.1 engine mixer (was 2.6.1) | M | nothing |
+| 2.8.2 `input/inputHub.h` (was 2.6.2) | L | opt in; `ActionMap` unchanged |
+| 2.8.3 an example adopts it (was 2.6.3) | S | nothing |
+| 2.8.4 the `.map` record parser (was 2.5.1's open half, P39) | M | rebuild; the version field and refusal path already shipped |
 | 3.0.0 the ECS wave | L | rebuild + an `UPGRADING.md` entry per break |
 
 **Effort is a band, not an estimate:** S is under a day, M is one to two, L is a
@@ -461,15 +486,18 @@ player, which the logger is not.
    flag is now not an *error* either, which is the direction the fix could
    easily have overshot.
 
-   **Still open, and it is the larger half:** the 22-field record is still
-   parsed twice, by hand — `loadFilemapEditor` and the editor's `LoadMap` — and
-   `SaveMap` is still the sole writer with no spec that calls it. P39's
-   `TileRecord` plus `readTileRecord`/`writeTileRecord` is not written. Left for
-   its own branch deliberately: it refactors three functions in a binary that
-   cannot be linked here (no libnfd), so it would be the one change in the slice
-   with no test able to observe it. Verified this slice: the editor's
-   `FileLoader.cpp` **compiles** against the new header, and the object contains
-   the `storm-map` string; the link failure is the documented libnfd gap.
+   **Still open, and it is the larger half — now tracked as 2.8.4, not here:**
+   the 22-field record is still parsed twice, by hand — `loadFilemapEditor` and
+   the editor's `LoadMap` — and `SaveMap` is still the sole writer with no spec
+   that calls it. P39's `TileRecord` plus `readTileRecord`/`writeTileRecord` is
+   not written. It moved to the 2.8.0 section when 2.7.0 shipped 2.6 empty;
+   the reasoning for putting a `.map` format change in a minor rather than
+   waiting is in the [versioning policy](#versioning-policy). Left for its own
+   branch deliberately: it refactors three functions in a binary that cannot be
+   linked here (no libnfd), so it would be the one change in the slice with no
+   test able to observe it. Verified in this slice: the editor's `FileLoader.cpp`
+   **compiles** against the new header, and the object contains the `storm-map`
+   string; the link failure is the documented libnfd gap.
 
 2. **The asset path seam, written down and completed.** ✅ **Done 2026-10-04.**
    This item's own premise turned out to be wrong, and that is the first thing
@@ -572,39 +600,6 @@ player, which the logger is not.
    `std::vector` out-parameter cannot alias by construction, so it would fire
    on a future "optimisation" that turned the copy into a shared view. Said so
    in the spec rather than left to look like a bug catch.
-
-### 2.6.0 — audio and input (additive)
-
-1. **An engine mixer.** Music versus sfx channel ownership, a pure volume model,
-pack-aware loads, and a seam for a game to hold its own music. The engine already
-links `SDL2_mixer` and already caches `Mix_Chunk`, so this adds a policy layer,
-not a dependency.
-2. **Make the input layer usable — add, do not rewrite.** `actionMap.h` has no
-consumer anywhere in the repo, and it is not because nobody found it: the three
-defects the flagship game's own reader documents are the reason a game wrote its
-own 627 lines.
-   - the event queue is drained only by the state on top, so a state pushed under
-     freezes — a pad plugged in while a child screen is up is never enumerated;
-   - hot-plug state must be process-wide, not per-state;
-   - edges must be per-state, so a new screen does not inherit the previous
-     screen's "was down".
-
-   All three are **additive fixes** if the answer is a new header rather than a
-   change to `ActionMap`: an `input/inputHub.h` that owns the device list and the
-   poll, hands each state its own edge trackers, and leaves `ActionMap` as the
-   binding table it already is. The repo rule applies — correct or extend the
-   existing mechanism before adding one — and here extending it means putting the
-   `ActionMap` per state *inside* a hub that owns what must be process-wide. That
-   is why this item stays in a minor instead of drifting into 3.0, which the first
-   draft of this section let it do by conflating "the abstraction is unused" with
-   "the abstraction must break".
-3. **Then make an example adopt it.** `examples/shooter` or `examples/sports`,
-   whichever is smaller, moves to the hub and drops its hand-rolled polling
-   (`grep -rn SDL_PollEvent examples/ --include=*.cpp` is **16 sites across nine
-   examples**). This is the step that is easy to skip and is the whole point: an
-   abstraction proven only by its own spec is not proven, which is exactly what
-   happened to `actionMap.h`, and nothing anywhere said so, because an uncalled
-   function is warning-free and the build is clean.
 
 ### 2.7.0 — net polish
 
@@ -714,6 +709,66 @@ Switch at all. It now has a `__SWITCH__` arm that returns no candidates — see
    `socketInitialize` and `socketGetLastResult`. A hardware run is still owed
    and is worth doing before anyone relies on Switch LAN play.
 
+### 2.8.0 — audio and input, plus the `.map` record parser (additive)
+
+**Renumbered from 2.6.0 on 2026-10-04, after 2.7.0 shipped 2.6 empty.** None of
+this was started, so the slices move with the release rather than leaving a
+line that advertises a mixer that does not exist. The reasoning is at the top of
+this file. The argument in item 2 below is unchanged and is why the work stays
+in a minor instead of drifting into 3.0 — that is still the load-bearing claim
+here.
+
+1. **An engine mixer.** Music versus sfx channel ownership, a pure volume model,
+pack-aware loads, and a seam for a game to hold its own music. The engine already
+links `SDL2_mixer` and already caches `Mix_Chunk`, so this adds a policy layer,
+not a dependency.
+2. **Make the input layer usable — add, do not rewrite.** `actionMap.h` has no
+consumer anywhere in the repo, and it is not because nobody found it: the three
+defects the flagship game's own reader documents are the reason a game wrote its
+own 627 lines.
+   - the event queue is drained only by the state on top, so a state pushed under
+     freezes — a pad plugged in while a child screen is up is never enumerated;
+   - hot-plug state must be process-wide, not per-state;
+   - edges must be per-state, so a new screen does not inherit the previous
+     screen's "was down".
+
+   All three are **additive fixes** if the answer is a new header rather than a
+   change to `ActionMap`: an `input/inputHub.h` that owns the device list and the
+   poll, hands each state its own edge trackers, and leaves `ActionMap` as the
+   binding table it already is. The repo rule applies — correct or extend the
+   existing mechanism before adding one — and here extending it means putting the
+   `ActionMap` per state *inside* a hub that owns what must be process-wide. That
+   is why this item stays in a minor instead of drifting into 3.0, which the first
+   draft of this section let it do by conflating "the abstraction is unused" with
+   "the abstraction must break".
+3. **Then make an example adopt it.** `examples/shooter` or `examples/sports`,
+   whichever is smaller, moves to the hub and drops its hand-rolled polling
+   (`grep -rn SDL_PollEvent examples/ --include=*.cpp` is **16 sites across nine
+   examples**). This is the step that is easy to skip and is the whole point: an
+   abstraction proven only by its own spec is not proven, which is exactly what
+   happened to `actionMap.h`, and nothing anywhere said so, because an uncalled
+   function is warning-free and the build is clean.
+4. **The `.map` record parser** (P39) — moved here from 2.5.1, which shipped only
+   its version half. `common/tilemapFormat.h` is the single owner of the *header*;
+   the **22-field record is still parsed twice, by hand** — `loadFilemapEditor`
+   and the editor's `LoadMap` — and `SaveMap` is still the sole writer with no
+   spec that calls it. P39's `TileRecord` plus `readTileRecord`/`writeTileRecord`
+   is not written.
+
+   It rides this minor because the [versioning policy](#versioning-policy) says
+   a `.map` format change is a **minor** carrying a version field and a refusal
+   path, and both already shipped in 2.7.0 — so the hard half is done and what
+   remains is the duplication.
+
+   **The obstacle recorded in 2.5.1 still stands and is worth repeating:** it
+   refactors three functions in a binary that *cannot be linked* here (no
+   libnfd), so it would be the one change in this release with no test able to
+   observe it. The mitigation available now is that the editor compiles to
+   objects in CI, so a header change is still observable — but a *behaviour*
+   change in `LoadMap` is not, and pretending otherwise is how the
+   `getifaddrs` defect shipped. Whoever takes this should decide first how to
+   make it testable, not after.
+
 ### 3.0.0 — the ECS wave (breaking, reserved, unscheduled)
 
 Reserved, not dated. It happens when a game is large enough that one of these is
@@ -749,10 +804,16 @@ again.
 
 | Change | Release |
 |---|---|
-| New header, new statics, new free function, new non-virtual method body | **Minor** (2.4, 2.5, 2.6, 2.7) |
+| New header, new statics, new free function, new non-virtual method body | **Minor** (2.4, 2.5, 2.7, 2.8) |
 | `= delete` of a copy operation on a type that cannot usefully be copied | **Minor**, with a CHANGELOG note |
 | Public signature change, struct layout change, member deletion, include trim | **Major** (3.0) |
 | `.map` or other on-disk format change | **Minor**, with a version field and a refusal path |
+
+**2.6 is absent from that row on purpose, not by omission.** 2.7.0 shipped
+carrying the 2.4, 2.5 and 2.7 lines at once, so no 2.6 was ever cut — the
+number moved to 2.8 with the work still attached to it. A reader comparing this
+list against the tags will not find a v2.6.x, and should not go looking for
+one.
 
 Three rules that go with the table:
 

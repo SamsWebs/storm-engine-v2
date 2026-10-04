@@ -2,6 +2,63 @@
 
 ## [Unreleased]
 
+### Added
+
+- **`common/audio/mixer.h` + `common/audio/soundMixer.h`** (2.8.1) — a mixer.
+  The engine decoded and cached sounds and stopped there, so everything after
+  `GetSound` was the game's problem, and the one desktop example with audio
+  shows the shape of it: `Mix_PlayChannel(-1, chunk, 0)`.
+
+  `-1` is "first free channel". The channel a sound lands on is whatever
+  happened to be free, so a burst of quiet moves can occupy every channel and
+  leave an explosion with nowhere to go — the loud thing is the one you drop.
+  There was also no volume model above SDL_mixer at all.
+
+  New: `SoundPriority`, `kLowestPriority`, `kNormalPriority`,
+  `kHighestPriority`, `kFullVolume`, `ChannelVerdict`, `ChannelDecision`,
+  `ChannelPolicy`, `VolumeModel`, `SoundMixer`. Bridged in
+  `compat/global.h` (204 names).
+
+  **Split the same way the rest of the engine splits.** `mixer.h` is the
+  policy — pure, header-only, no SDL_mixer, and therefore spec'd without an
+  audio device, which is what CI has. `soundMixer.h` is a thin layer of calls
+  SDL_mixer already has. That is the arrangement `common/net/hostAddress.h`
+  uses, and the reason is the same: the ranking rule was worth testing and the
+  socket was not.
+
+  The channel rules, in order, because the order is the design: a free channel
+  is always taken (contention must not become a gate on *starting*); otherwise
+  steal the least important busy channel, but only if it is **strictly** less
+  important than what is arriving; otherwise drop. Strictly-less is the
+  load-bearing word — letting an equal priority cut off its equal makes two
+  sounds of the same class fight over one channel forever, with the winner
+  decided by frame timing. Ties resolve to the lowest channel index so the
+  same frame makes the same choice twice.
+
+  **The engine does not own music.** There is no `PlayMusic`, which is a
+  decision rather than a gap: SDL_mixer has one music channel and a game with a
+  score or dynamic music needs to hold that handle itself. `ApplyMusicVolume`
+  exists so such a game still obeys the same settings screen. Owning the music
+  channel on the game's behalf would be the same failure as owning the input
+  poll — convenient right up until the game needs the thing it cannot get.
+
+  20 new specs (`specs/audio/mixer.spec.cpp`), 761 total, 3 sabotages all
+  caught. `examples/netplay-checkers` converted off `Mix_PlayChannel(-1, ...)`,
+  which is the half that makes this not another `actionMap.h`: the three sounds
+  are ranked win > capture > move, so a burst of moves can no longer hold
+  every channel against the win.
+
+  **What is not spec'd, deliberately:** the device half. `Open`, `Close` and
+  the actual `Mix_PlayChannel` call need a sound card, and a case that needs
+  hardware to run is a case that will silently stop running — the same
+  reasoning `specs/tilemapFormat.spec.cpp` records for the map reader. The
+  policy carries the decisions; the device carries none.
+
+  `SoundMixer`, `VolumeModel`, `ChannelPolicy` and `ChannelDecision` are
+  pinned in `specs/layout.spec.cpp` (112, 12, 4, 8). None crosses a `.so`
+  boundary, so none is an inter-library ABI, but a game holds a mixer and the
+  two policy types are small enough to embed in its own settings struct.
+
 ## [2.7.0] - 2026-10-04
 
 ### Added

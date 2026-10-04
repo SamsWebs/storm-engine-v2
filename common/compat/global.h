@@ -25,6 +25,8 @@
 
 #include "../assetPath.h"
 #include "../assetStore.h"
+#include "../audio/mixer.h"
+#include "../audio/soundMixer.h"
 #include "../collision/shapes.h"
 #include "../debugOverlay.h"
 #include "../ecs.h"
@@ -126,6 +128,22 @@ using storm::TileMapVersionState;
 using storm::XmlLoader;
 using storm::XmlObjectDef;
 using storm::XmlTextureDef;
+
+// ── Audio ───────────────────────────────────────────────────────────────────
+// Volume and channel policy is pure and SDL-free (audio/mixer.h); SoundMixer
+// is the thin SDL_mixer layer over it (audio/soundMixer.h). The engine does
+// NOT own music -- there is no PlayMusic, and a game holding its own Mix_Music
+// * still gets the volume model's music bus via ApplyMusicVolume().
+using storm::ChannelDecision;
+using storm::ChannelPolicy;
+using storm::ChannelVerdict;
+using storm::kFullVolume;
+using storm::kHighestPriority;
+using storm::kLowestPriority;
+using storm::kNormalPriority;
+using storm::SoundMixer;
+using storm::SoundPriority;
+using storm::VolumeModel;
 
 // ── Logging ─────────────────────────────────────────────────────────────────
 // LogType is an unscoped enum, so its enumerators are members of namespace

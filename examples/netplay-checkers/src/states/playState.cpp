@@ -1266,8 +1266,8 @@ void PlayState::InitAudio() {
     audioDisabled_ = true;
     return;
   }
-  if (Mix_OpenAudio(44100, MIX_DEFAULT_FORMAT, 2, 512) < 0) {
-    printf("(audio unavailable: %s)\n", Mix_GetError());
+  if (!mixer_.Open()) {
+    printf("(audio unavailable)\n");
     audioDisabled_ = true;
     return;
   }
@@ -1284,23 +1284,24 @@ void PlayState::InitAudio() {
 void PlayState::CloseAudio() {
   // The chunks live in the AssetStore now and are freed by ClearAssets, which
   // onExit() runs before this - Mix_CloseAudio frees every open chunk itself,
-  // so clearing afterwards would double-free.
-  Mix_CloseAudio();
+  // so clearing afterwards would double-free. SoundMixer::Close() has the
+  // same requirement and says so at the top of its header.
+  mixer_.Close();
   SDL_QuitSubSystem(SDL_INIT_AUDIO);
 }
 
 void PlayState::PlayStateSounds() {
   if (audioDisabled_)
     return;
+  // A move happens on every ply, a capture ends one, a win ends the game.
+  // Ranking them is the whole point: a burst of moves no longer holds every
+  // channel against the sound the player actually needs to hear.
   if (game_.winner >= 0) {
-    if (Mix_Chunk *c = assetStore_->GetSound("win"))
-      Mix_PlayChannel(-1, c, 0);
+    mixer_.Play(assetStore_.get(), "win", kHighestPriority);
   } else if (game_.lastCaptured > 0) {
-    if (Mix_Chunk *c = assetStore_->GetSound("capture"))
-      Mix_PlayChannel(-1, c, 0);
+    mixer_.Play(assetStore_.get(), "capture", kNormalPriority + 10);
   } else if (game_.lastFrom >= 0) {
-    if (Mix_Chunk *c = assetStore_->GetSound("move"))
-      Mix_PlayChannel(-1, c, 0);
+    mixer_.Play(assetStore_.get(), "move", kLowestPriority);
   }
 }
 

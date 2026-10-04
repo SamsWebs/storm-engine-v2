@@ -1,4 +1,5 @@
 common/assetStore.cpp
+common/audio/soundMixer.cpp
 common/ecs.cpp
 common/gameStateMachine.cpp
 common/logger.cpp

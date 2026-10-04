@@ -43,7 +43,7 @@ the canonical-source-list slice — the pipeline was red from the top down.
 | 11 | 2.5.1 Version the `.map` — version header + editor writer landed in 2.7.0; the 22-field record half moved to row 19 | `feat/map-format-version` | partial → split |
 | 12 | 2.5.2 Asset path seam — `assetPath.h` + `docs/assets.md`; the `./` defect made public | `feat/asset-path-seam` | done |
 | 13 | 2.5.3 Blob lifetime rules (docs) — missing `ReadBlob` entry + measured sync/lazy table | `docs/blob-lifetime` | done |
-| 14 | 2.8.1 Engine mixer (was 2.6.1) | pending | pending |
+| 14 | 2.8.1 Engine mixer (was 2.6.1) — `audio/mixer.h` (pure policy) + `audio/soundMixer.h`, and `netplay-checkers` converted off `Mix_PlayChannel(-1, ...)` | `feat/engine-mixer` | done |
 | 15 | 2.8.2 `input/inputHub.h` (was 2.6.2) — blocks row 16 | pending | pending |
 | 16 | 2.8.3 Example adopts input hub (was 2.6.3) | pending | pending |
 | 17 | 2.7.1 Host address enumeration | `feat/host-addresses` | done |

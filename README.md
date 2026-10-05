@@ -178,6 +178,23 @@ sudo apt install ./libstormenginev2_<version>_amd64.deb
 sudo apt install ./libstormenginev2_<version>_arm64.deb
 ```
 
+### If `apt` refuses the package: `libc6 (>= 2.32)` is not satisfied
+
+This is the expected failure on an older distro, and it is not a broken
+package. The `.deb` is built on Debian 12 (bookworm), so its library needs a
+newer glibc and libstdc++ than Ubuntu 20.04, Debian 10/11, Mint 20 or RHEL 8
+provide. `apt` is correctly refusing to install a library that cannot load.
+
+**Building from source is the fix, and on those distros it produces a library
+with a far lower floor** -- no SDL downgrade and no new compiler required. The
+source has been verified building and passing its full test suite on GCC 9.4 /
+glibc 2.31; a library built that way needs only glibc 2.14 and libstdc++
+3.4.21. [Building from Source](#building-from-source) below has the commands.
+
+Do not reach for `dpkg --force-depends` or hand-extracting the `.deb`. Both
+appear to work and then fail at load time instead, which is a worse bug report
+than the one you started with.
+
 ### Windows (x64, MinGW-w64)
 
 Download `stormengine2-<version>-win64.zip` from the same Releases page and
@@ -252,6 +269,34 @@ g++ -std=c++17 mygame.cpp $(pkg-config --cflags --libs stormengine2) -o mygame
 > `DSO missing from command line`, because it will not let your game borrow the
 > engine's transitive libraries. `pkg-config` emits the full set.
 
+#### At a custom `PREFIX`, add `-Wl,-rpath`
+
+`pkg-config` emits `-L${libdir}` but **no matching rpath**. With the default
+`/usr/local/lib` that is invisible, because it is on the default search path.
+At a prefix you chose, it is not, and the dynamic loader may resolve a
+*different* copy of `libstormenginev2.so` that is already installed
+system-wide:
+
+```bash
+g++ -std=c++17 mygame.cpp -o mygame \
+    -Wl,-rpath,$HOME/.local/stormengine2/lib \
+    $(pkg-config --cflags --libs stormengine2)
+```
+
+This fails silently rather than loudly, which is what makes it worth stating.
+The game compiles against the headers at your prefix and links cleanly, then
+loads whatever `libstormenginev2.so` the loader finds first — an older one
+installed system-wide, say. **Your own version banner will not reveal it:**
+`kEngineVersion` is a `constexpr` in a header, so it is baked into your game at
+compile time and the engine library exports no such symbol. A game can print
+`v2.7.0` while running against a library from months earlier.
+
+Check which one you actually got:
+
+```bash
+ldd ./mygame | grep stormengine2
+```
+
 ## Building from Source
 
 ### Prerequisites
@@ -271,10 +316,18 @@ sudo apt update && sudo apt install -y \
 git submodule update --init vendor/android/tinyxml2
 ```
 
-Without it the build stops at the first `#include "tinyxml2.h"`. It is under
-`vendor/android/` because Android vendored it first, not because Android is the
-only user -- the Linux, Windows and Android builds all compile this same pinned
-copy now, and `libtinyxml2-dev` is no longer a build dependency on any of them.
+Without it the build compiles the other fifteen engine sources and then stops
+with:
+
+```
+make: *** No rule to make target '/path/to/storm-engine-v2/vendor/android/tinyxml2/tinyxml2.cpp',
+needed by 'common/tinyxml2.o'.  Stop.
+```
+
+It is under `vendor/android/` because Android vendored it first, not because
+Android is the only user -- the Linux, Windows and Android builds all compile
+this same pinned copy now, and `libtinyxml2-dev` is no longer a build
+dependency on any of them.
 
 Install [Igloo](https://github.com/codewars/igloo) (test framework):
 
@@ -291,9 +344,28 @@ sudo cmake --build . --target install
 ### Build & install the library
 
 ```bash
-make -f Makefile.debian
+make -f Makefile.debian target
 sudo make -f Makefile.debian install
 ```
+
+Note `target`, not a bare `make -f Makefile.debian`. The **default** goal is
+`all: test-target run-test target`, so the bare form builds the entire spec
+suite first — which needs the Igloo/snowhouse install above and takes several
+minutes before it produces a library. `target` builds the library alone and
+needs no test framework; the two are independent.
+
+**Without root**, install into a prefix you own instead. `install` honours
+`PREFIX`, so this never touches `/usr/local`:
+
+```bash
+make -f Makefile.debian target
+make -f Makefile.debian install PREFIX=$HOME/.local/stormengine2
+export PKG_CONFIG_PATH=$HOME/.local/stormengine2/lib/pkgconfig
+```
+
+Then link your game with an explicit rpath — see
+[Building a game against the installed engine](#building-a-game-against-the-installed-engine)
+for why pkg-config alone is not enough at a custom prefix.
 
 ### Run the tests
 

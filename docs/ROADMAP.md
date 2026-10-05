@@ -1619,6 +1619,88 @@ recipe between `editor/Makefile` and `base.mk`) are pre-existing and untouched.
 Reviewed, ruled on, and deliberately left. Listed so they are not rediscovered as
 though new.
 
+### The shipped .deb cannot install below glibc 2.32 / GCC 11 — not yet fixed
+
+Found 2026-10-05, on the maintainer's own machine (Linux Mint 20.3, glibc 2.31,
+libstdc++ 3.4.28): the v2.7.0 `.deb` refuses to install with
+`libc6 (>= 2.32)` unsatisfied. Real and reproducible; the declaration is honest,
+the binary simply cannot load there.
+
+**The floor is exactly TWO symbols, and the engine's own code is not the
+reason for either.** Measured on the published v2.7.0 amd64 `.so`, then
+located with `nm -uC` per object inside the bookworm image:
+
+| Symbol | Where it comes from |
+|---|---|
+| `__libc_single_threaded@GLIBC_2.32` | `common/ecs.o` only — libstdc++'s `shared_ptr` refcount path, gated on `__has_include(<sys/single_threaded.h>)` |
+| `std::__throw_bad_array_new_length()@GLIBCXX_3.4.29` | **seven** engine objects — every TU that touches `std::string`, via libstdc++'s *inlined* `new char[]` |
+
+For scale: of 33 libstdc++ references in the shipped library, 22 are
+GLIBCXX_3.4.21 and exactly one is 3.4.29. A locally built `.so` on glibc 2.31 /
+GCC 9.4 needs only **2.14 / 3.4.21**.
+
+**Two hypotheses tested and killed, recorded so they are not retried:**
+
+- *"`std::__throw_bad_array_new_length` is vendored tinyxml2's `new char[]`."*
+  Wrong. It came from reading the nearest preceding symbol in `objdump -d`,
+  which was a PLT stub and therefore not the caller. `nm -uC` per object shows
+  tinyxml2 is not among the referencing objects at all.
+- *"`-fno-exceptions` on `tinyxml2.cpp` removes it."* It does — tinyxml2 has
+  0 `throw` and 0 `catch`, and the flag demonstrably dropped the reference from
+  `tinyxml2.o`. It changes nothing in the shipped library, because seven
+  *engine* objects reference the same symbol. The flag was reverted rather
+  than kept as a no-op that reads like a fix.
+
+**Why the remaining fix is a toolchain and nothing else.** The `GLIBCXX` one is
+emitted by the **GCC 11 compiler** for any `new T[n]` reachable from an
+inlined libstdc++ header, so a glibc sysroot cannot remove it: the call is
+still emitted and an older libstdc++ does not have the symbol to resolve it
+against. The engine also genuinely needs exceptions — `Registry::GetSystem`
+and `GetEntityByTag` throw through `std::map::at` — so `-fno-exceptions` is not
+available as a lever. **Both symbols disappear on GCC <= 10**, and every
+distribution with GCC <= 10 ships SDL2 <= 1.16.2, so the two cannot be
+separated.
+
+**Acceptance criterion, so this is not reopened as a matter of taste.** The
+whole floor is only 11 entries, so print all of it and read the top of each
+list. Measured on the current tree in the bookworm image today:
+
+```
+GLIBCXX_3.4.14  3.4.18  3.4.19  3.4.20  3.4.21  3.4.29   <- 3.4.29 is the floor
+GLIBC_2.2.5  2.3  2.7  2.14  2.32                        <- 2.32 is the floor
+```
+
+```bash
+# in the bookworm image, in ONE container run (each run starts a fresh
+# container, so the build and the measurement cannot be split):
+make target >/dev/null 2>&1
+readelf -V ./bin/libstormenginev2.so \
+  | grep -oE 'GLIBCXX_3\.4\.[0-9]+|GLIBC_[0-9.]+' | sort -uV
+# DONE when the two marked entries are gone: max GLIBCXX 3.4.21, max GLIBC 2.14.
+```
+
+Do **not** trim that list to its last few lines to make it terse: trimming is
+exactly how `GLIBCXX_3.4.29` and `GLIBC_2.32` would go unseen, which is the
+whole failure being fixed here.
+
+A local `readelf` proves **nothing** about this: a GCC 9 host never emitted
+either symbol in the first place, which is exactly why the measurement has to
+happen inside the image.
+
+**The one thing deliberately NOT done: a weak `__libc_single_threaded` shim.**
+Defining it locally makes libstdc++ believe the process is single-threaded
+*forever*, so any game that spawns a thread gets non-atomic `shared_ptr`
+refcounting — a latent data race shipped to every consumer, in exchange for one
+glibc symbol. `-static-libstdc++` is worse and for a different reason: the
+engine's public API *is* `std::string`/`std::vector`/`std::shared_ptr`, so two
+copies of libstdc++ is an ODR and allocator mismatch.
+
+**A floor cannot be removed, only lowered.** glibc's compatibility is
+forward-only: a binary built against glibc N runs on N or newer, never below.
+Every dynamically-linked C++ library on Linux has one. The question worth
+arguing about is only whether it sits at 2.32 or at 2.14 — and lowering it is
+strictly *less* restrictive for consumers, not more.
+
 ### Carried from the TECH_DEBT notebook (moved 2026-09-22)
 
 The gitignored `docs/TECH_DEBT.md` keeps the full evidence and reasoning; this

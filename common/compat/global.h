@@ -48,6 +48,7 @@
 
 #include "../input/actionMap.h"
 #include "../input/gamepad.h"
+#include "../input/inputHub.h"
 #include "../input/keyboard.h"
 #include "../input/touchControls.h"
 #include "../input/virtualGamepad.h"
@@ -225,6 +226,7 @@ using storm::GamepadNormaliseStick;
 using storm::GamepadPressed;
 using storm::GamepadReleased;
 using storm::GamepadState;
+using storm::InputHub;
 using storm::Keyboard;
 using storm::MakeDefaultZones;
 using storm::MakeVPadLayout;

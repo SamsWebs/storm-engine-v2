@@ -34,11 +34,11 @@ const std::string PlayState::s_playID = "PLAY_STATE";
 
 PlayState::PlayState(SDL_Renderer *renderer, int windowWidth, int windowHeight,
                      bool isDebugging, AssetStore *assetStore,
-                     GameStateMachine *machine, Gamepad *gamepad,
+                     GameStateMachine *machine, InputHub *input,
                      bool &isRunning)
     : renderer_(renderer), windowWidth_(windowWidth),
       windowHeight_(windowHeight), isDebugging_(isDebugging),
-      assetStore_(assetStore), machine_(machine), gamepad_(gamepad),
+      assetStore_(assetStore), machine_(machine), input_(input),
       isRunning_(isRunning) {
   lives_ = START_LIVES;
   playerStart_ =
@@ -89,7 +89,10 @@ bool PlayState::onEnter() {
 // onExit() must be idempotent -- it can run twice (state machine call, then
 // destructor). It does NOT clear the asset store: Game owns those textures and
 // the menu and game-over states still need them.
-bool PlayState::onExit() { return true; }
+bool PlayState::onExit() {
+  input_->UnregisterMap(&actions_);
+  return true;
+}
 
 void PlayState::SpawnPlayer() {
   Entity player = registry_.CreateEntity();
@@ -226,7 +229,7 @@ void PlayState::LoseLife() {
     leaving_ = true;
     machine_->changeState(new GameOverState(
         renderer_, windowWidth_, windowHeight_, isDebugging_, assetStore_,
-        machine_, gamepad_, isRunning_, score_, static_cast<int>(waveCount_)));
+        machine_, input_, isRunning_, score_, static_cast<int>(waveCount_)));
     return; // caller must not touch this state afterwards
   }
 
@@ -240,50 +243,16 @@ void PlayState::LoseLife() {
   getReadyUntil_ = SDL_GetTicks() + GET_READY_MS;
 }
 
-// The active state owns ALL event polling. Never call SDL_PollEvent in both
-// Game::ProcessInput and a state's processInput -- the queue is shared.
+// This screen no longer polls. Game::Run drains the queue once per frame
+// through the hub and updates every registered map before any state runs, so
+// this reads THIS frame's edges. The old comment here -- "The active state owns
+// ALL event polling. Never call SDL_PollEvent in both Game::ProcessInput and a
+// state's processInput -- the queue is shared" -- was a workaround for a defect
+// the hub removes: the queue was drained by whichever state was on top, so a
+// state pushed underneath this one stopped receiving input entirely.
 void PlayState::processInput() {
-  SDL_Event event;
-  while (SDL_PollEvent(&event)) {
-    gamepad_->HandleEvent(event); // device add/remove only
-    switch (event.type) {
-    case SDL_QUIT:
-      isRunning_ = false;
-      return;
-    case SDL_KEYDOWN:
-      if (event.key.keysym.sym == SDLK_ESCAPE) {
-        isRunning_ = false;
-        return;
-      }
-      if (event.key.keysym.sym == SDLK_LEFT)
-        moveLeft_ = true;
-      if (event.key.keysym.sym == SDLK_RIGHT)
-        moveRight_ = true;
-      if (event.key.keysym.sym == SDLK_UP)
-        moveUp_ = true;
-      if (event.key.keysym.sym == SDLK_DOWN)
-        moveDown_ = true;
-      if (event.key.keysym.sym == SDLK_SPACE)
-        spaceHeld_ = true;
-      if (event.key.keysym.sym == SDLK_z && !event.key.repeat) {
-        rollPressed_ = true;
-      }
-      break;
-    case SDL_KEYUP:
-      if (event.key.keysym.sym == SDLK_LEFT)
-        moveLeft_ = false;
-      if (event.key.keysym.sym == SDLK_RIGHT)
-        moveRight_ = false;
-      if (event.key.keysym.sym == SDLK_UP)
-        moveUp_ = false;
-      if (event.key.keysym.sym == SDLK_DOWN)
-        moveDown_ = false;
-      if (event.key.keysym.sym == SDLK_SPACE)
-        spaceHeld_ = false;
-      break;
-    default:
-      break;
-    }
+  if (actions_.WasPressed(static_cast<int>(Action::Back))) {
+    isRunning_ = false;
   }
 }
 
@@ -302,25 +271,28 @@ void PlayState::update() {
   // Flush deferred entity adds/kills FIRST, before running any system.
   registry_.Update();
 
-  // Sample the controller once per frame. Polled rather than accumulated
-  // from events, so a pad unplugged mid-hold cannot latch a direction on.
-  gamepad_->Update();
-  if (gamepad_->Pressed(GamepadButton::Back)) {
+  // The pad is sampled once per frame by the hub's Poll(), for the whole
+  // process. Nothing in this state samples a device. Polled rather than
+  // accumulated from events, so a pad unplugged mid-hold cannot latch a
+  // direction on.
+  if (actions_.WasPressed(static_cast<int>(Action::Back))) {
     isRunning_ = false;
     return;
   }
-
-  // Keyboard and controller are merged: either drives the game, and neither
-  // disables the other.
-  const bool left = moveLeft_ || gamepad_->Down(GamepadButton::Left);
-  const bool right = moveRight_ || gamepad_->Down(GamepadButton::Right);
-  const bool up = moveUp_ || gamepad_->Down(GamepadButton::Up);
-  const bool down = moveDown_ || gamepad_->Down(GamepadButton::Down);
-  const bool fire =
-      spaceHeld_ || (gamepad_->Down(GamepadButton::A) ||
-                     gamepad_->Current().triggerRight > 0.5f); // A / RT, held
-  const bool roll = rollPressed_ || gamepad_->Pressed(GamepadButton::B) ||
-                    gamepad_->Pressed(GamepadButton::X); // B / X, edge
+  const bool left = actions_.IsDown(static_cast<int>(Action::Left));
+  const bool right = actions_.IsDown(static_cast<int>(Action::Right));
+  const bool up = actions_.IsDown(static_cast<int>(Action::Up));
+  const bool down = actions_.IsDown(static_cast<int>(Action::Down));
+  // A, held. The right trigger is read straight off the pad: ActionMap binds
+  // DISCRETE buttons, and a trigger is an analog axis with no button behind
+  // it. That is a limit of the binding table, not a gap in it.
+  const bool fire = actions_.IsDown(static_cast<int>(Action::Fire)) ||
+                    input_->Pad().Current().triggerRight > 0.5f;
+  // Roll is B OR X, and ActionBinding holds exactly one pad button per action,
+  // so the second one stays a direct read. Binding both would need a second
+  // field on ActionBinding -- a public API change, and not this slice.
+  const bool roll = actions_.WasPressed(static_cast<int>(Action::Roll)) ||
+                    input_->Pad().Pressed(GamepadButton::X);
 
   if (player_) {
     auto &rb = player_->GetComponent<RigidBodyComponent>();
@@ -333,7 +305,6 @@ void PlayState::update() {
       rolling_ = true;
       anim.startTime = static_cast<int>(now);
     }
-    rollPressed_ = false;
     if (!rolling_) {
       // Pin to frame 0 (the level flying pose) while not rolling.
       anim.startTime = static_cast<int>(now);

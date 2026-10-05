@@ -3,7 +3,7 @@
 #include <SDL2/SDL.h>
 #include <stormengine2/gameStateMachine.h>
 
-#include <stormengine2/input/gamepad.h>
+#include <stormengine2/input/inputHub.h>
 #include <stormengine2/states/gameState.h>
 
 #include <string>
@@ -14,7 +14,7 @@ class MenuState : public GameState {
 public:
   MenuState(SDL_Renderer *renderer, int windowWidth, int windowHeight,
             bool isDebugging, AssetStore *assetStore, GameStateMachine *machine,
-            Gamepad *gamepad, bool &isRunning);
+            InputHub *input, bool &isRunning);
 
   void processInput() override;
   void update() override;
@@ -36,7 +36,14 @@ private:
   bool isDebugging_;
   AssetStore *assetStore_; // owned by Game, not by this state
   GameStateMachine *machine_;
-  Gamepad *gamepad_;
+  InputHub *input_;
+
+  // This screen's bindings, and this screen's edges. Every state owns its own
+  // ActionMap, which is what stops a new screen inheriting the previous
+  // screen's "was down" -- a player holding RETURN through the menu -> game
+  // change used to confirm instantly.
+  enum class Action { Up, Down, Accept, AcceptKeypadEnter, Back };
+  ActionMap actions_;
   bool &isRunning_;
   Logger logger_;
 

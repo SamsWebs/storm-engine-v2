@@ -4,6 +4,32 @@
 
 ### Added
 
+- **`common/input/inputHub.h`** (2.8.2, 2.8.3) — an input hub. `ActionMap`
+  had specs and no consumer since it landed, and the reason is that every
+  game polls SDL itself: the queue is drained by whichever state is on top
+  (a state pushed *underneath* freezes, and a pad plugged in behind a child
+  screen is never enumerated), hot-plug state is per-state, and edges are
+  shared, so a new screen inherits the previous screen's *was down*.
+
+  `InputHub` owns the devices and the poll; each state still owns its own
+  `ActionMap`, which is what gives a new screen a clean edge state. The
+  split works because `Keyboard` clears only its edges in `BeginFrame()`,
+  so within a frame they can be read any number of times — one device, many
+  edges. `ActionMap` is unchanged.
+
+  `SDL_QUIT` belongs to no device and to no binding, so once the hub owned
+  the poll nothing else would ever see it; `SawQuit()` latches it.
+
+  `examples/shooter` adopts it: one hub in `Game`, one `ActionMap` per
+  state, three hand-rolled polling loops and six hand-rolled key flags
+  removed. The linked binary now contains exactly one `SDL_PollEvent` call
+  site, inside `storm::InputHub::Poll`; it used to have one per state.
+
+  Two limits the conversion exposed, both still true: `ActionMap` binds
+  discrete buttons, so a trigger is an analog axis read straight off the
+  pad, and `ActionBinding` holds one pad button per action, so "B or X"
+  has no expression yet.
+
 - **`common/audio/mixer.h` + `common/audio/soundMixer.h`** (2.8.1) — a mixer.
   The engine decoded and cached sounds and stopped there, so everything after
   `GetSound` was the game's problem, and the one desktop example with audio

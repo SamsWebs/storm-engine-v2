@@ -12,13 +12,31 @@ const std::string GameOverState::s_overID = "GAME_OVER_STATE";
 GameOverState::GameOverState(SDL_Renderer *renderer, int windowWidth,
                              int windowHeight, bool isDebugging,
                              AssetStore *assetStore, GameStateMachine *machine,
-                             Gamepad *gamepad, bool &isRunning, int finalScore,
+                             InputHub *input, bool &isRunning, int finalScore,
                              int wavesSurvived)
     : renderer_(renderer), windowWidth_(windowWidth),
       windowHeight_(windowHeight), isDebugging_(isDebugging),
-      assetStore_(assetStore), machine_(machine), gamepad_(gamepad),
+      assetStore_(assetStore), machine_(machine), input_(input),
       isRunning_(isRunning), finalScore_(finalScore),
-      wavesSurvived_(wavesSurvived) {}
+      wavesSurvived_(wavesSurvived) {
+  ActionBinding accept;
+  accept.key = SDL_SCANCODE_RETURN;
+  accept.pad = GamepadButton::A;
+  actions_.Bind(static_cast<int>(Action::Accept), accept);
+
+  // Its own action id rather than a second bind of Accept: Bind replaces the
+  // binding for an id instead of adding to it.
+  ActionBinding acceptKeypadEnter;
+  acceptKeypadEnter.key = SDL_SCANCODE_KP_ENTER;
+  actions_.Bind(static_cast<int>(Action::AcceptKeypadEnter), acceptKeypadEnter);
+
+  ActionBinding back;
+  back.key = SDL_SCANCODE_ESCAPE;
+  back.pad = GamepadButton::Back;
+  actions_.Bind(static_cast<int>(Action::Back), back);
+
+  input_->RegisterMap(&actions_);
+}
 
 bool GameOverState::onEnter() {
   enteredAt_ = SDL_GetTicks();
@@ -27,7 +45,10 @@ bool GameOverState::onEnter() {
   return true;
 }
 
-bool GameOverState::onExit() { return true; }
+bool GameOverState::onExit() {
+  input_->UnregisterMap(&actions_);
+  return true;
+}
 
 void GameOverState::ToMenu() {
   if (leaving_) {
@@ -36,45 +57,23 @@ void GameOverState::ToMenu() {
   leaving_ = true;
   machine_->changeState(new MenuState(renderer_, windowWidth_, windowHeight_,
                                       isDebugging_, assetStore_, machine_,
-                                      gamepad_, isRunning_));
+                                      input_, isRunning_));
 }
 
 void GameOverState::processInput() {
-  SDL_Event event;
-  while (SDL_PollEvent(&event)) {
-    gamepad_->HandleEvent(event);
-    if (event.type == SDL_QUIT) {
-      isRunning_ = false;
-      return;
-    }
-    // SDL delivers auto-repeat KEYDOWNs for a held key. SPACE is the fire
-    // button during play and the transition here happens inside update(),
-    // after that frame's queue was drained -- so without this guard the
-    // still-held key dismisses GAME OVER within a frame or two.
-    if (event.type != SDL_KEYDOWN || event.key.repeat) {
-      continue;
-    }
-    if (event.key.keysym.sym == SDLK_ESCAPE) {
-      isRunning_ = false;
-      return;
-    }
-    if (event.key.keysym.sym == SDLK_RETURN ||
-        event.key.keysym.sym == SDLK_KP_ENTER ||
-        event.key.keysym.sym == SDLK_SPACE) {
-      ToMenu();
-      return; // this state is defunct now
-    }
+  // No poll here any more -- the hub owns that, once, for the whole process.
+  if (actions_.WasPressed(static_cast<int>(Action::Back))) {
+    isRunning_ = false;
   }
 }
 
 void GameOverState::update() {
-  gamepad_->Update();
-  if (gamepad_->Pressed(GamepadButton::Back)) {
+  if (actions_.WasPressed(static_cast<int>(Action::Back))) {
     isRunning_ = false;
     return;
   }
-  if (gamepad_->Pressed(GamepadButton::A) ||
-      gamepad_->Pressed(GamepadButton::Start)) {
+  if (actions_.WasPressed(static_cast<int>(Action::Accept)) ||
+      actions_.WasPressed(static_cast<int>(Action::AcceptKeypadEnter))) {
     ToMenu();
     return;
   }

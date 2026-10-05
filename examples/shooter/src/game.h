@@ -6,7 +6,7 @@
 #include <stormengine2/gameStateMachine.h>
 #include <stormengine2/logger.h>
 
-#include <stormengine2/input/gamepad.h>
+#include <stormengine2/input/inputHub.h>
 
 using namespace storm;
 
@@ -42,7 +42,11 @@ private:
   SDL_Renderer *renderer_ = nullptr;
 
   GameStateMachine gameStateMachine_;
-  Gamepad gamepad_;
+  // One hub for the whole process, not one per state. It owns the SDL poll and
+  // the controller; the states own only their own ActionMap. That split is the
+  // point -- before this, each state called SDL_PollEvent itself, so whichever
+  // state was on top drained the queue and a state pushed underneath froze.
+  InputHub input_;
   Logger_Ptr logger_;
   AssetStore_Ptr assetStore_;
 

@@ -521,6 +521,74 @@ With more than one source bound to an action, the action goes down when the **fi
 
 Keyboard and gamepad edges are taken from those classes rather than recomputed, so a key pressed and released inside a single frame is still seen as a press. Deriving edges from the held state alone would drop fast taps silently - which is why `Keyboard` tracks presses separately in the first place.
 
+### InputHub: one poll for the whole process
+
+`ActionMap` answers *what an action means*. It deliberately does not answer
+*who drains SDL's event queue*, and that gap is where every game went wrong.
+A game that calls `SDL_PollEvent` in each state gets three defects at once:
+
+- the queue is drained by whichever state is on top, so a state pushed
+  **underneath** freezes - a pad plugged in while a child screen is up is
+  never enumerated;
+- hot-plug state is per-state, so two states disagree about whether a pad
+  exists;
+- edges are shared, so a new screen inherits the previous screen's *was
+  down* and a player who holds a key through a screen change gets a
+  fabricated press or release.
+
+`InputHub` splits those apart. It owns the devices and the poll; each state
+still owns its own `ActionMap`.
+
+```cpp
+InputHub input;                     // one per process, in your main
+
+// in your main loop, once per frame, BEFORE any state's update():
+input.Poll();                       // the only SDL_PollEvent in the game
+if (input.SawQuit()) break;         // no state can miss the close request
+input.UpdateMaps();                 // every registered map gets this frame
+```
+
+```cpp
+// in a state, which owns its map and registers it
+class PlayState : public GameState {
+  enum class Action { Left, Fire, Roll };
+  ActionMap actions_;
+
+  PlayState(..., InputHub *input, ...) {
+    ActionBinding fire;
+    fire.key = SDL_SCANCODE_SPACE;
+    fire.pad = GamepadButton::A;
+    actions_.Bind(static_cast<int>(Action::Fire), fire);
+    input->RegisterMap(&actions_);
+  }
+
+  void processInput() override {
+    if (actions_.WasPressed(static_cast<int>(Action::Left))) MoveLeft();
+  }
+
+  bool onExit() override {
+    input_->UnregisterMap(&actions_);
+    return true;
+  }
+};
+```
+
+**One device, many edges.** This works because `Keyboard` clears only its
+*edges* in `BeginFrame()` and not its held state, so within a frame those
+bits can be read any number of times without being consumed. N maps reading
+the same press is therefore safe, and each map's own `down`/`pressed` is what
+gives a new screen a clean edge state. Sharing the device while separating
+the edges is the design; the other arrangement is the bug.
+
+`examples/shooter` is the adopter: one `InputHub` in `Game`, one `ActionMap`
+per state, and **one** `SDL_PollEvent` call site in the whole binary - inside
+`storm::InputHub::Poll`. It used to be one polling loop per state.
+
+Two limits worth knowing, both of which `shooter` runs into. `ActionMap`
+binds **discrete** buttons: a trigger is an analog axis and is read straight
+off `input.Pad().Current().triggerRight`. And `ActionBinding` holds one pad
+button per action, so "B or X" needs a second field that does not exist yet.
+
 ## Windows / WSL
 
 Windows is supported via a MinGW-w64 cross-compile from Linux - no Windows toolchain needed. SDL2 and its satellites are cross-built from the same vendored sources the Android build uses (`vendor/android/`), so nothing is downloaded:

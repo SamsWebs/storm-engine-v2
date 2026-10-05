@@ -77,10 +77,10 @@ void Game::Initialize(StartState start) {
 
   // SDL only emits CONTROLLERDEVICEADDED for pads plugged in after init on
   // some platforms, so a controller that was already attached has to be
-  // opened explicitly.
-  gamepad_.OpenFirstAttached();
-  if (gamepad_.Connected()) {
-    logger_->Log("Controller: " + gamepad_.Name());
+  // opened explicitly. The hub owns the pad, so the game asks the hub.
+  input_.MutablePad().OpenFirstAttached();
+  if (input_.Pad().Connected()) {
+    logger_->Log("Controller: " + input_.Pad().Name());
   }
 
   // The state machine owns every state pointer -- pass `new`-allocated
@@ -89,18 +89,18 @@ void Game::Initialize(StartState start) {
   switch (start) {
   case StartState::Play:
     first = new PlayState(renderer_, windowWidth_, windowHeight_, isDebugging_,
-                          assetStore_.get(), &gameStateMachine_, &gamepad_,
+                          assetStore_.get(), &gameStateMachine_, &input_,
                           isRunning_);
     break;
   case StartState::GameOver:
     first = new GameOverState(
         renderer_, windowWidth_, windowHeight_, isDebugging_, assetStore_.get(),
-        &gameStateMachine_, &gamepad_, isRunning_, 12300, 7);
+        &gameStateMachine_, &input_, isRunning_, 12300, 7);
     break;
   case StartState::Menu:
   default:
     first = new MenuState(renderer_, windowWidth_, windowHeight_, isDebugging_,
-                          assetStore_.get(), &gameStateMachine_, &gamepad_,
+                          assetStore_.get(), &gameStateMachine_, &input_,
                           isRunning_);
     break;
   }
@@ -111,7 +111,26 @@ void Game::Initialize(StartState start) {
 
 void Game::Run(StartState start) {
   Initialize(start);
+  // The whole input contract of the game, in the order it has to happen in.
+  //
+  // Before the hub, this loop was three delegating calls and the top state did
+  // its own SDL_PollEvent. That is the defect the hub exists to remove: the
+  // queue was drained by whichever state happened to be on top, so a state
+  // pushed underneath stopped receiving events entirely.
+  //
+  // Now: ONE drain for the process, the close request is answered here where
+  // no state can miss it, and every registered map is updated before any state
+  // runs -- so a state's processInput() reads THIS frame's edges, not last
+  // frame's.
   while (isRunning_) {
+    input_.Poll();
+
+    if (input_.SawQuit()) {
+      isRunning_ = false;
+      break;
+    }
+
+    input_.UpdateMaps();
     ProcessInput();
     Update();
     Render();
@@ -126,7 +145,7 @@ void Game::Destroy() {
   gameStateMachine_.clean();
   // Before SDL_QuitSubSystem: SDL_GameControllerQuit frees every open
   // controller, so releasing the pad afterwards is a use-after-free.
-  gamepad_.Shutdown();
+  input_.MutablePad().Shutdown();
   if (assetStore_) {
     assetStore_->ClearAssets();
   }

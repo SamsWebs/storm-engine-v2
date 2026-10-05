@@ -78,7 +78,22 @@ public:
   void Feed(const SDL_Event &event) {
     keyboard_.HandleEvent(event);
     gamepad_.HandleEvent(event);
+
+    // The window-close event belongs to no device, but it cannot simply be
+    // dropped: once the hub owns the poll and no state drains the queue,
+    // nothing else in the game ever sees it and the window becomes
+    // unclosable. SDL_QUIT is not a binding -- it is not an action a player
+    // presses -- so it is a latch on the hub rather than an ActionMap entry.
+    if (event.type == SDL_QUIT) {
+      quit_ = true;
+    }
   }
+
+  // True if a close request has arrived, latched until ClearQuit(). Latched
+  // rather than per-frame so a quit that arrives between a state's input
+  // passes cannot be missed by a screen that is mid-transition.
+  bool SawQuit() const { return quit_; }
+  void ClearQuit() { quit_ = false; }
 
   // Drains SDL's queue and samples the pad. This is the one call in the engine
   // that belongs in exactly one place, and having it be a method is what stops
@@ -183,6 +198,7 @@ private:
   const TouchInput *touch_ = nullptr;
   std::vector<ActionMap *> maps_;
   std::uint64_t frame_ = 0;
+  bool quit_ = false;
 };
 
 } // namespace storm

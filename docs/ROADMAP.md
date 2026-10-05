@@ -167,8 +167,8 @@ used by nobody, and nothing anywhere said so.
 | 2.7.1 host address enumeration | S | nothing |
 | 2.7.2 the Switch halves | S | Switch consumers rebuild |
 | 2.8.1 engine mixer (was 2.6.1) | M | nothing |
-| 2.8.2 `input/inputHub.h` (was 2.6.2) | L | opt in; `ActionMap` unchanged |
-| 2.8.3 an example adopts it (was 2.6.3) | S | nothing |
+| 2.8.2 `input/inputHub.h` (was 2.6.2) | L | **Done.** opt in; `ActionMap` unchanged |
+| 2.8.3 an example adopts it (was 2.6.3) | S | **Done.** `examples/shooter` |
 | 2.8.4 the `.map` record parser (was 2.5.1's open half, P39) | M | rebuild; the version field and refusal path already shipped |
 | 3.0.0 the ECS wave | L | rebuild + an `UPGRADING.md` entry per break |
 
@@ -746,10 +746,10 @@ here.
    This mirrors the argument in item 2 below — the abstraction is convenient
    right up until the game needs the thing it cannot get.
 
-2. **Make the input layer usable — add, do not rewrite.** `actionMap.h` has no
-consumer anywhere in the repo, and it is not because nobody found it: the three
-defects the flagship game's own reader documents are the reason a game wrote its
-own 627 lines.
+2. **Make the input layer usable — add, do not rewrite.** ✅ **Done 2026-10-05.**
+   `actionMap.h` had no consumer anywhere in the repo, and it is not because
+   nobody found it: the three defects the flagship game's own reader documents
+   are the reason a game wrote its own 627 lines.
    - the event queue is drained only by the state on top, so a state pushed under
      freezes — a pad plugged in while a child screen is up is never enumerated;
    - hot-plug state must be process-wide, not per-state;
@@ -765,13 +765,50 @@ own 627 lines.
    is why this item stays in a minor instead of drifting into 3.0, which the first
    draft of this section let it do by conflating "the abstraction is unused" with
    "the abstraction must break".
-3. **Then make an example adopt it.** `examples/shooter` or `examples/sports`,
-   whichever is smaller, moves to the hub and drops its hand-rolled polling
-   (`grep -rn SDL_PollEvent examples/ --include=*.cpp` is **16 sites across nine
-   examples**). This is the step that is easy to skip and is the whole point: an
-   abstraction proven only by its own spec is not proven, which is exactly what
-   happened to `actionMap.h`, and nothing anywhere said so, because an uncalled
-   function is warning-free and the build is clean.
+
+   **The design question that decided it, and it is not obvious:** can one
+   `Keyboard` feed N maps without one map's poll eating another's press? Yes, and
+   the reason is in `keyboard.h` — `BeginFrame()` clears `pressed_`/`released_`
+   but **not** `down_`, and within a frame those bits are readable any number of
+   times because they are not consumed. So N maps reading the same press is safe,
+   and the per-screen bookkeeping is each map's own `down`/`pressed`/`released`.
+   Sharing the device while separating the edges *is* the design; the other
+   arrangement is the bug. Maps are registered by **pointer** and stay owned by
+   their state — a `std::vector<ActionMap>` inside the hub would reallocate under
+   a state holding a reference to its own map.
+
+   21 specs, and three sabotages landed rather than three passes: removing the
+   double-registration guard (1 failure — the second `Update` swallows the press,
+   because the map's own `down` is already true), breaking the `UpdateMaps` loop
+   (2 failures, and only the two multi-map specs), and removing the quit latch
+   (2 failures).
+
+3. **Then make an example adopt it.** ✅ **Done 2026-10-05**, in `examples/shooter`.
+   It had **three** separate `SDL_PollEvent` loops — one per state — plus six
+   hand-rolled key flags (`moveLeft_`, `spaceHeld_`, `rollPressed_`, …) set from
+   raw keycodes. `Game` now owns one `InputHub`, each state owns one `ActionMap`,
+   and the linked binary has **exactly one** `SDL_PollEvent` call site, inside
+   `storm::InputHub::Poll` — verified with `objdump -d`, where it used to be three
+   separate loops. The wider repo count was 16 sites across nine examples; the
+   three in `shooter` are gone.
+
+   **What the conversion found that writing the specs first could not have:**
+
+   - **`SDL_QUIT` had nowhere to go.** It is not a device event and not a
+     binding, and once the hub owned the poll and no state drained the queue,
+     nothing else in the game ever saw it — the window became unclosable. The
+     hub latches it as `SawQuit()`.
+   - **`ActionMap` binds discrete buttons, not analog axes.** A trigger is read
+     straight off `Pad().Current().triggerRight`.
+   - **`ActionBinding` holds exactly one pad button per action**, so "B or X" has
+     no expression. A second `pad2` field is the fix; it is a public struct
+     change with a layout pin, so it is recorded here rather than smuggled into
+     this slice.
+   - **`Bind` REPLACES an action's binding rather than adding to it.** Binding
+     RETURN and then KP_ENTER to the same action id silently drops the first,
+     which is how the keypad's accept key nearly shipped as the only one working.
+
+
 4. **The `.map` record parser** (P39) — moved here from 2.5.1, which shipped only
    its version half. `common/tilemapFormat.h` is the single owner of the *header*;
    the **22-field record is still parsed twice, by hand** — `loadFilemapEditor`

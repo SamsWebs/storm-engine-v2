@@ -3,7 +3,7 @@
 #include <SDL2/SDL.h>
 #include <stormengine2/gameStateMachine.h>
 
-#include <stormengine2/input/gamepad.h>
+#include <stormengine2/input/inputHub.h>
 #include <stormengine2/states/gameState.h>
 
 #include <string>
@@ -14,7 +14,7 @@ class GameOverState : public GameState {
 public:
   GameOverState(SDL_Renderer *renderer, int windowWidth, int windowHeight,
                 bool isDebugging, AssetStore *assetStore,
-                GameStateMachine *machine, Gamepad *gamepad, bool &isRunning,
+                GameStateMachine *machine, InputHub *input, bool &isRunning,
                 int finalScore, int wavesSurvived);
 
   void processInput() override;
@@ -36,7 +36,16 @@ private:
   bool isDebugging_;
   AssetStore *assetStore_;
   GameStateMachine *machine_;
-  Gamepad *gamepad_;
+  InputHub *input_;
+
+  // This screen's own bindings and its own edges. Game Over is the screen that
+  // motivated the split: SPACE is the fire button during play, so a player who
+  // dies while holding it arrives here with SPACE still down. With edges shared
+  // across screens that read as a press and the game left by itself a frame
+  // later; with a per-screen map the key is simply already held, and the
+  // dismiss needs a fresh press.
+  enum class Action { Accept, AcceptKeypadEnter, Back };
+  ActionMap actions_;
   bool &isRunning_;
   Logger logger_;
 

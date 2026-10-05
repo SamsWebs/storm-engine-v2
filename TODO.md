@@ -44,8 +44,8 @@ the canonical-source-list slice — the pipeline was red from the top down.
 | 12 | 2.5.2 Asset path seam — `assetPath.h` + `docs/assets.md`; the `./` defect made public | `feat/asset-path-seam` | done |
 | 13 | 2.5.3 Blob lifetime rules (docs) — missing `ReadBlob` entry + measured sync/lazy table | `docs/blob-lifetime` | done |
 | 14 | 2.8.1 Engine mixer (was 2.6.1) — `audio/mixer.h` (pure policy) + `audio/soundMixer.h`, and `netplay-checkers` converted off `Mix_PlayChannel(-1, ...)` | `feat/engine-mixer` | done |
-| 15 | 2.8.2 `input/inputHub.h` (was 2.6.2) — blocks row 16 | pending | pending |
-| 16 | 2.8.3 Example adopts input hub (was 2.6.3) | pending | pending |
+| 15 | 2.8.2 `input/inputHub.h` (was 2.6.2) — blocks row 16 | `feat/input-hub` | done |
+| 16 | 2.8.3 Example adopts input hub (was 2.6.3) — `examples/shooter`, 3 poll loops + 6 key flags removed | `feat/input-hub` | done |
 | 17 | 2.7.1 Host address enumeration | `feat/host-addresses` | done |
 | 18 | 2.7.2 Switch halves — `socketInitializeDefault`, three-stage `Open` diagnostics, and the two latent Switch compile breaks it unmasked | `fix/switch-socket-init` | done |
 | 19 | 2.8.4 The `.map` record parser (P39) — 22 fields parsed twice by hand, `SaveMap` is the only writer with no spec calling it. **Blocked on deciding how to make it observable**: the editor cannot be linked here (no libnfd), so a behaviour change in `LoadMap` has no test watching it. | pending | pending |

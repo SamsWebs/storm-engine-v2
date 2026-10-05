@@ -337,5 +337,74 @@ It(should_not_report_an_unbound_action) {
   Assert::That(actions.IsDown(Thrust), Equals(false));
   Assert::That(actions.WasReleased(Thrust), Equals(false));
 }
+
+// ── the window-close event ──────────────────────────────────────────────────
+//
+// Found by converting a real example rather than by writing the spec first.
+// SDL_QUIT is not a device event and not a binding, and once the hub owns the
+// poll and no state drains the queue, nothing else in the game ever sees it --
+// the window becomes unclosable.
+
+It(should_not_report_a_quit_that_never_arrived) {
+  InputHub hub;
+  Assert::That(hub.SawQuit(), Equals(false));
+}
+
+It(should_latch_a_quit_event) {
+  InputHub hub;
+  SDL_Event quit{};
+  quit.type = SDL_QUIT;
+
+  hub.Feed(quit);
+
+  Assert::That(hub.SawQuit(), Equals(true));
+}
+
+It(should_keep_a_quit_latched_across_frames) {
+  InputHub hub;
+  SDL_Event quit{};
+  quit.type = SDL_QUIT;
+  hub.Feed(quit);
+
+  // A screen changing mid-close must not swallow it.
+  hub.BeginFrame();
+  hub.UpdateMaps();
+  Assert::That(hub.SawQuit(), Equals(true));
+
+  hub.BeginFrame();
+  hub.UpdateMaps();
+  Assert::That(hub.SawQuit(), Equals(true));
+}
+
+It(should_clear_a_quit_only_when_asked) {
+  InputHub hub;
+  SDL_Event quit{};
+  quit.type = SDL_QUIT;
+  hub.Feed(quit);
+
+  hub.ClearQuit();
+
+  Assert::That(hub.SawQuit(), Equals(false));
+}
+
+It(should_not_treat_a_window_event_as_a_binding) {
+  InputHub hub;
+  ActionMap actions;
+  actions.Bind(Fire, FireOnSpace());
+  hub.RegisterMap(&actions);
+
+  SDL_Event quit{};
+  quit.type = SDL_QUIT;
+
+  hub.BeginFrame();
+  hub.Feed(quit);
+  hub.UpdateMaps();
+
+  // Nothing is down and nothing was reported. The close request is the hub's,
+  // not an action's.
+  Assert::That(actions.IsDown(Fire), Equals(false));
+  Assert::That(actions.WasPressed(Fire), Equals(false));
+  Assert::That(actions.WasReleased(Fire), Equals(false));
+}
 }
 ;

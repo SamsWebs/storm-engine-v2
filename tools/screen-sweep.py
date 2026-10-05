@@ -146,7 +146,7 @@ def read_name(exdir: pathlib.Path) -> str:
     return m.group(1)
 
 
-def ensure_built(exdir: pathlib.Path, name: str) -> pathlib.Path:
+def ensure_built(exdir: pathlib.Path, name: str, make_args=()) -> pathlib.Path:
     """Run make, then prove the binary actually LOADS.
 
     Two traps, both hit while building this:
@@ -169,7 +169,7 @@ def ensure_built(exdir: pathlib.Path, name: str) -> pathlib.Path:
     # binary landed in the REPO ROOT's bin/ instead of the example's, which then
     # read as "make succeeded but the binary is absent". So PWD is set to match.
     build_env = {**os.environ, "PWD": str(exdir)}
-    r = subprocess.run(["make"], cwd=exdir, env=build_env,
+    r = subprocess.run(["make", *make_args], cwd=exdir, env=build_env,
                        capture_output=True, text=True, timeout=900)
     if r.returncode != 0:
         raise SystemExit(f"{exdir}: make failed\n{r.stdout[-2000:]}\n"
@@ -304,7 +304,8 @@ def changed_pixels(a: pathlib.Path, b: pathlib.Path) -> int:
 
 # ── one key, one process ──────────────────────────────────────────────────────
 def probe(binary: pathlib.Path, exdir: pathlib.Path, env, key, outdir: pathlib.Path,
-          settle: float, baseline: int, samples: int = 5, gap: float = 0.18):
+          settle: float, baseline: int, samples: int = 5, gap: float = 0.18,
+          keys_before=(), pre_settle: float = 0.9):
     """Launch, capture, press, SAMPLE, diff, kill. Always kills by pid.
 
     Sampling, not a single after-shot. A jump that starts and lands inside the
@@ -334,6 +335,20 @@ def probe(binary: pathlib.Path, exdir: pathlib.Path, env, key, outdir: pathlib.P
             return dict(key=key, changed=None, box=None,
                         note="no window appeared", before=None, after=None,
                         exited=False)
+
+        # Preamble: drive to the screen under test BEFORE the baseline is
+        # taken. Without this a game whose default screen is a menu can only
+        # ever have its MENU keys swept, and every key belonging to the screen
+        # behind the menu reads below the idle floor for the honest reason that
+        # nothing there is bound to it. That is not a dead input path; it is the
+        # sweep never having reached the screen. Measured on examples/shooter:
+        # Return/Up/Down/Escape all answered from the menu, while Left/Right/
+        # space/z -- every one of which IS bound, on the play screen -- read
+        # below floor.
+        for step in keys_before:
+            run(["xdotool", "key", step], env)
+            time.sleep(pre_settle)
+
         shoot(env, wid, before)
 
         if key in HOLD_KEYS:
@@ -438,10 +453,10 @@ def verdict(n, baseline, exited=False):
 
 
 def sweep(exdir: pathlib.Path, keys, display_num, settle, outdir,
-          samples=5, gap=0.18):
+          samples=5, gap=0.18, make_args=(), keys_before=(), pre_settle=0.9):
     need("Xvfb", "xdotool", "import", "compare")
     name = read_name(exdir)
-    binary = ensure_built(exdir, name)
+    binary = ensure_built(exdir, name, make_args)
     if not binary.is_file():
         raise SystemExit(f"{binary} missing")
 
@@ -464,7 +479,7 @@ def sweep(exdir: pathlib.Path, keys, display_num, settle, outdir,
 
         for key in keys:
             row = probe(binary, exdir, d.env, key, exout, settle, baseline,
-                        samples, gap)
+                        samples, gap, keys_before, pre_settle)
             rows.append(row)
             what = verdict(row["changed"], baseline, row["exited"])
             extra = f"  [{row['box']}]" if row.get("box") else ""
@@ -493,10 +508,32 @@ def main():
     ap.add_argument("--display", type=int, default=99)
     ap.add_argument("--out", type=pathlib.Path,
                     default=pathlib.Path("/tmp/storm-sweep"))
+    ap.add_argument("--keys-before", default="",
+                    help="comma-separated keys pressed ONCE to reach the screen "
+                         "under test, before the baseline frame is captured. "
+                         "Use this for any game whose default screen is not the "
+                         "one you are sweeping -- otherwise every key bound on "
+                         "a deeper screen reads below the idle floor for the "
+                         "honest reason that the sweep never got there.")
+    ap.add_argument("--pre-settle", type=float, default=0.9,
+                    help="seconds between each --keys-before keypress")
+    ap.add_argument("--make-arg", action="append", default=[], metavar="ARG",
+                    help="extra argument passed to make (repeatable). Needed on a "
+                         "machine without root, where the engine cannot be "
+                         "installed to /usr/local and the example must build "
+                         "against the working tree instead:\n"
+                         "  --make-arg INCLUDE=-I/tmp/eng-inc -Ivendor "
+                         "-Ivendor/android/tinyxml2\n"
+                         "These must be make ARGUMENTS, not environment "
+                         "variables: base.mk assigns INCLUDE with `=`, and a "
+                         "makefile assignment beats the environment, so "
+                         "INCLUDE=... in the environment is silently ignored.")
     args = ap.parse_args()
 
     if not args.all and not args.example:
         ap.error("give an example directory or --all")
+
+    keys_before = [k for k in args.keys_before.split(",") if k]
 
     keys = [k for k in (s.strip() for s in args.keys.split(",")) if k]
 
@@ -517,7 +554,9 @@ def main():
         try:
             name, rows, base = sweep(exdir, keys, args.display,
                                       args.settle, outdir,
-                                      args.samples, args.gap)
+                                      args.samples, args.gap,
+                                      tuple(args.make_arg),
+                                      keys_before, args.pre_settle)
         except SystemExit as e:
             print(f"\n=== {exdir.name} ===\n  SKIPPED: {e}")
             continue

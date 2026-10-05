@@ -809,26 +809,36 @@ here.
      which is how the keypad's accept key nearly shipped as the only one working.
 
 
-4. **The `.map` record parser** (P39) — moved here from 2.5.1, which shipped only
-   its version half. `common/tilemapFormat.h` is the single owner of the *header*;
-   the **22-field record is still parsed twice, by hand** — `loadFilemapEditor`
-   and the editor's `LoadMap` — and `SaveMap` is still the sole writer with no
-   spec that calls it. P39's `TileRecord` plus `readTileRecord`/`writeTileRecord`
-   is not written.
+4. **The `.map` record parser** (P39) — ✅ **Done 2026-10-05.** Moved here from
+   2.5.1, which shipped only its version half. `common/tilemapFormat.h` owned the
+   *header*; the **22-field record was parsed twice, by hand** — `loadFilemapEditor`
+   and the editor's `LoadMap` — and `SaveMap` spelled the field order out again as a
+   writer. That is now one `TileRecord` plus `TileRecordReader` and `WriteTileRecord`,
+   header-only in the same file as the version header, and **all three call sites use
+   it**: the engine's loader, the editor's `LoadMap`, and the editor's `SaveMap`.
+   16 specs, no file and no filesystem needed.
 
-   It rides this minor because the [versioning policy](#versioning-policy) says
-   a `.map` format change is a **minor** carrying a version field and a refusal
-   path, and both already shipped in 2.7.0 — so the hard half is done and what
-   remains is the duplication.
+   **The audit found this was not a tidiness item. The editor's copy had two live
+   bugs that the engine's copy had already been fixed for:**
 
-   **The obstacle recorded in 2.5.1 still stands and is worth repeating:** it
-   refactors three functions in a binary that *cannot be linked* here (no
-   libnfd), so it would be the one change in this release with no test able to
-   observe it. The mitigation available now is that the editor compiles to
-   objects in CI, so a header change is still observable — but a *behaviour*
-   change in `LoadMap` is not, and pretending otherwise is how the
-   `getifaddrs` defect shipped. Whoever takes this should decide first how to
-   make it testable, not after.
+   - **It read no version header.** `LoadMap` went straight into records, so on any
+     versioned map it read `storm-map` as the first record's group name and loaded
+     **zero tiles** out of a file the engine itself had written. The editor could
+     not open a 2.7.0 map at all.
+   - **It did `mapFile >> animated;` with no pushback.** The engine's copy had been
+     fixed for exactly this: an int extraction that hits the next record's group and
+     one that hits EOF both set failbit, so a flag omitted anywhere but the last
+     record read as a truncated file and the whole map was lost. The editor kept the
+     unfixed version, so one hand-edited map still cost a whole level there.
+
+   **And the blocker this item was parked on does not hold.** It was recorded as: the
+   editor cannot be linked here (no libnfd), so a behaviour change in `LoadMap` has
+   no test watching it. That conflates two different things. What is spec'd is the
+   **record parsing**, which is pure and lives in a header the suite already compiles;
+   the editor's call is a mechanical loop over a spec'd function, and CI compiles the
+   editor to objects, so a signature drift is still a build break. The thing genuinely
+   unobservable is the editor's own entity construction — which this change does not
+   touch. The mitigation was available in 2.5.1 and was not applied then.
 
 ### 3.0.0 — the ECS wave (breaking, reserved, unscheduled)
 

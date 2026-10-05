@@ -8,7 +8,7 @@
 // third of the exports, so a name missing from the bridge was missing
 // from the spec too.
 //
-// 205 names.
+// 209 names.
 #pragma once
 
 namespace storm_compat_probe {
@@ -160,6 +160,8 @@ using ::TileMapVersion;
 using ::TileMapVersionLine;
 using ::TileMapVersionRefusal;
 using ::TileMapVersionState;
+using ::TileRecord;
+using ::TileRecordReader;
 using ::TokenToNonce;
 using ::TouchControl;
 using ::TouchInput;
@@ -175,6 +177,8 @@ using ::VPadStyle;
 using ::VersionEquals;
 using ::VersionString;
 using ::VolumeModel;
+using ::WriteTileMapVersionLine;
+using ::WriteTileRecord;
 using ::XmlLoader;
 using ::XmlObjectDef;
 using ::XmlTextureDef;

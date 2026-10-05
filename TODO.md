@@ -48,7 +48,7 @@ the canonical-source-list slice — the pipeline was red from the top down.
 | 16 | 2.8.3 Example adopts input hub (was 2.6.3) — `examples/shooter`, 3 poll loops + 6 key flags removed | `feat/input-hub` | done |
 | 17 | 2.7.1 Host address enumeration | `feat/host-addresses` | done |
 | 18 | 2.7.2 Switch halves — `socketInitializeDefault`, three-stage `Open` diagnostics, and the two latent Switch compile breaks it unmasked | `fix/switch-socket-init` | done |
-| 19 | 2.8.4 The `.map` record parser (P39) — 22 fields parsed twice by hand, `SaveMap` is the only writer with no spec calling it. **Blocked on deciding how to make it observable**: the editor cannot be linked here (no libnfd), so a behaviour change in `LoadMap` has no test watching it. | pending | pending |
+| 19 | 2.8.4 The `.map` record parser (P39) — `TileRecord` + `TileRecordReader` + `WriteTileRecord` shared by the loader and the editor; fixes two live editor bugs | `fix/map-record-parser` | done |
 
 **Skipped (unscheduled):** 3.0.0 ECS wave — trigger-based, not in the queue.
 2.6 is retired as a number: 2.7.0 shipped 2.4, 2.5 and 2.7 at once, so rows

@@ -130,44 +130,54 @@ void FileLoader::LoadMap(const AssetManager_Ptr &assetManager,
     return;
   }
 
-  // Loop through the tiles and add them to the registry
-  while (true) {
-    int srcRectX = 0, srcRectY = 0, layer = 0, colWidth = 0, colHeight = 0,
-        tileWidth = 0, tileHeight = 0;
-    glm::vec2 transform = glm::vec2(0, 0);
-    glm::vec2 scale = glm::vec2(1, 1);
-    glm::vec2 offset = glm::vec2(1, 1);
-    std::string group = "", assetID = "";
-    int numFrames = 0, frameSpeed = 0, frameOffset = 0;
-    bool collider = false, animated = false, vertical = false, looped = false;
+  // THE VERSION HEADER, read from THIS stream, exactly as the engine's loader
+  // does. It did not used to: LoadMap went straight into reading records, so
+  // on any versioned map it read "storm-map" as the first record's group name
+  // and loaded ZERO tiles out of a file the engine itself had written. The
+  // editor could not open a 2.7.0 map at all.
+  const TileMapVersion version = ReadTileMapVersion(mapFile);
+  const std::string refusal = TileMapVersionRefusal(version, filename);
+  if (!refusal.empty()) {
+    logger.Err(refusal);
+    return;
+  }
 
-    // Read the contents of the file into the temporary variables
-    if (!(mapFile >> group >> assetID >> tileWidth >> tileHeight >> srcRectX >>
-          srcRectY >> layer >> transform.x >> transform.y >> scale.x >>
-          scale.y >> collider))
-      break;
+  // The record parsing is NOT here either -- it is TileRecordReader, shared
+  // with the engine's TileMapLoader. That sharing is the whole point, and it
+  // fixes a live bug: this function used to do `mapFile >> animated;` with no
+  // pushback, so a record that omitted its animation flag consumed the NEXT
+  // record's group token, set failbit, and ended the map right there. The
+  // engine's copy had already been fixed for exactly that and this one had not,
+  // which is what "two hand-written parsers drift" looks like in practice.
+  TileRecordReader reader(mapFile);
 
-    // If the tile is also a collider, load collider data
-    if (collider)
-      mapFile >> colWidth >> colHeight >> offset.x >> offset.y;
-
-    mapFile >> animated;
-
-    if (animated)
-      mapFile >> numFrames >> frameSpeed >> vertical >> looped >> frameOffset;
-
-    // Create a new entity based on the above information
+  TileRecord record;
+  while (reader.Read(&record)) {
     Entity tile = Registry::Instance().CreateEntity();
-    tile.Group(group);
-    tile.AddComponent<SpriteComponent>(assetID, tileWidth, tileHeight, layer,
-                                       false, srcRectX, srcRectY);
-    tile.AddComponent<TransformComponent>(transform, scale, 0.0);
+    tile.Group(record.group);
+    tile.AddComponent<SpriteComponent>(record.assetId, record.tileWidth,
+                                       record.tileHeight, record.zIndex, false,
+                                       record.srcRectX, record.srcRectY);
+    tile.AddComponent<TransformComponent>(
+        glm::vec2(record.worldX, record.worldY),
+        glm::vec2(record.scaleX, record.scaleY), 0.0);
 
-    if (collider)
-      tile.AddComponent<BoxColliderComponent>(colWidth, colHeight, offset);
-    if (animated)
-      tile.AddComponent<AnimationComponent>(numFrames, frameSpeed, vertical,
-                                            looped, frameOffset);
+    if (record.collider)
+      tile.AddComponent<BoxColliderComponent>(
+          record.colliderWidth, record.colliderHeight,
+          glm::vec2(record.colliderOffsetX, record.colliderOffsetY));
+    if (record.animated)
+      tile.AddComponent<AnimationComponent>(record.numFrames, record.frameSpeed,
+                                            record.vertical, record.looped,
+                                            record.frameOffset);
+  }
+
+  // A failed Read is either "the map ended" or "the map is damaged", and the
+  // loop above cannot tell them apart. It used to `break` on both, with nothing
+  // said -- a truncated map loaded as a short map and looked like content.
+  if (reader.Truncated()) {
+    logger.Err("FileLoader: '" + filename + "': truncated or malformed " +
+               reader.TruncatedWhat() + "; the map above is incomplete");
   }
 
   // Close the file
@@ -205,47 +215,47 @@ void FileLoader::SaveMap(std::filesystem::path filename) {
 
   auto tiles = Registry::Instance().GetEntitiesByGroup("tiles");
 
+  // The 22 fields are written by WriteTileRecord, the same function the
+  // engine's TileRecordReader reads. Previously this loop spelled the order out
+  // by hand, which meant the editor and the engine each carried their own copy
+  // of the field order and a change to it had to be made twice.
   for (const auto &tile : tiles) {
-    bool collider = false, animated = false;
-    std::string group = "tiles";
     const auto &sprite = tile.GetComponent<SpriteComponent>();
     const auto &transform = tile.GetComponent<TransformComponent>();
 
-    // Save to the map file
-    mapFile << group << " " << sprite.assetId << " " << sprite.width << " "
-            << sprite.height << " " << sprite.srcRect.x << " "
-            << sprite.srcRect.y << " " << sprite.zIndex << " "
-            << transform.position.x << " " << transform.position.y << " "
-            << transform.scale.x << " " << transform.scale.y << " ";
+    TileRecord record;
+    record.group = "tiles";
+    record.assetId = sprite.assetId;
+    record.tileWidth = sprite.width;
+    record.tileHeight = sprite.height;
+    record.srcRectX = sprite.srcRect.x;
+    record.srcRectY = sprite.srcRect.y;
+    record.zIndex = sprite.zIndex;
+    record.worldX = transform.position.x;
+    record.worldY = transform.position.y;
+    record.scaleX = transform.scale.x;
+    record.scaleY = transform.scale.y;
 
-    // Check to see if the tile has a collider component
-    if (tile.HasComponent<BoxColliderComponent>())
-      collider = true;
-
-    if (collider) {
-      const auto &boxCollider = tile.GetComponent<BoxColliderComponent>();
-      mapFile << collider << " " << boxCollider.width << " "
-              << boxCollider.height << " " << boxCollider.offset.x << " "
-              << boxCollider.offset.y << " "; // << std::endl;
-    } else {
-      collider = false;
-      mapFile << collider << " "; // << std::endl;
+    if (tile.HasComponent<BoxColliderComponent>()) {
+      const auto &box = tile.GetComponent<BoxColliderComponent>();
+      record.collider = true;
+      record.colliderWidth = box.width;
+      record.colliderHeight = box.height;
+      record.colliderOffsetX = box.offset.x;
+      record.colliderOffsetY = box.offset.y;
     }
 
-    // Check to see if the tile has an animation component
-    if (tile.HasComponent<AnimationComponent>())
-      animated = true;
-
-    if (animated) {
+    if (tile.HasComponent<AnimationComponent>()) {
       const auto &animation = tile.GetComponent<AnimationComponent>();
-      mapFile << animated << " " << animation.numFrames << " "
-              << animation.frameSpeedRate << " " << animation.vertical << " "
-              << animation.isLooped << " " << animation.frameOffset << " "
-              << std::endl;
-    } else {
-      animated = false;
-      mapFile << animated << " " << std::endl;
+      record.animated = true;
+      record.numFrames = animation.numFrames;
+      record.frameSpeed = animation.frameSpeedRate;
+      record.vertical = animation.vertical;
+      record.looped = animation.isLooped;
+      record.frameOffset = animation.frameOffset;
     }
+
+    WriteTileRecord(mapFile, record);
   }
   // Close the file
   mapFile.close();

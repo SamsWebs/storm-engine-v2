@@ -4,6 +4,24 @@
 
 ### Added
 
+- **`TileRecord` + `TileRecordReader` + `WriteTileRecord`** (2.8.4, P39) — the
+  `.map` record, in `common/tilemapFormat.h`. The version header moved here in
+  2.5.1; the 22-field record was still parsed by hand in two places, and
+  `SaveMap` spelled the field order out a third time.
+
+  This fixes **two live bugs in the editor**, not just the duplication:
+
+  - `LoadMap` read no version header, so it read `storm-map` as the first
+    record's group name and loaded **zero tiles** out of any map the engine had
+    written — the editor could not open a 2.7.0 map.
+  - `LoadMap` did `mapFile >> animated;` with no pushback, so a record omitting
+    its animation flag consumed the next record's group token and ended the map
+    there. The engine's copy had been fixed for exactly this; the editor's had
+    not.
+
+  A truncated record is now **reported** rather than silently ending the load.
+  16 specs, no file or filesystem required.
+
 - **`common/input/inputHub.h`** (2.8.2, 2.8.3) — an input hub. `ActionMap`
   had specs and no consumer since it landed, and the reason is that every
   game polls SDL itself: the queue is drained by whichever state is on top

@@ -35,6 +35,7 @@
 #include "../logger.h"
 #include "../packFile.h"
 #include "../text.h"
+#include "../tilemapFormat.h"
 #include "../tilemapLoader.h"
 #include "../version.h"
 #include "../xmlLoader.h"
@@ -126,6 +127,10 @@ using storm::TileMapVersion;
 using storm::TileMapVersionLine;
 using storm::TileMapVersionRefusal;
 using storm::TileMapVersionState;
+using storm::TileRecord;
+using storm::TileRecordReader;
+using storm::WriteTileMapVersionLine;
+using storm::WriteTileRecord;
 using storm::XmlLoader;
 using storm::XmlObjectDef;
 using storm::XmlTextureDef;

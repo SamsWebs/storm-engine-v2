@@ -104,13 +104,12 @@ void TileMapLoader::loadFilemapCSV(const std::string &fileMap) {
 // and all five animation fields were parsed purely to advance the stream and
 // then dropped, because Tile had nowhere to put them.
 //
-// The optional collider and animation tails are checked field-by-field. A
-// record that claims a collider (or an animation) and then ends early used to
-// either drop the rest of the file with no diagnostic or push a Tile with
-// hasCollider/isAnimated set and the dimensions left at zero. A clean EOF
-// after a complete record is still a normal end of file, not an error: the
-// `animatedFlag` read may legitimately fail at EOF for a last record that
-// omits it, so that one failure is treated as "not animated".
+// The optional collider and animation tails are checked field-by-field, and a
+// record that claims one and then ends early is reported rather than pushed
+// with its dimensions left at zero. A clean EOF after a complete record is
+// still a normal end of file, not an error -- the last record may legitimately
+// omit its animation flag. All of that moved to TileRecordReader; see the note
+// at its call site below.
 void TileMapLoader::loadFilemapEditor(const std::string &fileMap) {
   std::ifstream fmap{fileMap};
   if (!fmap.is_open()) {
@@ -135,96 +134,22 @@ void TileMapLoader::loadFilemapEditor(const std::string &fileMap) {
     return;
   }
 
-  auto reportTruncated = [&](const std::string &what) {
-    logger.Err("TileMapLoader: '" + fileMap + "': truncated or malformed " +
-               what + " after " + std::to_string(map.size()) +
-               " complete tiles; stopping");
-  };
-
-  // One-token pushback, local because the stream is. Needed for exactly one
-  // field — the optional trailing animation flag — and the reason is worth
-  // stating, because the obvious implementation is the one that was there.
+  // The record parsing is NOT here any more. It lives in
+  // <stormengine2/tilemapFormat.h> as TileRecordReader, because it used to be
+  // written by hand TWICE -- once here and once in the editor's FileLoader --
+  // and the editor's copy is a separate binary that ships separately, which is
+  // how the two drifted.
   //
-  // `fmap >> animatedFlag` cannot tell "this record omitted the flag" from "the
-  // file ended": an int extraction that hits the next record's group token
-  // ("tiles") and an extraction that hits EOF both set failbit, so the only
-  // test available was eof(), which fires on the LAST record and nowhere else.
-  // A flag omitted anywhere else was reported as a truncated file and the
-  // loader returned an EMPTY MAP — one hand-edit, or one writer that skipped a
-  // zero flag, cost a whole level. Reading the token as a string separates the
-  // cases: a token that is a number is the flag, a token that is not is the
-  // next record's group and gets pushed back.
-  std::string pending;
-  bool hasPending = false;
-  auto nextToken = [&](std::string &out) {
-    if (hasPending) {
-      out = pending;
-      pending.clear();
-      hasPending = false;
-      return true;
-    }
-    return static_cast<bool>(fmap >> out);
-  };
-  auto looksNumeric = [](const std::string &text) {
-    if (text.empty()) {
-      return false;
-    }
-    std::size_t i = (text[0] == '-' || text[0] == '+') ? 1 : 0;
-    if (i == text.size()) {
-      return false;
-    }
-    for (; i < text.size(); ++i) {
-      if (text[i] < '0' || text[i] > '9') {
-        return false;
-      }
-    }
-    return true;
-  };
+  // TileRecordReader is also the only thing here that knows about the optional
+  // animation flag and the one-token pushback that separates "this record
+  // omitted its flag" from "the file ended". Both are spec'd there; neither was
+  // observable here.
+  TileRecordReader reader(fmap);
 
-  std::string group;
-  while (nextToken(group)) {
-    std::string assetId;
-    int tileW = 0, tileH = 0, srcX = 0, srcY = 0, zIndex = 0;
-    float worldX = 0.0f, worldY = 0.0f, scaleX = 0.0f, scaleY = 0.0f;
-    int colliderFlag = 0;
-
-    if (!(fmap >> assetId >> tileW >> tileH >> srcX >> srcY >> zIndex >>
-          worldX >> worldY >> scaleX >> scaleY >> colliderFlag)) {
-      reportTruncated("header for group '" + group + "'");
-      return;
-    }
-
-    int colW = 0, colH = 0;
-    float offX = 0.0f, offY = 0.0f;
-    if (colliderFlag && !(fmap >> colW >> colH >> offX >> offY)) {
-      reportTruncated("collider fields for '" + assetId + "'");
-      return;
-    }
-
-    // The optional animation flag. See the pushback note above for why this is
-    // a string read and not `fmap >> animatedFlag`.
-    int animatedFlag = 0;
-    std::string flagToken;
-    if (nextToken(flagToken)) {
-      if (looksNumeric(flagToken)) {
-        animatedFlag = std::atoi(flagToken.c_str());
-      } else {
-        // Not a flag: it is the next record's group, and the loop needs it.
-        pending = flagToken;
-        hasPending = true;
-      }
-    }
-    // Nothing readable here means the file ended, which is the last record
-    // legitimately omitting its flag. Nothing ELSE about the stream can reach
-    // here, because a malformed token was pushed back rather than consumed.
-
-    int numFrames = 1, frameSpeed = 1, frameOffset = 0;
-    bool vertical = true, looped = true;
-    if (animatedFlag && !(fmap >> numFrames >> frameSpeed >> vertical >>
-                          looped >> frameOffset)) {
-      reportTruncated("animation fields for '" + assetId + "'");
-      return;
-    }
+  TileRecord record;
+  while (reader.Read(&record)) {
+    const int tileW = record.tileWidth;
+    const std::string &assetId = record.assetId;
 
     // Use the tile size passed to the constructor to derive grid position.
     // If zero (not set), fall back to the tile width from the map line.
@@ -236,24 +161,35 @@ void TileMapLoader::loadFilemapEditor(const std::string &fileMap) {
     }
 
     Tile tile;
-    tile.relativePosition = glm::ivec2(static_cast<int>(worldX) / ts,
-                                       static_cast<int>(worldY) / ts);
-    tile.pixelSrcPosition = glm::ivec2(srcX, srcY);
-    tile.scale = glm::vec2(scaleX, scaleY);
-    tile.zIndex = zIndex;
-    tile.assetId = assetId;
-    tile.hasCollider = (colliderFlag != 0);
-    tile.colliderW = colW;
-    tile.colliderH = colH;
-    tile.colliderOffset = glm::vec2(offX, offY);
-    tile.isAnimated = (animatedFlag != 0);
-    tile.numFrames = numFrames;
-    tile.frameSpeedRate = frameSpeed;
-    tile.vertical = vertical;
-    tile.isLooped = looped;
-    tile.frameOffset = frameOffset;
+    tile.relativePosition = glm::ivec2(static_cast<int>(record.worldX) / ts,
+                                       static_cast<int>(record.worldY) / ts);
+    tile.pixelSrcPosition = glm::ivec2(record.srcRectX, record.srcRectY);
+    tile.scale = glm::vec2(record.scaleX, record.scaleY);
+    tile.zIndex = record.zIndex;
+    tile.assetId = record.assetId;
+    tile.hasCollider = record.collider;
+    tile.colliderW = record.colliderWidth;
+    tile.colliderH = record.colliderHeight;
+    tile.colliderOffset =
+        glm::vec2(record.colliderOffsetX, record.colliderOffsetY);
+    tile.isAnimated = record.animated;
+    tile.numFrames = record.numFrames;
+    tile.frameSpeedRate = record.frameSpeed;
+    tile.vertical = record.vertical;
+    tile.isLooped = record.looped;
+    tile.frameOffset = record.frameOffset;
 
     map.push_back(tile);
+  }
+
+  // The reader distinguishes "the map ended" from "the map is damaged", which
+  // this loop cannot do by itself: a failed Read is both. Truncation used to
+  // be reported per-field from three separate places; it is now one report,
+  // and it names the record that was damaged rather than only the field.
+  if (reader.Truncated()) {
+    logger.Err("TileMapLoader: '" + fileMap + "': truncated or malformed " +
+               reader.TruncatedWhat() + " after " + std::to_string(map.size()) +
+               " complete tiles; stopping");
   }
 }
 

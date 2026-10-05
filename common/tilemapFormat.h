@@ -25,6 +25,7 @@
 // and Android, and there is nothing here that needs a translation unit.
 #include <cstdlib>
 #include <istream>
+#include <ostream>
 #include <string>
 
 namespace storm {
@@ -199,6 +200,215 @@ inline std::string TileMapVersionRefusal(const TileMapVersion &version,
            "rather than falling through to the old parser.";
   }
   return std::string();
+}
+
+// ── The record ──────────────────────────────────────────────────────────────
+//
+// 2.5.1 gave this file the format's HEADER. The 22-field RECORD was still
+// parsed by hand in two places: `TileMapLoader::loadFilemapEditor` in the
+// engine, and `FileLoader::LoadMap` in the editor. Two implementations of one
+// format, in two binaries that ship separately.
+//
+// This is the record half. One struct, one reader, one writer, all spec'd with
+// no file and no filesystem.
+//
+// WHY THE READER IS A CLASS AND NOT A FUNCTION. The one-token pushback is
+// state that has to live somewhere between calls, because it exists only to
+// distinguish two cases `>>` cannot tell apart: an int extraction that hits
+// the next record's group token and one that hits EOF both set failbit. The
+// only test available on a plain stream is eof(), which fires on the LAST
+// record and nowhere else. So a flag omitted anywhere else read as a truncated
+// file and the loader returned an EMPTY MAP -- one hand-edit, or one writer
+// that skipped a zero flag, cost a whole level. The editor's copy never got
+// that fix: `mapFile >> animated;` with no pushback, which is a live bug, not
+// a tidiness issue.
+//
+// WHAT THE EDITOR CANNOT BE SPEC'D FOR, AND WHY THAT DOES NOT BLOCK THIS.
+// The editor does not link on this machine (no libnfd), so nothing observes
+// `LoadMap` directly. That was recorded as the reason P39 was blocked. It is
+// not: what is spec'd here is the RECORD PARSING, which is pure and lives in
+// this header. The editor's call becomes a mechanical two-liner over a
+// spec'd function, and CI compiles the editor to objects, so a signature drift
+// is still a build break. The thing that cannot be observed is the editor's own
+// entity construction, which this change does not touch.
+struct TileRecord {
+  std::string group;
+  std::string assetId;
+  int tileWidth = 0;
+  int tileHeight = 0;
+  int srcRectX = 0;
+  int srcRectY = 0;
+  int zIndex = 0;
+  float worldX = 0.0f;
+  float worldY = 0.0f;
+  float scaleX = 1.0f;
+  float scaleY = 1.0f;
+
+  bool collider = false;
+  int colliderWidth = 0;
+  int colliderHeight = 0;
+  float colliderOffsetX = 0.0f;
+  float colliderOffsetY = 0.0f;
+
+  // Defaults are what a record with no animation means: one frame, played at
+  // the base rate, looping vertically. The loader used to default these to 1
+  // and the editor to 0, which is the same disagreement this header exists to
+  // end -- a record that means "not animated" arrived at the two readers with
+  // different frame counts.
+  bool animated = false;
+  int numFrames = 1;
+  int frameSpeed = 1;
+  bool vertical = true;
+  bool looped = true;
+  int frameOffset = 0;
+};
+
+// Reads records from a stream that has already had its version header
+// consumed. NOT copyable: the pending token is part of the parse position, and
+// a copy would silently read from a stream state that no longer exists.
+class TileRecordReader {
+public:
+  explicit TileRecordReader(std::istream &in) : in_(in) {}
+  TileRecordReader(const TileRecordReader &) = delete;
+  TileRecordReader &operator=(const TileRecordReader &) = delete;
+
+  // Returns false at clean end of input, or on a truncated record. The two are
+  // told apart by Truncated(), which is the only thing the caller needs to
+  // decide between "the map ended" and "the map is damaged".
+  bool Read(TileRecord *out) {
+    if (out == nullptr) {
+      return false;
+    }
+    truncated_ = false;
+    what_.clear();
+
+    std::string group;
+    if (!NextToken(&group)) {
+      return false; // clean EOF: the previous record was the last one
+    }
+
+    TileRecord r;
+    r.group = group;
+    // The 11 always-present fields. A short read here is damage, not the end:
+    // the group token was already consumed, so there is nothing left to stop
+    // at.
+    if (!(in_ >> r.assetId >> r.tileWidth >> r.tileHeight >> r.srcRectX >>
+          r.srcRectY >> r.zIndex >> r.worldX >> r.worldY >> r.scaleX >>
+          r.scaleY)) {
+      return Fail(out, "header for group '" + group + "'");
+    }
+
+    int colliderFlag = 0;
+    if (!(in_ >> colliderFlag)) {
+      return Fail(out, "collider flag for '" + r.assetId + "'");
+    }
+    r.collider = colliderFlag != 0;
+    if (r.collider && !(in_ >> r.colliderWidth >> r.colliderHeight >>
+                        r.colliderOffsetX >> r.colliderOffsetY)) {
+      return Fail(out, "collider fields for '" + r.assetId + "'");
+    }
+
+    // The optional animation flag, read as a STRING. This is the whole reason
+    // the reader is a class: a string read can come back either as the flag or
+    // as the next record's group, and only this form tells us which. See the
+    // note on TileRecordReader above.
+    int animatedFlag = 0;
+    std::string token;
+    if (NextToken(&token)) {
+      if (LooksNumeric(token)) {
+        animatedFlag = std::atoi(token.c_str());
+      } else {
+        pending_ = token;
+        hasPending_ = true;
+      }
+    }
+    // Nothing readable here means the file ended, which is the last record
+    // legitimately omitting its flag. Nothing ELSE reaches this branch, because
+    // a non-numeric token was pushed back rather than consumed.
+
+    r.animated = animatedFlag != 0;
+    if (r.animated && !(in_ >> r.numFrames >> r.frameSpeed >> r.vertical >>
+                        r.looped >> r.frameOffset)) {
+      return Fail(out, "animation fields for '" + r.assetId + "'");
+    }
+
+    *out = r;
+    return true;
+  }
+
+  bool Truncated() const { return truncated_; }
+  const std::string &TruncatedWhat() const { return what_; }
+
+private:
+  bool Fail(TileRecord *out, const std::string &what) {
+    truncated_ = true;
+    what_ = what;
+    (void)out;
+    return false;
+  }
+
+  bool NextToken(std::string *out) {
+    if (hasPending_) {
+      *out = pending_;
+      pending_.clear();
+      hasPending_ = false;
+      return true;
+    }
+    return static_cast<bool>(in_ >> *out);
+  }
+
+  static bool LooksNumeric(const std::string &text) {
+    if (text.empty()) {
+      return false;
+    }
+    std::size_t i = (text[0] == '-' || text[0] == '+') ? 1 : 0;
+    if (i == text.size()) {
+      return false;
+    }
+    for (; i < text.size(); ++i) {
+      if (text[i] < '0' || text[i] > '9') {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  std::istream &in_;
+  std::string pending_;
+  bool hasPending_ = false;
+  bool truncated_ = false;
+  std::string what_;
+};
+
+// The counterpart, so the editor's SaveMap and the engine's loader cannot
+// disagree about the order of the 22 fields either.
+//
+// The conditional groups are written ONLY when their flag is set. A stray
+// collider field on a record with `collider = false` would be read by the next
+// record's reader as that record's animation flag -- the writer has to be as
+// careful as the reader about which fields exist.
+inline void WriteTileRecord(std::ostream &out, const TileRecord &r) {
+  out << r.group << ' ' << r.assetId << ' ' << r.tileWidth << ' '
+      << r.tileHeight << ' ' << r.srcRectX << ' ' << r.srcRectY << ' '
+      << r.zIndex << ' ' << r.worldX << ' ' << r.worldY << ' ' << r.scaleX
+      << ' ' << r.scaleY << ' ' << (r.collider ? 1 : 0) << ' ';
+  if (r.collider) {
+    out << r.colliderWidth << ' ' << r.colliderHeight << ' '
+        << r.colliderOffsetX << ' ' << r.colliderOffsetY << ' ';
+  }
+  out << (r.animated ? 1 : 0) << ' ';
+  if (r.animated) {
+    out << r.numFrames << ' ' << r.frameSpeed << ' ' << (r.vertical ? 1 : 0)
+        << ' ' << (r.looped ? 1 : 0) << ' ' << r.frameOffset << ' ';
+  }
+  out << '\n';
+}
+
+// The header, written through the same constant the reader enforces. Named
+// apart from TileMapVersionLine() only so the streaming form is obvious at the
+// call site; it is the same line.
+inline void WriteTileMapVersionLine(std::ostream &out) {
+  out << TileMapVersionLine();
 }
 
 } // namespace storm

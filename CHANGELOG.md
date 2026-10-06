@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [2.8.0] - 2026-10-06
+
 ### Added
 
 - **`TileRecord` + `TileRecordReader` + `WriteTileRecord`** (2.8.4, P39) — the

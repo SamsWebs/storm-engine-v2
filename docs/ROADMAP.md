@@ -7,7 +7,7 @@ The point of this file is the *reasoning*. Anyone can re-derive a task list; wha
 gets lost between sessions is why the order is what it is, and which decisions
 were already argued and settled.
 
-**Current release:** 2.7.0. **Next:** 2.8.0. The forward-looking section is
+**Current release:** 2.8.0. **Next:** 2.9.0. The forward-looking section is
 [What's next — the 2.4 → 3.0 line, with 2.6 retired](#whats-next--the-24--30-line-with-26-retired), added
 2026-09-17; everything below it is history and stays as it is.
 

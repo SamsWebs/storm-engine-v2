@@ -299,10 +299,36 @@ jobs:
           # engine's complete SDL-family ABI. A symbol outside it means the
           # engine started calling something new: the rewrite is refused and
           # a human reads the symbol before anything ships.
+          #
+          # The gate did exactly that on 2026-10-06, on the 2.8.0 tag, and it
+          # was right to. Seven symbols appeared, all of them from
+          # common/audio/soundMixer.cpp, which is 2.8.1's mixer and the first
+          # code in the LIBRARY to drive SDL_mixer. Until then only the
+          # netplay-checkers EXAMPLE called Mix_PlayChannel, and examples are
+          # not in the shipped .so, so the mixer's ABI never showed up here.
+          #
+          #   Mix_AllocateChannels Mix_CloseAudio Mix_OpenAudio
+          #   Mix_PlayChannel Mix_Playing Mix_Volume Mix_VolumeMusic
+          #
+          # All seven are SDL_mixer 2.0.0-era API, declared in SDL_mixer.h
+          # since 2.0.0, and libsdl2-mixer-2.0-0 was ALREADY a dependency --
+          # the engine decoded and cached Mix_Chunk long before this. So this
+          # is the engine's intended surface getting wider, not a new
+          # dependency sneaking in.
+          #
+          # One thing to know before "fixing" this gate again by hand: the
+          # list is profile- AND distro-sensitive, because Mix_PlayChannel is
+          # a macro over Mix_PlayChannelTimed and different SDL_mixer headers
+          # expand it differently. A local -O2 build on this machine produced
+          # Mix_PlayChannelTimed and SDL_RWFromFile where the bookworm image
+          # produces Mix_PlayChannel and Mix_LoadWAV. So the list below is
+          # transcribed from the gate's own `imported:` line in the failed
+          # job's log, which is the artifact of record -- not from a local
+          # objdump, which does not reproduce it.
           IMPORTED=$(objdump -T deb/usr/local/lib/libstormenginev2.so \
             | awk '/\*UND\*/ {print $NF}' \
             | grep -E '^(SDL_|IMG_|TTF_|Mix_)' | sort -u | tr '\n' ' ')
-          EXPECTED="IMG_Load IMG_Load_RW Mix_FreeChunk Mix_LoadWAV Mix_LoadWAV_RW SDL_CreateTextureFromSurface SDL_DestroyTexture SDL_FreeSurface SDL_GetError SDL_RWFromMem TTF_CloseFont TTF_OpenFont TTF_OpenFontRW "
+          EXPECTED="IMG_Load IMG_Load_RW Mix_AllocateChannels Mix_CloseAudio Mix_FreeChunk Mix_LoadWAV Mix_LoadWAV_RW Mix_OpenAudio Mix_PlayChannel Mix_Playing Mix_Volume Mix_VolumeMusic SDL_CreateTextureFromSurface SDL_DestroyTexture SDL_FreeSurface SDL_GetError SDL_RWFromMem TTF_CloseFont TTF_OpenFont TTF_OpenFontRW "
           if [ "${IMPORTED}" != "${EXPECTED}" ]; then
             echo "::error::the library imports SDL-family symbols outside the known ABI -- the floor rewrite below is refused until a human reads them"
             echo "::error::imported: ${IMPORTED}"

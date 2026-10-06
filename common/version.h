@@ -18,20 +18,20 @@
 namespace storm {
 
 // The version this translation unit was compiled against, as a string.
-inline constexpr const char *kEngineVersion = "2.7.0";
+inline constexpr const char *kEngineVersion = "2.8.0";
 
 // The numeric triple, for a consumer that needs to compare rather than print.
 // Derived from the version above at generation time, so there is still only
 // one place the number is written.
 inline constexpr int kEngineVersionMajor = 2;
-inline constexpr int kEngineVersionMinor = 7;
+inline constexpr int kEngineVersionMinor = 8;
 inline constexpr int kEngineVersionPatch = 0;
 
 // The same number with a leading "v" -- "v" followed by kEngineVersion. Kept as
 // its own constant rather than built at runtime so a crash banner can print it
 // from a signal handler, and so nobody has to remember to prefix the "v" at
 // every call site, which is the half that gets forgotten.
-inline constexpr const char *kEngineVersionString = "v2.7.0";
+inline constexpr const char *kEngineVersionString = "v2.8.0";
 
 inline const char *VersionString() { return kEngineVersionString; }
 
